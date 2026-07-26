@@ -170,27 +170,51 @@ export class SimulationHost {
         return notReplayable('no-imported-ledger');
       }
       const file = this.importedFile;
-      const result = replayLedger(file.scenario.id, file.events);
-      return {
-        ok: true,
-        match: result.finalStateHash === file.finalStateHash,
-        computedHash: result.finalStateHash,
-        expectedHash: file.finalStateHash,
-        errors: [],
-      };
+      // The reducer deliberately throws on impossible transitions, so a
+      // schema-valid but payload-corrupted ledger can abort mid-replay. That
+      // must surface as an explicit non-match result, never as a lost
+      // response: a replay command always yields a replay outcome.
+      try {
+        const result = replayLedger(file.scenario.id, file.events);
+        return {
+          ok: true,
+          match: result.finalStateHash === file.finalStateHash,
+          computedHash: result.finalStateHash,
+          expectedHash: file.finalStateHash,
+          errors: [],
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          match: false,
+          computedHash: null,
+          expectedHash: file.finalStateHash,
+          errors: [`replay-aborted: ${(error as Error).message}`],
+        };
+      }
     }
     const run = this.run;
     if (!run || !run.state.terminal || run.finalStateHash === null) {
       return notReplayable('live-run-not-complete');
     }
-    const result = replayLedger(run.scenario.id, run.ledger.events);
-    return {
-      ok: true,
-      match: result.finalStateHash === run.finalStateHash,
-      computedHash: result.finalStateHash,
-      expectedHash: run.finalStateHash,
-      errors: [],
-    };
+    try {
+      const result = replayLedger(run.scenario.id, run.ledger.events);
+      return {
+        ok: true,
+        match: result.finalStateHash === run.finalStateHash,
+        computedHash: result.finalStateHash,
+        expectedHash: run.finalStateHash,
+        errors: [],
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        match: false,
+        computedHash: null,
+        expectedHash: run.finalStateHash,
+        errors: [`replay-aborted: ${(error as Error).message}`],
+      };
+    }
   }
 
   exportTraces(): { fileName: string; json: string; traces: TraceExport } {

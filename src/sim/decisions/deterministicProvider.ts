@@ -6,6 +6,8 @@ import {
   INJURY_NEEDS_TREATMENT_SEVERITY,
   COMMITMENT_LEAD_TICKS,
   COMMITMENT_RELIEF_MIN_DURATION_TICKS,
+  REPAIR_TOTAL_UNITS,
+  SOCIAL_SIGNAL_RECENCY_TICKS,
 } from '../config';
 import type { Affordance } from '../actions/affordances';
 import type { AffordanceScoreRecord, AffordanceScoreComponent } from '../events/types';
@@ -131,7 +133,18 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
     case 'relieve': {
       add('base', a.mode === 'work' ? SCORING.base.work : SCORING.base.relieve);
       add('work-drive', w.workDriveMicro * SCORING.workDriveScale);
-      if (ctx.purifierProgressUnits < 120_000) add('deadline-pressure', SCORING.deadlinePressure);
+      if (ctx.purifierProgressUnits < REPAIR_TOTAL_UNITS) {
+        // The colony-survival/-stability value is what makes the unfinished
+        // purifier press on the decision; label the component accordingly so
+        // value effects stay separately inspectable.
+        const survivalValue = ctx.identity.values.find(
+          (v) => v === 'colony-survival' || v === 'colony-stability',
+        );
+        add(
+          survivalValue ? `value:${survivalValue}` : 'deadline-pressure',
+          SCORING.deadlinePressure,
+        );
+      }
       if (ctx.npcId === 'mara' && hasMemory('mem-mara-criticism')) {
         add('memory:criticism', SCORING.memoryCriticism.workBonus);
       }
@@ -152,7 +165,9 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
         if (occupant) {
           const requestedRelief = ctx.recentSignals.some(
             (s) =>
-              s.kind === 'relief-requested' && s.fromNpcId === occupant && ctx.tick - s.tick < 600,
+              s.kind === 'relief-requested' &&
+              s.fromNpcId === occupant &&
+              ctx.tick - s.tick < SOCIAL_SIGNAL_RECENCY_TICKS,
           );
           if (requestedRelief) {
             add('empathy-relief', w.empathyMicro * SCORING.relieveEmpathyScale);
@@ -237,6 +252,11 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
       add('base', SCORING.base.respondToRequest);
       add('directness', w.directnessMicro * SCORING.refuseDirectnessScale);
       add('suspicion', w.suspicionMicro * SCORING.refuseSuspicionScale);
+      // Conflict-avoidant NPCs (identity trait) find blunt refusals costly.
+      add(
+        'conflict-avoidance',
+        -(ctx.identity.traits['conflictAvoidance'] ?? 0) * SCORING.refuseConflictAvoidanceScale,
+      );
       if (ctx.hungerMicro >= HUNGER_MODERATE) add('self-need', SCORING.refuseSelfNeedBonus);
       if (ctx.npcId === 'rin' && a.targetNpcId === 'jonas' && hasMemory('mem-rin-supply-taken')) {
         add('memory:supply-taken', SCORING.memorySupplyTaken.refuseJonasBonus);
@@ -246,7 +266,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
 
     case 'release': {
       add('base', 0);
-      add('generosity', w.generosityMicro * 0.1);
+      add('generosity', w.generosityMicro * SCORING.releaseGenerosityScale);
       break;
     }
 
@@ -285,7 +305,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
           s.kind === 'help-requested' &&
           s.fromNpcId === a.targetNpcId &&
           (s.toNpcId === null || s.toNpcId === ctx.npcId) &&
-          ctx.tick - s.tick < 600,
+          ctx.tick - s.tick < SOCIAL_SIGNAL_RECENCY_TICKS,
       );
       if (asked) add('asked-for-help', SCORING.treatAskedForHelpBonus);
       break;
@@ -310,13 +330,13 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
         'emergency-belief',
         aligned ? SCORING.base.respondToProposal : SCORING.respondProposalMismatchScore,
       );
-      if (!isAccept) add('pride', w.prideMicro * 0.05);
+      if (!isAccept) add('pride', w.prideMicro * SCORING.rejectPrideScale);
       break;
     }
 
     case 'stay-at-cot': {
       add('base', SCORING.base.stayAtCot);
-      add('self-preservation', w.selfPreservationMicro * 0.2);
+      add('self-preservation', w.selfPreservationMicro * SCORING.stayAtCotSelfPreservationScale);
       break;
     }
 
@@ -337,7 +357,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
     case 'routine-work':
     case 'deliver-materials': {
       add('base', SCORING.base.routineWork);
-      add('industriousness', w.industriousnessMicro * SCORING.industriousnessScale * 10);
+      add('industriousness', w.industriousnessMicro * SCORING.routineIndustriousnessScale);
       break;
     }
 

@@ -293,7 +293,9 @@ export type OwnershipViolatedEvent = Evt<
     actorId: NpcId;
     resourceId: ResourceId;
     ownerNpcId: NpcId;
-    violationKind: 'consumed-reserved-meal';
+    /** Recorded at the moment the actor takes the reserved resource; whether
+     * consumption then completes is recorded separately by MealConsumed. */
+    violationKind: 'took-reserved-meal';
   }
 >;
 

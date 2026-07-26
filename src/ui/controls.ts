@@ -113,10 +113,11 @@ export function mountControls(root: HTMLElement, store: ViewStore, client: Worke
       scenarioSelect.value = s.selectedScenarioId;
     }
     const complete = s.runStatus === 'complete';
-    startBtn.disabled = s.snapshot === null || s.runStatus === 'running' || complete;
+    const busy = s.runStatus === 'running' || s.runStatus === 'replaying';
+    startBtn.disabled = s.snapshot === null || busy || complete;
     pauseBtn.disabled = s.runStatus !== 'running';
     resumeBtn.disabled = s.runStatus !== 'paused';
-    stepBtn.disabled = s.snapshot === null || s.runStatus === 'running' || complete;
+    stepBtn.disabled = s.snapshot === null || busy || complete;
     exportBtn.disabled = !complete;
     exportTracesBtn.disabled = !complete;
     replayLiveBtn.disabled = !complete;

@@ -125,6 +125,9 @@ export const DELIVER_MATERIALS_DURATION_TICKS = 180;
 /** After a refused meal-transfer request, the requester waits before asking again. */
 export const REQUEST_REFUSAL_COOLDOWN_TICKS = 10 * TICKS_PER_MINUTE; // 600
 
+/** Social signals (help/relief requests) count as "recent" for this window. */
+export const SOCIAL_SIGNAL_RECENCY_TICKS = 10 * TICKS_PER_MINUTE; // 600
+
 // --- Decision cadence ------------------------------------------------------------
 
 /** Decisions re-evaluate on relevant events and at this fixed maximum interval. */

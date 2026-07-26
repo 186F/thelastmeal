@@ -1,11 +1,13 @@
 import { PROTOCOL_VERSION } from '../shared/versions';
 import type { ScenarioId } from '../shared/ids';
 import {
+  workerEventsResponseSchema,
   workerResponseEnvelopeSchema,
   type OperatorSpeed,
   type WorkerCommand,
   type WorkerResponse,
 } from '../shared/workerProtocol';
+import { presentationSnapshotSchema } from '../shared/snapshotSchema';
 import type { ViewStore } from './store';
 
 /**
@@ -98,9 +100,19 @@ export class WorkerClient {
     this.send({ type: 'export-ledger' });
   }
   importLedger(fileText: string): void {
+    // A new import invalidates any prior replay verdict.
+    this.store.update((s) => {
+      s.replayResult = null;
+      s.importResult = null;
+    });
     this.send({ type: 'import-ledger', fileText });
   }
   replay(source: 'imported' | 'live'): void {
+    // Clear the previous verdict so a failed replay can never leave a stale
+    // "match" on screen; the replay-result response repopulates it.
+    this.store.update((s) => {
+      s.replayResult = null;
+    });
     this.send({ type: 'replay', source });
   }
   exportTraces(): void {
@@ -142,7 +154,15 @@ export class WorkerClient {
           });
         }
         break;
-      case 'snapshot':
+      case 'snapshot': {
+        // Full payload-level schema validation at the worker boundary.
+        const parsed = presentationSnapshotSchema.safeParse(response.snapshot);
+        if (!parsed.success) {
+          this.store.update((s) => {
+            s.lastError = `invalid-snapshot-payload: ${parsed.error.issues[0]?.message ?? ''}`;
+          });
+          break;
+        }
         this.store.update((s) => {
           s.snapshot = response.snapshot;
           s.snapshotSeq = response.snapshotSeq;
@@ -150,9 +170,18 @@ export class WorkerClient {
           s.speed = response.speed;
         });
         break;
-      case 'events':
+      }
+      case 'events': {
+        const parsed = workerEventsResponseSchema.safeParse(response);
+        if (!parsed.success) {
+          this.store.update((s) => {
+            s.lastError = `invalid-events-payload: ${parsed.error.issues[0]?.message ?? ''}`;
+          });
+          break;
+        }
         this.store.appendEvents(response.events, response.totalCount);
         break;
+      }
       case 'run-complete':
         this.store.update((s) => {
           s.finalHash = response.finalStateHash;

@@ -17,6 +17,7 @@ import {
   TREATMENT_BY_HEALER,
 } from '../config';
 import { IDENTITIES, SEED_MEMORIES } from '../domain/identities';
+import { NPC_WEIGHTS, WEIGHT_TRAIT_SOURCES } from '../decisions/weights';
 import { SCENARIOS, SCENARIO_LIST } from '../scenarios/definitions';
 import { buildInitialState } from '../scenarios/initialState';
 import { canonicalSerialize } from '../replay/serialize';
@@ -103,6 +104,30 @@ export function validateExperimentData(): { ok: boolean; issues: ValidationIssue
   for (const memory of SEED_MEMORIES) {
     if (!NPC_IDS.includes(memory.npcId)) {
       err('broken-npc-reference', `Seed memory ${memory.id} belongs to ${memory.npcId}`);
+    }
+  }
+
+  // Decision weights: every field that mirrors a brief-fixed trait must equal
+  // the identity card exactly (section 26 change control), and all weights
+  // must be exact integers in range.
+  for (const npcId of NPC_IDS) {
+    const weights = NPC_WEIGHTS[npcId];
+    for (const [field, value] of Object.entries(weights)) {
+      if (!Number.isInteger(value) || value < -1_000_000 || value > 1_000_000) {
+        err('invalid-decision-weight', `${npcId}.${field} = ${value}`);
+      }
+    }
+    for (const [field, traitKey] of Object.entries(WEIGHT_TRAIT_SOURCES[npcId])) {
+      const traitValue = IDENTITIES[npcId].traits[traitKey];
+      const weightValue = weights[field as keyof typeof weights];
+      if (traitValue === undefined) {
+        err('weight-trait-source-missing', `${npcId}.${field} references trait ${traitKey}`);
+      } else if (weightValue !== traitValue) {
+        err(
+          'weight-trait-mismatch',
+          `${npcId}.${field} (${weightValue}) != identity trait ${traitKey} (${traitValue})`,
+        );
+      }
     }
   }
 

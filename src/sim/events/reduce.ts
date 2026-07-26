@@ -3,6 +3,7 @@ import {
   FATIGUE_RATE_PER_TICK,
   HUNGER_RATE_PER_TICK,
   INCAPACITATION_SEVERITY,
+  INJURY_NEEDS_TREATMENT_SEVERITY,
   REPAIR_TOTAL_UNITS,
   REQUEST_REFUSAL_COOLDOWN_TICKS,
   REST_FATIGUE_REDUCTION,
@@ -177,7 +178,24 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
     case 'ActionInterrupted': {
       const p = event.payload;
       const npc = getNpc(state, p.npcId);
-      if (npc.currentAction?.id === p.actionId) {
+      const action = npc.currentAction;
+      if (action?.id === p.actionId) {
+        // An interrupted treatment did not complete: release the patient's
+        // treatment markers so re-treatment stays possible and the untreated
+        // worsening rule re-arms. (A completed treatment lowers severity
+        // below the treatment threshold first, so this only fires for
+        // genuinely aborted treatments.)
+        if (action.mode === 'treat' && action.targetNpcId !== null) {
+          const patient = getNpc(state, action.targetNpcId);
+          if (
+            patient.injury.treatmentStartedTick !== null &&
+            patient.injury.severityMicro >= INJURY_NEEDS_TREATMENT_SEVERITY
+          ) {
+            patient.injury.treatmentStartedTick = null;
+            patient.injury.treatedByNpcId = null;
+            patient.needsReevaluation = true;
+          }
+        }
         clearBenchWorkEffects(state, npc);
         npc.currentAction = null;
       }

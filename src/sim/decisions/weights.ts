@@ -1,14 +1,54 @@
 import type { NpcId } from '../../shared/ids';
+import { IDENTITIES } from '../domain/identities';
 
 /**
  * Centralized decision weights for the deterministic provider.
  *
  * All decision scores are integers on a nominal 0..~1,200,000 scale. Trait,
  * value, memory, relationship, and commitment effects are separate scoring
- * components so debug output can decompose every choice. These weights were
- * calibrated so the scenario suite exhibits the behavioral signatures in
- * brief section 8 without scripting any specific action sequence.
+ * components so debug output can decompose every choice.
+ *
+ * Fields that mirror a brief-fixed identity trait are sourced FROM the
+ * identity card (single source of truth; section 26 change control), and
+ * `npm run validate` cross-checks the mapping. Fields marked "calibration"
+ * have no corresponding fixed trait; their values were calibrated so the
+ * scenario suite exhibits the behavioral signatures in brief section 8
+ * without scripting any specific action sequence.
  */
+
+/** Reads a brief-fixed trait from the identity card (throws if missing). */
+function trait(npcId: NpcId, key: string): number {
+  const value = IDENTITIES[npcId].traits[key];
+  if (value === undefined) {
+    throw new Error(`weights-missing-trait: ${npcId}.${key}`);
+  }
+  return value;
+}
+
+/** Declares which weight fields mirror which brief-fixed identity traits. */
+export const WEIGHT_TRAIT_SOURCES: Record<
+  NpcId,
+  Partial<Record<keyof NpcDecisionWeights, string>>
+> = {
+  mara: {
+    workDriveMicro: 'diligence',
+    prideMicro: 'pride',
+    empathyMicro: 'empathy',
+    ruleAdherenceMicro: 'ruleAdherence',
+  },
+  jonas: {
+    industriousnessMicro: 'conscientiousness',
+    empathyMicro: 'empathy',
+    prideMicro: 'pride',
+    promiseDutyMicro: 'conscientiousness',
+  },
+  rin: {
+    selfPreservationMicro: 'selfPreservation',
+    suspicionMicro: 'suspicion',
+    generosityMicro: 'generosity',
+    directnessMicro: 'directness',
+  },
+};
 
 export interface NpcDecisionWeights {
   /** Drive toward low-intensity routine duties. */
@@ -30,42 +70,42 @@ export interface NpcDecisionWeights {
 
 export const NPC_WEIGHTS: Record<NpcId, NpcDecisionWeights> = {
   mara: {
-    industriousnessMicro: 850_000,
-    workDriveMicro: 850_000,
-    selfPreservationMicro: 300_000,
-    prideMicro: 800_000,
-    empathyMicro: 350_000,
-    ruleAdherenceMicro: 600_000,
-    directnessMicro: 500_000,
-    promiseDutyMicro: 600_000,
-    generosityMicro: 400_000,
-    suspicionMicro: 300_000,
+    industriousnessMicro: 850_000, // calibration (tracks diligence)
+    workDriveMicro: trait('mara', 'diligence'),
+    selfPreservationMicro: 300_000, // calibration
+    prideMicro: trait('mara', 'pride'),
+    empathyMicro: trait('mara', 'empathy'),
+    ruleAdherenceMicro: trait('mara', 'ruleAdherence'),
+    directnessMicro: 500_000, // calibration
+    promiseDutyMicro: 600_000, // calibration
+    generosityMicro: 400_000, // calibration
+    suspicionMicro: 300_000, // calibration
     firstAidBonus: -100_000, // first aid: low
   },
   jonas: {
-    industriousnessMicro: 750_000,
-    workDriveMicro: 500_000,
-    selfPreservationMicro: 200_000,
-    prideMicro: 250_000,
-    empathyMicro: 850_000,
-    ruleAdherenceMicro: 700_000,
-    directnessMicro: 400_000,
-    promiseDutyMicro: 750_000,
-    generosityMicro: 700_000,
-    suspicionMicro: 200_000,
+    industriousnessMicro: trait('jonas', 'conscientiousness'),
+    workDriveMicro: 500_000, // calibration (repair skill: medium)
+    selfPreservationMicro: 200_000, // calibration
+    prideMicro: trait('jonas', 'pride'),
+    empathyMicro: trait('jonas', 'empathy'),
+    ruleAdherenceMicro: 700_000, // calibration
+    directnessMicro: 400_000, // calibration
+    promiseDutyMicro: trait('jonas', 'conscientiousness'),
+    generosityMicro: 700_000, // calibration
+    suspicionMicro: 200_000, // calibration
     firstAidBonus: 100_000, // first aid: high
   },
   rin: {
-    industriousnessMicro: 300_000,
-    workDriveMicro: 150_000,
-    selfPreservationMicro: 850_000,
-    prideMicro: 400_000,
-    empathyMicro: 250_000,
-    ruleAdherenceMicro: 500_000,
-    directnessMicro: 750_000,
-    promiseDutyMicro: 500_000,
-    generosityMicro: 250_000,
-    suspicionMicro: 750_000,
+    industriousnessMicro: 300_000, // calibration
+    workDriveMicro: 150_000, // calibration (repair skill: low)
+    selfPreservationMicro: trait('rin', 'selfPreservation'),
+    prideMicro: 400_000, // calibration
+    empathyMicro: 250_000, // calibration
+    ruleAdherenceMicro: 500_000, // calibration
+    directnessMicro: trait('rin', 'directness'),
+    promiseDutyMicro: 500_000, // calibration
+    generosityMicro: trait('rin', 'generosity'),
+    suspicionMicro: trait('rin', 'suspicion'),
     firstAidBonus: -100_000, // first aid: low
   },
 };
@@ -140,6 +180,16 @@ export const SCORING = {
   restFatigueFactor: 2,
   /** Ask-help scoring. */
   askHelpSelfPreservationScale: 0.2,
+  /** Voluntary release scoring. */
+  releaseGenerosityScale: 0.1,
+  /** Renegotiation-rejection pride nudge. */
+  rejectPrideScale: 0.05,
+  /** Stay-at-cot self-preservation scale. */
+  stayAtCotSelfPreservationScale: 0.2,
+  /** Routine-duty industriousness scale. */
+  routineIndustriousnessScale: 0.4,
+  /** Conflict-avoidance drag on blunt refusals (reads the identity trait). */
+  refuseConflictAvoidanceScale: 0.1,
   /** Memory effects (structured, per seed memory). */
   memoryCriticism: {
     workBonus: 150_000,

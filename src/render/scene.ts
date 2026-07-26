@@ -202,6 +202,10 @@ export function createWorkshopScene(
     camera.updateProjectionMatrix();
   };
   window.addEventListener('resize', resize);
+  // The viewport pane's size is layout-driven (the collapsible event panel
+  // changes it without any window resize), so track the container itself.
+  const resizeObserver = new ResizeObserver(() => resize());
+  resizeObserver.observe(container);
   resize();
 
   // --- Visual interpolation & render loop ----------------------------------------
@@ -297,9 +301,11 @@ export function createWorkshopScene(
       disposed = true;
       cancelAnimationFrame(rafHandle);
       window.removeEventListener('resize', resize);
+      resizeObserver.disconnect();
       renderer.domElement.removeEventListener('click', onClick);
       scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
+        // Meshes, lines (incl. GridHelper), and points all own GPU resources.
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line || obj instanceof THREE.Points) {
           obj.geometry.dispose();
           const material = obj.material as THREE.Material | THREE.Material[];
           if (Array.isArray(material)) material.forEach((m) => m.dispose());

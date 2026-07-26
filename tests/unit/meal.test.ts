@@ -136,7 +136,7 @@ describe('meal reservation lifecycle', () => {
         actorId: 'mara',
         resourceId: 'meal-1',
         ownerNpcId: 'rin',
-        violationKind: 'consumed-reserved-meal',
+        violationKind: 'took-reserved-meal',
       }),
     );
     // The reducer records the victim's structured memory of the violation.

@@ -9,6 +9,7 @@ import {
   INJURY_WORSEN_DELAY_TICKS,
   INJURY_WORSENED_SEVERITY,
   MAX_REEVALUATION_INTERVAL_TICKS,
+  MEAL_HUNGER_REDUCTION,
   MEAL_RESOURCE_ID,
   RELATIONSHIP_MAX,
   RELATIONSHIP_MIN,
@@ -19,6 +20,7 @@ import {
   REPAIR_TOTAL_UNITS,
   ROUTINE_WORK_BLOCK_TICKS,
   SCENARIO_END_TICK,
+  SOCIAL_SIGNAL_RECENCY_TICKS,
   TASK_ID,
   TRAVEL_TICKS,
   TREATMENT_BY_HEALER,
@@ -385,7 +387,10 @@ function injuryWorseningMonitor(run: EngineRun, tick: number): void {
       injury.severityMicro > 0 &&
       injury.severityMicro < INJURY_WORSENED_SEVERITY &&
       injury.treatmentStartedTick === null &&
-      tick === injury.injuredAtTick + INJURY_WORSEN_DELAY_TICKS
+      // ">=" rather than "===": if a treatment started in time but was later
+      // aborted after the deadline, the untreated injury still worsens (on
+      // the first tick the patient is again untreated past the deadline).
+      tick >= injury.injuredAtTick + INJURY_WORSEN_DELAY_TICKS
     ) {
       const worsened = emit(run, {
         type: 'InjuryWorsened',
@@ -884,7 +889,7 @@ function beginActivePhase(
           actorId: npc.id,
           resourceId: state.meal.resourceId,
           ownerNpcId: ownerId,
-          violationKind: 'consumed-reserved-meal',
+          violationKind: 'took-reserved-meal',
         },
       });
       changeRelationship(run, tick, ownerId, npc.id, REL_DELTA_MEAL_VIOLATION, 'meal-taken', [
@@ -996,7 +1001,7 @@ function completeAction(run: EngineRun, npc: NpcState, tick: number): void {
     case 'eat':
     case 'eat-violation': {
       const before = npc.hungerMicro;
-      const after = Math.max(0, before - 550_000);
+      const after = Math.max(0, before - MEAL_HUNGER_REDUCTION);
       emit(run, {
         type: 'MealConsumed',
         tick,
@@ -1423,7 +1428,7 @@ function buildDecisionContext(
     benchOccupantRunTicks: occupantRun,
     purifierProgressUnits: state.purifier.progressUnits,
     recentSignals: state.socialSignals
-      .filter((s) => tick - s.tick < 600)
+      .filter((s) => tick - s.tick < SOCIAL_SIGNAL_RECENCY_TICKS)
       .map((s) => ({ kind: s.kind, fromNpcId: s.fromNpcId, toNpcId: s.toNpcId, tick: s.tick })),
   };
 }

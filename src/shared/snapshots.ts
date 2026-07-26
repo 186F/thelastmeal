@@ -9,7 +9,7 @@ import type { ActionCategory, ActionMode, LocationId, NpcId, ScenarioId } from '
  * All normalized quantities are integer micro units (1.0 == 1_000_000).
  */
 
-export type RunStatus = 'idle' | 'running' | 'paused' | 'complete';
+export type RunStatus = 'idle' | 'running' | 'paused' | 'replaying' | 'complete';
 
 export interface SnapshotTransit {
   fromLocationId: LocationId;

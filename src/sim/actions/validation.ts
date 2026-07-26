@@ -58,7 +58,17 @@ export function validateStart(
       }
       if (state.purifier.progressUnits >= REPAIR_TOTAL_UNITS)
         return fail('repair-already-complete');
-      return OK; // bench free or occupied are both valid (handover or plain takeover)
+      // Never silently reinterpret against a new target: when the active
+      // phase begins, the bench must still be held by the NPC this relieve
+      // was proposed for. If they left or were replaced, the action is stale
+      // and gets rejected cleanly; the actor re-decides next tick.
+      if (atLocationCheck && action.targetNpcId !== null) {
+        const bench = state.reservations.find((r) => r.resourceId === BENCH_RESOURCE_ID);
+        if (!bench || bench.holderNpcId !== action.targetNpcId) {
+          return fail('stale-relieve-target');
+        }
+      }
+      return OK;
     }
     case 'treat': {
       const patientId = action.targetNpcId;

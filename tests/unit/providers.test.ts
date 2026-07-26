@@ -216,7 +216,7 @@ describe('deterministic provider', () => {
     const codes = work!.components.map((c) => c.code);
     expect(codes).toContain('work-drive'); // trait effect
     expect(codes).toContain('memory:criticism'); // memory effect
-    expect(codes).toContain('deadline-pressure'); // goal/commitment context
+    expect(codes).toContain('value:colony-survival'); // declared-value effect
   });
 });
 

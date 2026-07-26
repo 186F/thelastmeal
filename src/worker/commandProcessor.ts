@@ -211,7 +211,15 @@ export function handleCommand(session: WorkerSession, command: WorkerCommand): W
       }
 
       case 'replay': {
+        // Surface the required 'replaying' run state for the duration of the
+        // replay (synchronous here, but the operator sees the transition).
+        const statusBefore = session.runStatus;
+        if (session.host.scenarioId !== null) {
+          session.runStatus = 'replaying';
+          pushSnapshot(session, out);
+        }
         const outcome = session.host.replay(command.source);
+        session.runStatus = statusBefore;
         out.push({
           protocolVersion: PROTOCOL_VERSION,
           type: 'replay-result',
@@ -222,6 +230,9 @@ export function handleCommand(session: WorkerSession, command: WorkerCommand): W
           errors: outcome.errors,
         });
         ack(outcome.ok, outcome.ok ? null : (outcome.errors[0] ?? 'replay-failed'));
+        if (session.host.scenarioId !== null) {
+          pushSnapshot(session, out);
+        }
         break;
       }
 

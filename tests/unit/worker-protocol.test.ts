@@ -61,6 +61,30 @@ describe('command ordering gate', () => {
   });
 });
 
+describe('snapshot schema validation', () => {
+  it('a real host snapshot validates against the runtime schema', async () => {
+    const { presentationSnapshotSchema } = await import('../../src/shared/snapshotSchema');
+    const session = new WorkerSession();
+    handleCommand(session, cmd('load-scenario', { scenarioId: 'C' }));
+    handleCommand(session, cmd('step', { ticks: 800 }));
+    const snapshot = session.host.snapshot();
+    const result = presentationSnapshotSchema.safeParse(snapshot);
+    expect(result.success, JSON.stringify(result.success ? '' : result.error.issues[0])).toBe(true);
+  });
+
+  it('rejects structurally corrupted snapshots', async () => {
+    const { presentationSnapshotSchema } = await import('../../src/shared/snapshotSchema');
+    const session = new WorkerSession();
+    handleCommand(session, cmd('load-scenario', { scenarioId: 'A' }));
+    const snapshot = session.host.snapshot() as unknown as Record<string, unknown>;
+    expect(presentationSnapshotSchema.safeParse({ ...snapshot, tick: -1 }).success).toBe(false);
+    expect(presentationSnapshotSchema.safeParse({ ...snapshot, npcs: [] }).success).toBe(false);
+    expect(presentationSnapshotSchema.safeParse({ ...snapshot, extraField: 1 }).success).toBe(
+      false,
+    );
+  });
+});
+
 describe('worker snapshot/response flow (Node-driven)', () => {
   it('produces ready, snapshot, events, and run-complete responses', () => {
     const session = new WorkerSession();
