@@ -1,0 +1,8 @@
+# Normalize all text files to LF in the repository AND in working trees.
+# Prettier enforces endOfLine "lf"; without this, Windows checkouts under
+# core.autocrlf=true materialize CRLF and `npm run lint` fails from a clean
+# clone.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
