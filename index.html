@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>The Last Meal — Vertical Slice 001</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="control-bar" aria-label="Global controls"></header>
+      <main id="main-grid">
+        <section id="viewport-pane" aria-label="Workshop viewport">
+          <div id="viewport"></div>
+          <div id="viewport-labels"></div>
+        </section>
+        <aside id="side-pane">
+          <section id="global-panel" aria-label="Global simulation state"></section>
+          <section id="inspector-panel" aria-label="Selected NPC inspector"></section>
+        </aside>
+      </main>
+      <footer id="bottom-pane">
+        <section id="event-panel" aria-label="Event and decision details"></section>
+      </footer>
+    </div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

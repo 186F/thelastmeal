@@ -1,0 +1,271 @@
+/* Operator UI — desktop-oriented, plain HTML/CSS (no framework). */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f1319;
+  --panel: #171d26;
+  --panel-2: #1d2531;
+  --border: #2a3442;
+  --text: #d7dee8;
+  --muted: #8b98a9;
+  --accent: #5ea1f7;
+  --good: #62d68a;
+  --bad: #e5484d;
+  --warn: #f2c14e;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.45 'Segoe UI',
+    system-ui,
+    sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* --- Control bar ---------------------------------------------------------- */
+
+#control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+#control-bar .group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 8px;
+  border-right: 1px solid var(--border);
+}
+
+#control-bar .group:last-child {
+  border-right: none;
+}
+
+button,
+select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+label.speed-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+/* --- Main grid ------------------------------------------------------------- */
+
+#main-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  flex: 1;
+  min-height: 0;
+}
+
+#viewport-pane {
+  position: relative;
+  min-width: 0;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+}
+
+#viewport canvas {
+  display: block;
+}
+
+#viewport-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.scene-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+  text-shadow: 0 1px 3px #000;
+}
+
+.npc-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+#side-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+/* --- Panels ------------------------------------------------------------------ */
+
+.panel-title {
+  margin: 0;
+  padding: 8px 10px 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 2px 10px;
+  padding: 4px 10px 10px;
+}
+
+.kv-grid dt {
+  color: var(--muted);
+}
+
+.kv-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.value-good {
+  color: var(--good);
+}
+
+.value-bad {
+  color: var(--bad);
+}
+
+.value-warn {
+  color: var(--warn);
+}
+
+#inspector-panel .npc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.sub-list {
+  margin: 2px 0 8px;
+  padding: 0 10px 0 24px;
+  color: var(--muted);
+}
+
+.sub-list li b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* --- Bottom pane ----------------------------------------------------------------- */
+
+#bottom-pane {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+#bottom-pane.collapsed #event-log-body {
+  display: none;
+}
+
+#event-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#event-log-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 10px;
+}
+
+#event-log-body {
+  overflow-y: auto;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  padding: 0 10px 8px;
+}
+
+.event-row {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.event-row b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.scores-table {
+  border-collapse: collapse;
+  margin: 4px 10px 10px;
+  font-size: 11px;
+}
+
+.scores-table td,
+.scores-table th {
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  text-align: left;
+}
+
+#status-line {
+  padding: 3px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+}
+
+#status-line .error {
+  color: var(--bad);
+}
