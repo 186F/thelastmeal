@@ -3,7 +3,11 @@ import type { Affordance } from '../../src/sim/actions/affordances';
 import { DeterministicProvider } from '../../src/sim/decisions/deterministicProvider';
 import { FallbackProvider } from '../../src/sim/decisions/fallbackProvider';
 import { ScriptedFailureProvider } from '../../src/sim/decisions/failingProvider';
-import { ProviderFailureError, type DecisionContext } from '../../src/sim/decisions/provider';
+import {
+  ProviderFailureError,
+  type DecisionContext,
+  type DecisionResult,
+} from '../../src/sim/decisions/provider';
 import { IDENTITIES } from '../../src/sim/domain/identities';
 
 function aff(partial: Partial<Affordance> & { id: string; mode: Affordance['mode'] }): Affordance {
@@ -198,7 +202,9 @@ describe('deterministic provider', () => {
         hungerMicro: 720_000,
         memories: [
           {
-            id: 'mem-mara-criticism',
+            // Deliberately arbitrary ID: decision logic reads the typed
+            // appraisal, never the memory ID (remediation 6).
+            id: 'mem-arbitrary-id-xyz',
             canonicalFact: 'player-criticized-mara-for-giving-up-when-work-becomes-difficult',
             factEventId: null,
             preScenario: true,
@@ -207,6 +213,10 @@ describe('deterministic provider', () => {
             confidenceMicro: 900_000,
             importanceMicro: 900_000,
             createdTick: -1,
+            themes: ['competence-threat'],
+            socialTargetId: null,
+            valenceMicro: -700_000,
+            selfRelevanceMicro: 900_000,
           },
         ],
         affordances,
@@ -215,7 +225,7 @@ describe('deterministic provider', () => {
     const work = result.scores.find((s) => s.affordanceId === 'aff:mara:100:work');
     const codes = work!.components.map((c) => c.code);
     expect(codes).toContain('work-drive'); // trait effect
-    expect(codes).toContain('memory:criticism'); // memory effect
+    expect(codes).toContain('memory:competence-threat'); // generic appraisal effect
     expect(codes).toContain('value:colony-survival'); // declared-value effect
   });
 });
@@ -240,7 +250,8 @@ describe('scripted failure provider', () => {
   it('delegates before the failure tick and throws from it onward', () => {
     const failing = new ScriptedFailureProvider(new DeterministicProvider(), 600);
     const affordances = [aff({ id: 'aff:jonas:100:wait', mode: 'wait' })];
-    expect(failing.decide(ctx({ tick: 599, affordances })).affordanceId).toBe('aff:jonas:100:wait');
+    const before = failing.decide(ctx({ tick: 599, affordances })) as DecisionResult;
+    expect(before.affordanceId).toBe('aff:jonas:100:wait');
     expect(() => failing.decide(ctx({ tick: 600, affordances }))).toThrow(ProviderFailureError);
   });
 });

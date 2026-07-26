@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MARA_CRITICISM_MEMORY_ID } from '../../src/sim/domain/identities';
 import { completedRun, eventsOfType, firstEventOfType } from '../helpers';
 
 describe('fact / perception / belief / memory separation', () => {
@@ -46,7 +47,7 @@ describe('fact / perception / belief / memory separation', () => {
 
   it('pre-scenario memories keep fact, perception, interpretation, confidence, importance apart', () => {
     const run = completedRun('A');
-    const memory = run.state.npcs.mara.memories.find((m) => m.id === 'mem-mara-criticism')!;
+    const memory = run.state.npcs.mara.memories.find((m) => m.id === MARA_CRITICISM_MEMORY_ID)!;
     expect(memory.canonicalFact).toContain('player-criticized-mara');
     expect(memory.perception).toBe('heard-directly');
     expect(memory.interpretation).toBe('attack-on-competence');
@@ -54,6 +55,9 @@ describe('fact / perception / belief / memory separation', () => {
     expect(memory.importanceMicro).toBe(900_000);
     expect(memory.preScenario).toBe(true);
     expect(memory.factEventId).toBeNull();
+    // Typed appraisal is stored alongside, separately inspectable.
+    expect(memory.themes).toEqual(['competence-threat']);
+    expect(memory.socialTargetId).toBeNull();
   });
 
   it('runtime memories cite the canonical fact event (treatment memory)', () => {

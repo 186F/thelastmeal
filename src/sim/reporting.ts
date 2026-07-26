@@ -97,7 +97,8 @@ export function buildScenarioReportRow(
   scenario: ScenarioDefinition,
   state: CanonicalState,
   events: readonly EventEnvelope[],
-  finalStateHash: string,
+  worldStateHash: string,
+  canonicalLedgerHash: string,
   replayHashMatch: boolean,
 ): ScenarioReportRow {
   const mealConsumedEvent = events.find((e) => e.type === 'MealConsumed');
@@ -126,7 +127,8 @@ export function buildScenarioReportRow(
       valueMicro: r.valueMicro,
     })),
     eventCount: events.length,
-    finalStateHash,
+    worldStateHash,
+    canonicalLedgerHash,
     replayHashMatch,
     npcStats: buildNpcStats(events),
   };
@@ -204,16 +206,16 @@ export function renderMarkdownReport(report: BatchReport): string {
   }
   lines.push('');
   lines.push(
-    '| Scenario | Seed | Progress | Task | Meal eaten by | Violations | Promise | Treatment | Provider failures | Rejected | Interrupted | Events | Hash | Replay |',
+    '| Scenario | Seed | Progress | Task | Meal eaten by | Violations | Promise | Treatment | Provider failures | Rejected | Interrupted | Events | World hash | Ledger hash | Replay |',
   );
-  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const row of report.scenarios) {
     const progress = (row.finalProgressPctTimes100 / 100).toFixed(2) + '%';
     const treatment = row.treatmentOutcome
       ? `${row.treatmentOutcome.healerId}→${row.treatmentOutcome.patientId}@${formatTickClock(row.treatmentOutcome.completedTick)}`
       : '—';
     lines.push(
-      `| ${row.scenarioId} | ${row.seed} | ${progress} | ${row.taskOutcome} | ${row.mealConsumedBy ?? '—'}${row.mealConsumedViaViolation ? ' (violation)' : ''} | ${row.ownershipViolationCount} | ${row.promiseOutcome} | ${treatment} | ${row.decisionProviderFailureCount} | ${row.rejectedActionCount} | ${row.interruptedActionCount} | ${row.eventCount} | \`${row.finalStateHash}\` | ${row.replayHashMatch ? 'match' : 'MISMATCH'} |`,
+      `| ${row.scenarioId} | ${row.seed} | ${progress} | ${row.taskOutcome} | ${row.mealConsumedBy ?? '—'}${row.mealConsumedViaViolation ? ' (violation)' : ''} | ${row.ownershipViolationCount} | ${row.promiseOutcome} | ${treatment} | ${row.decisionProviderFailureCount} | ${row.rejectedActionCount} | ${row.interruptedActionCount} | ${row.eventCount} | \`${row.worldStateHash}\` | \`${row.canonicalLedgerHash}\` | ${row.replayHashMatch ? 'match' : 'MISMATCH'} |`,
     );
   }
   lines.push('');

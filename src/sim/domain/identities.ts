@@ -1,4 +1,4 @@
-import type { LocationId, NpcId } from '../../shared/ids';
+import type { LocationId, MemoryTheme, NpcId } from '../../shared/ids';
 
 /**
  * Structured NPC identity cards (brief section 8). Identity is data; any
@@ -40,6 +40,13 @@ export interface SeedMemory {
   interpretation: string;
   confidenceMicro: number;
   importanceMicro: number;
+  /** Typed appraisal (remediation 6): decision logic reads these fields,
+   * never the memory ID. IDs are neutral slugs carrying no scenario name or
+   * action outcome. */
+  themes: MemoryTheme[];
+  socialTargetId: NpcId | null;
+  valenceMicro: number;
+  selfRelevanceMicro: number;
 }
 
 export const IDENTITIES: Record<NpcId, NpcIdentity> = {
@@ -119,7 +126,7 @@ export const IDENTITIES: Record<NpcId, NpcIdentity> = {
  */
 export const SEED_MEMORIES: SeedMemory[] = [
   {
-    id: 'mem-mara-criticism',
+    id: 'mem-mara-001',
     npcId: 'mara',
     canonicalFact: 'player-criticized-mara-for-giving-up-when-work-becomes-difficult',
     preScenario: true,
@@ -127,9 +134,13 @@ export const SEED_MEMORIES: SeedMemory[] = [
     interpretation: 'attack-on-competence',
     confidenceMicro: 900_000,
     importanceMicro: 900_000,
+    themes: ['competence-threat'],
+    socialTargetId: null,
+    valenceMicro: -700_000,
+    selfRelevanceMicro: 900_000,
   },
   {
-    id: 'mem-jonas-shift-covered',
+    id: 'mem-jonas-001',
     npcId: 'jonas',
     canonicalFact: 'mara-covered-jonas-shift-several-days-ago',
     preScenario: true,
@@ -137,9 +148,13 @@ export const SEED_MEMORIES: SeedMemory[] = [
     interpretation: 'owes-mara-reliability',
     confidenceMicro: 900_000,
     importanceMicro: 700_000,
+    themes: ['reciprocity-debt'],
+    socialTargetId: 'mara',
+    valenceMicro: 400_000,
+    selfRelevanceMicro: 700_000,
   },
   {
-    id: 'mem-rin-supply-taken',
+    id: 'mem-rin-001',
     npcId: 'rin',
     canonicalFact: 'jonas-used-rins-supply-without-asking',
     preScenario: true,
@@ -147,5 +162,16 @@ export const SEED_MEMORIES: SeedMemory[] = [
     interpretation: 'jonas-disrespects-ownership',
     confidenceMicro: 850_000,
     importanceMicro: 800_000,
+    themes: ['ownership-violation'],
+    socialTargetId: 'jonas',
+    valenceMicro: -600_000,
+    selfRelevanceMicro: 800_000,
   },
 ];
+
+/**
+ * The B1/B2 ablation switch targets Mara's competence-threat seed memory by
+ * ID. This is scenario-data plumbing (which fixture to remove), not decision
+ * logic — decision logic reads appraisals only.
+ */
+export const MARA_CRITICISM_MEMORY_ID = 'mem-mara-001';

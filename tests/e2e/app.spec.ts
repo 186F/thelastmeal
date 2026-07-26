@@ -59,11 +59,12 @@ test('start, pause, resume, step, speed change, and reset drive the run', async 
   expect(consoleErrors).toEqual([]);
 });
 
-test('run to completion produces a final hash and matching live replay', async ({ page }) => {
+test('run to completion produces both hashes and a matching live replay', async ({ page }) => {
   await page.locator('#btn-run-complete').click();
   await expect(await field(page, 'status')).toHaveText('complete');
   await expect(await field(page, 'time')).toContainText('45:00');
   await expect(await field(page, 'final-hash')).toContainText(/[0-9a-f]{16}/);
+  await expect(await field(page, 'ledger-hash')).toContainText(/[0-9a-f]{16}/);
   await expect(await field(page, 'deadline')).toContainText('completed');
 
   await page.locator('#btn-replay-live').click();
@@ -138,6 +139,8 @@ test('scenario F visibly reports provider failure and fallback while continuing'
   // Fallback decisions are visible in the event log and inspector.
   await page.locator('#npc-tab-mara').click();
   await expect(await field(page, 'npc-decision')).toContainText('fallback');
+  // Decision-lifecycle diagnostics: request ID and resolution status.
+  await expect(await field(page, 'npc-request')).toContainText(/dec-\d+/);
   await expect(
     page.locator('#event-log-body .event-row[data-event-type="DecisionProviderFailed"]').first(),
   ).toBeVisible();
@@ -159,7 +162,8 @@ test('export, import, and replay round-trip to a matching hash', async ({ page }
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(chunk as Buffer);
   const fileText = Buffer.concat(chunks).toString('utf8');
-  expect(fileText).toContain('"finalStateHash"');
+  expect(fileText).toContain('"worldStateHash"');
+  expect(fileText).toContain('"canonicalLedgerHash"');
 
   await page.locator('#import-file').setInputFiles({
     name: download.suggestedFilename(),

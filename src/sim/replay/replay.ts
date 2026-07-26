@@ -4,7 +4,7 @@ import { applyEvent } from '../events/reduce';
 import type { SimEvent } from '../events/types';
 import { getScenario } from '../scenarios/definitions';
 import { buildInitialState } from '../scenarios/initialState';
-import { hashCanonicalState } from './hash';
+import { worldStateHash } from './worldHash';
 import type { ScenarioId } from '../../shared/ids';
 
 /**
@@ -12,13 +12,17 @@ import type { ScenarioId } from '../../shared/ids';
  * scenario definition plus the ordered authoritative event ledger. Replay
  * never consults a decision provider — it folds the reducer over recorded
  * events, exactly the invariant that makes the ledger authoritative.
+ *
+ * Replay reproduces the semantic `worldStateHash`. The canonical ledger hash
+ * is a function of the event stream itself, so re-simulating (not replaying)
+ * is the axis that verifies it; see the determinism suite.
  */
 
 export interface ReplayResult {
   state: CanonicalState;
-  finalStateHash: string;
+  worldStateHash: string;
   /** Hash recorded in the ledger's ScenarioEnded event, if present. */
-  recordedHash: string | null;
+  recordedWorldStateHash: string | null;
 }
 
 export function replayLedger(
@@ -27,12 +31,12 @@ export function replayLedger(
 ): ReplayResult {
   const scenario = getScenario(scenarioId);
   const state = buildInitialState(scenario);
-  let recordedHash: string | null = null;
+  let recordedWorldStateHash: string | null = null;
   for (const event of events) {
     applyEvent(state, event as SimEvent);
     if (event.type === 'ScenarioEnded') {
-      recordedHash = (event.payload as { finalStateHash: string }).finalStateHash;
+      recordedWorldStateHash = (event.payload as { worldStateHash: string }).worldStateHash;
     }
   }
-  return { state, finalStateHash: hashCanonicalState(state), recordedHash };
+  return { state, worldStateHash: worldStateHash(state), recordedWorldStateHash };
 }

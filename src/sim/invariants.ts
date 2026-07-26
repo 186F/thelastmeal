@@ -6,14 +6,29 @@ import type { ScenarioDefinition } from './scenarios/definitions';
  * Post-run invariant checker (pre-registered correctness criteria, brief
  * section 2). Operates purely on the recorded ledger and final state, so the
  * batch runner and tests share one implementation.
+ *
+ * Split (remediation 3): STRUCTURAL invariants hold for any well-formed run
+ * of any provider and hard-reject a ledger at import; scenario EXPECTATIONS
+ * encode pre-registered behavioral outcomes of the frozen v1.0 provider and
+ * are reported as warnings at import (a genuine ledger from a different
+ * provider may legitimately violate them without being corrupt).
  */
 export function checkInvariants(
   scenario: ScenarioDefinition,
   events: readonly EventEnvelope[],
   finalState: CanonicalState,
 ): string[] {
+  return [
+    ...checkStructuralInvariants(events, finalState),
+    ...checkScenarioExpectations(scenario, events),
+  ];
+}
+
+export function checkStructuralInvariants(
+  events: readonly EventEnvelope[],
+  finalState: CanonicalState,
+): string[] {
   const violations: string[] = [];
-  const has = (code: string): boolean => scenario.expectedInvariants.includes(code);
   const count = (type: string): number => events.filter((e) => e.type === type).length;
 
   // Meal consumed at most once — globally pre-registered.
@@ -94,7 +109,18 @@ export function checkInvariants(
     }
   }
 
-  // Scenario-specific expectations.
+  return violations;
+}
+
+/** Pre-registered scenario expectations (warnings at import, see above). */
+export function checkScenarioExpectations(
+  scenario: ScenarioDefinition,
+  events: readonly EventEnvelope[],
+): string[] {
+  const violations: string[] = [];
+  const has = (code: string): boolean => scenario.expectedInvariants.includes(code);
+  const count = (type: string): number => events.filter((e) => e.type === type).length;
+
   if (has('no-injury-events')) {
     const injuryEvents =
       count('InjuryOccurred') +

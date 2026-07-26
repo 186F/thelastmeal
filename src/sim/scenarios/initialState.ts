@@ -7,7 +7,7 @@ import {
   REPAIR_INITIAL_UNITS,
   SCENARIO_END_TICK,
 } from '../config';
-import { IDENTITIES, SEED_MEMORIES } from '../domain/identities';
+import { IDENTITIES, MARA_CRITICISM_MEMORY_ID, SEED_MEMORIES } from '../domain/identities';
 import type {
   BeliefState,
   CanonicalState,
@@ -16,6 +16,7 @@ import type {
   RelationshipState,
 } from '../domain/state';
 import type { ScenarioDefinition } from './definitions';
+import { V1_ROLES, commitmentIdForRoles, roleOf, type RoleAssignment } from './roles';
 
 /**
  * Builds the canonical initial state for a scenario, before any event is
@@ -25,11 +26,18 @@ import type { ScenarioDefinition } from './definitions';
  * Pre-scenario memories and initial beliefs are scenario data, not events:
  * they exist before the simulation's first tick. Everything that happens
  * from tick 0 onward is event-sourced.
+ *
+ * Structural roles (remediation 7): initial locations and the common-
+ * knowledge beliefs follow the role assignment; the default V1_ROLES
+ * reproduces the frozen v1.0 identity-card values exactly.
  */
-export function buildInitialState(scenario: ScenarioDefinition): CanonicalState {
+export function buildInitialState(
+  scenario: ScenarioDefinition,
+  roles: RoleAssignment = V1_ROLES,
+): CanonicalState {
   const npcs = {} as Record<NpcId, NpcState>;
   for (const npcId of NPC_IDS) {
-    npcs[npcId] = buildNpc(npcId, scenario);
+    npcs[npcId] = buildNpc(npcId, scenario, roles);
   }
 
   const relationships: RelationshipState[] = [];
@@ -49,6 +57,7 @@ export function buildInitialState(scenario: ScenarioDefinition): CanonicalState 
     scenarioVersion: scenario.version,
     seed: scenario.seed,
     stateVersion: 0,
+    worldRevision: 0,
     tick: 0,
     endTick: SCENARIO_END_TICK,
     terminal: false,
@@ -71,7 +80,13 @@ export function buildInitialState(scenario: ScenarioDefinition): CanonicalState 
   };
 }
 
-function buildNpc(npcId: NpcId, scenario: ScenarioDefinition): NpcState {
+const INITIAL_LOCATION_BY_ROLE = {
+  benchWorker: 'purifier-workbench',
+  debtor: 'routine-work-station',
+  mealOwner: 'purifier-workbench',
+} as const;
+
+function buildNpc(npcId: NpcId, scenario: ScenarioDefinition, roles: RoleAssignment): NpcState {
   const identity = IDENTITIES[npcId];
   let hunger = identity.initial.hungerMicro;
   if (npcId === 'mara' && scenario.overrides.maraInitialHungerMicro !== null) {
@@ -80,7 +95,7 @@ function buildNpc(npcId: NpcId, scenario: ScenarioDefinition): NpcState {
 
   const memories: MemoryState[] = SEED_MEMORIES.filter((m) => {
     if (m.npcId !== npcId) return false;
-    if (m.id === 'mem-mara-criticism' && scenario.overrides.removeMaraCriticismMemory) {
+    if (m.id === MARA_CRITICISM_MEMORY_ID && scenario.overrides.removeMaraCriticismMemory) {
       return false;
     }
     return true;
@@ -94,20 +109,25 @@ function buildNpc(npcId: NpcId, scenario: ScenarioDefinition): NpcState {
     confidenceMicro: m.confidenceMicro,
     importanceMicro: m.importanceMicro,
     createdTick: -1,
+    themes: [...m.themes],
+    socialTargetId: m.socialTargetId,
+    valenceMicro: m.valenceMicro,
+    selfRelevanceMicro: m.selfRelevanceMicro,
   }));
 
   // Small-colony common knowledge, seeded as initial beliefs with 'initial'
-  // provenance: everyone knows the meal exists, that Rin holds its
-  // reservation, and that Jonas promised to relieve Mara.
+  // provenance: everyone knows the meal exists, who holds its reservation,
+  // and that the relief promise is active (v1.0: Rin owns the meal, Jonas
+  // promised to relieve Mara).
   const beliefs: BeliefState[] = [
     initialBelief(npcId, 'meal-exists', 'true'),
-    initialBelief(npcId, 'meal-owner', 'rin'),
-    initialBelief(npcId, 'commitment:cmt-jonas-relieves-mara', 'active'),
+    initialBelief(npcId, 'meal-owner', roles.mealOwner),
+    initialBelief(npcId, `commitment:${commitmentIdForRoles(roles)}`, 'active'),
   ];
 
   return {
     id: npcId,
-    locationId: identity.initial.locationId,
+    locationId: INITIAL_LOCATION_BY_ROLE[roleOf(roles, npcId)],
     transit: null,
     hungerMicro: hunger,
     fatigueMicro: identity.initial.fatigueMicro,
@@ -123,6 +143,8 @@ function buildNpc(npcId: NpcId, scenario: ScenarioDefinition): NpcState {
     pendingAction: null,
     lastDecisionTick: 0,
     needsReevaluation: false,
+    pendingDecision: null,
+    lastSupersededRequestId: null,
     requestCooldownUntilTick: 0,
     lastDecision: null,
     beliefs,

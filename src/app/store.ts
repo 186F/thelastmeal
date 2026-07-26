@@ -1,3 +1,4 @@
+import type { DecisionRequest } from '../shared/decisionContracts';
 import type { EventEnvelope } from '../shared/events';
 import type { NpcId, ScenarioId } from '../shared/ids';
 import type { BatchReport } from '../shared/reports';
@@ -24,12 +25,17 @@ export interface ViewState {
   eventLog: EventEnvelope[];
   eventTotal: number;
   lastDecisionScores: Partial<Record<NpcId, AffordanceScoreRecord[]>>;
-  finalHash: string | null;
+  finalWorldHash: string | null;
+  finalLedgerHash: string | null;
+  /** Diagnostics log of external-gateway decision requests (capped). */
+  externalDecisionRequests: DecisionRequest[];
   replayResult: {
     ok: boolean;
     match: boolean;
-    computedHash: string | null;
-    expectedHash: string | null;
+    computedWorldStateHash: string | null;
+    expectedWorldStateHash: string | null;
+    computedLedgerHash: string | null;
+    expectedLedgerHash: string | null;
     errors: string[];
   } | null;
   importResult: { ok: boolean; errors: string[]; scenarioId: ScenarioId | null } | null;
@@ -66,7 +72,9 @@ export class ViewStore {
     eventLog: [],
     eventTotal: 0,
     lastDecisionScores: {},
-    finalHash: null,
+    finalWorldHash: null,
+    finalLedgerHash: null,
+    externalDecisionRequests: [],
     replayResult: null,
     importResult: null,
     batch: {
@@ -103,12 +111,14 @@ export class ViewStore {
     this.update((s) => {
       s.eventTotal = totalCount;
       for (const event of events) {
-        if (event.type === 'DecisionReturned') {
+        if (event.type === 'DecisionResponseReceived') {
           const payload = event.payload as {
             npcId: NpcId;
             scores: AffordanceScoreRecord[];
           };
-          s.lastDecisionScores[payload.npcId] = payload.scores;
+          if (payload.scores.length > 0) {
+            s.lastDecisionScores[payload.npcId] = payload.scores;
+          }
         }
       }
       s.eventLog.push(...events);
@@ -123,7 +133,9 @@ export class ViewStore {
       s.eventLog = [];
       s.eventTotal = 0;
       s.lastDecisionScores = {};
-      s.finalHash = null;
+      s.finalWorldHash = null;
+      s.finalLedgerHash = null;
+      s.externalDecisionRequests = [];
       s.replayResult = null;
     });
   }

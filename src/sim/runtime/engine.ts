@@ -2,7 +2,6 @@ import { NPC_IDS, type NpcId } from '../../shared/ids';
 import {
   BENCH_RESOURCE_ID,
   COMMITMENT_RELIEF_GRACE_TICK,
-  COMMITMENT_RELIEF_ID,
   COMMITMENT_RELIEF_MIN_DURATION_TICKS,
   COMMITMENT_RELIEF_START_TICK,
   DELIVER_MATERIALS_DURATION_TICKS,
@@ -33,20 +32,38 @@ import type { CanonicalState, NpcState, PendingActionState } from '../domain/sta
 import { EventLedger, makeDraft } from '../events/ledger';
 import { applyEvent } from '../events/reduce';
 import type { EventDraft, SimEvent } from '../events/types';
+import { evaluateConstraints } from '../decisions/constraints';
+import { hardDependencyFingerprint } from '../decisions/dependencyFingerprint';
 import { DeterministicProvider } from '../decisions/deterministicProvider';
 import { FallbackProvider } from '../decisions/fallbackProvider';
 import { ScriptedFailureProvider } from '../decisions/failingProvider';
 import {
   ProviderFailureError,
+  isDeferred,
+  isScheduledResponseSource,
   type CommitmentView,
   type DecisionContext,
   type DecisionProvider,
   type DecisionResult,
 } from '../decisions/provider';
+import type {
+  DecisionRejectionReason,
+  DecisionRequest,
+  DecisionResponse,
+} from '../../shared/decisionContracts';
+import { DECISION_REQUEST_TTL_TICKS } from '../config';
 import { SeededRng } from '../rng/rng';
-import { hashCanonicalState } from '../replay/hash';
+import { canonicalLedgerHash } from '../replay/ledgerHash';
+import { worldStateHash } from '../replay/worldHash';
 import { buildInitialState } from '../scenarios/initialState';
 import { getScenario, type ScenarioDefinition } from '../scenarios/definitions';
+import {
+  V1_ROLES,
+  assertValidRoles,
+  commitmentIdForRoles,
+  roleOf,
+  type RoleAssignment,
+} from '../scenarios/roles';
 import type { ScenarioId } from '../../shared/ids';
 
 /**
@@ -60,18 +77,45 @@ import type { ScenarioId } from '../../shared/ids';
 
 export interface EngineRun {
   scenario: ScenarioDefinition;
+  /** Structural role assignment; always V1_ROLES outside the eval harness. */
+  roles: RoleAssignment;
   state: CanonicalState;
   ledger: EventLedger;
   rng: SeededRng;
   provider: DecisionProvider;
   fallback: DecisionProvider;
   counters: { action: number; decision: number; request: number; proposal: number; signal: number };
-  finalStateHash: string | null;
+  /** Semantic world-state hash, set at scenario end (remediation 4). */
+  worldStateHash: string | null;
+  /** Canonical event-stream hash, set at scenario end (remediation 4). */
+  canonicalLedgerHash: string | null;
+  /**
+   * Externally injected decision responses (worker command
+   * `submit-decision-response`), drained at exactly one fixed point inside
+   * stepTick so canonical outcomes never depend on operator tick-batch sizes.
+   * Non-canonical transport: every processed response is event-recorded.
+   */
+  responseInbox: DecisionResponse[];
+  /**
+   * Outbox of pending requests whose provider deferred — the seam intended
+   * for a future external gateway. This build never forwards them to any
+   * network; the worker exposes them as diagnostics-only messages.
+   */
+  externalRequests: DecisionRequest[];
 }
 
 export function createRun(scenarioId: ScenarioId): EngineRun {
-  const scenario = getScenario(scenarioId);
-  const state = buildInitialState(scenario);
+  return createRunWithRoles(getScenario(scenarioId), V1_ROLES);
+}
+
+/**
+ * Role-parameterized run creation for the individuality-eval harness
+ * (remediation 7). Every v1.0 path calls createRun, which fixes V1_ROLES;
+ * with the default assignment this function reproduces v1.0 byte-exactly.
+ */
+export function createRunWithRoles(scenario: ScenarioDefinition, roles: RoleAssignment): EngineRun {
+  assertValidRoles(roles);
+  const state = buildInitialState(scenario, roles);
   const base = new DeterministicProvider();
   const provider =
     scenario.providerFailureFromTick !== null
@@ -79,13 +123,17 @@ export function createRun(scenarioId: ScenarioId): EngineRun {
       : base;
   const run: EngineRun = {
     scenario,
+    roles,
     state,
     ledger: new EventLedger(),
     rng: new SeededRng(scenario.seed),
     provider,
     fallback: new FallbackProvider(),
     counters: { action: 0, decision: 0, request: 0, proposal: 0, signal: 0 },
-    finalStateHash: null,
+    worldStateHash: null,
+    canonicalLedgerHash: null,
+    responseInbox: [],
+    externalRequests: [],
   };
   emitScenarioStart(run);
   return run;
@@ -125,13 +173,21 @@ export function stepTick(run: EngineRun): void {
   // 8. Commitment monitor (fulfillment / breach).
   commitmentMonitor(run, tick);
 
-  // 9. Scenario end: task outcome, final hash, sealed ledger.
+  // 9. Decision-response drain: scheduled and externally injected responses
+  //    are processed at exactly this point, in deterministic order, so
+  //    canonical outcomes are independent of operator tick-batch sizes.
+  drainDecisionResponses(run, tick);
+
+  // 10. Expire overdue decision requests.
+  expireDecisionRequests(run, tick);
+
+  // 11. Scenario end: task outcome, final hash, sealed ledger.
   if (tick >= state.endTick) {
     endScenario(run, tick);
     return;
   }
 
-  // 10. Decision phase.
+  // 12. Decision phase.
   decisionPhase(run, tick);
 }
 
@@ -232,7 +288,7 @@ function cascadePerception(run: EngineRun, source: SimEvent): void {
 // ---------------------------------------------------------------------------
 
 function emitScenarioStart(run: EngineRun): void {
-  const { scenario } = run;
+  const { scenario, roles } = run;
   emit(run, {
     type: 'ScenarioStarted',
     tick: 0,
@@ -247,26 +303,32 @@ function emitScenarioStart(run: EngineRun): void {
     },
   });
 
-  // The meal is reserved for Rin at scenario start; everyone knows.
+  // The meal is reserved for the meal-owner role at scenario start (v1.0:
+  // Rin); everyone knows.
   emit(run, {
     type: 'ResourceReserved',
     tick: 0,
-    actorId: 'rin',
+    actorId: roles.mealOwner,
     targetId: MEAL_RESOURCE_ID,
-    payload: { resourceId: MEAL_RESOURCE_ID, holderNpcId: 'rin', kind: 'consumption-right' },
+    payload: {
+      resourceId: MEAL_RESOURCE_ID,
+      holderNpcId: roles.mealOwner,
+      kind: 'consumption-right',
+    },
   });
 
-  // Jonas's pre-existing typed commitment to relieve Mara.
+  // The pre-existing typed relief commitment: debtor role owes the bench
+  // worker (creditor) role. v1.0: Jonas relieves Mara.
   emit(run, {
     type: 'CommitmentCreated',
     tick: 0,
-    actorId: 'jonas',
-    targetId: 'mara',
+    actorId: roles.debtor,
+    targetId: roles.benchWorker,
     payload: {
-      commitmentId: COMMITMENT_RELIEF_ID,
+      commitmentId: commitmentIdForRoles(roles),
       kind: 'relieve-at-bench',
-      debtorId: 'jonas',
-      creditorId: 'mara',
+      debtorId: roles.debtor,
+      creditorId: roles.benchWorker,
       terms: {
         startTick: COMMITMENT_RELIEF_START_TICK,
         graceTick: COMMITMENT_RELIEF_GRACE_TICK,
@@ -275,15 +337,21 @@ function emitScenarioStart(run: EngineRun): void {
     },
   });
 
-  // Scripted initial actions per the identity cards.
+  // Scripted initial actions follow the structural roles (v1.0 assignment
+  // coincides with the identity cards).
   startScriptedInitialAction(run, 'mara');
   startScriptedInitialAction(run, 'jonas');
   startScriptedInitialAction(run, 'rin');
 }
 
+const INITIAL_MODE_BY_ROLE = {
+  benchWorker: 'work',
+  debtor: 'routine-work',
+  mealOwner: 'deliver-materials',
+} as const;
+
 function startScriptedInitialAction(run: EngineRun, npcId: NpcId): void {
-  const identity = IDENTITIES[npcId];
-  const mode = identity.initial.initialActionMode;
+  const mode = INITIAL_MODE_BY_ROLE[roleOf(run.roles, npcId)];
   const actionId = nextActionId(run);
   if (mode === 'work') {
     emit(run, {
@@ -319,7 +387,7 @@ function startScriptedInitialAction(run: EngineRun, npcId: NpcId): void {
       mode,
       targetNpcId: null,
       targetResourceId: mode === 'work' ? BENCH_RESOURCE_ID : null,
-      locationId: identity.initial.locationId,
+      locationId: run.state.npcs[npcId].locationId,
       durationTicks: durations[mode],
       stateVersion: run.state.stateVersion,
       interruptible: mode !== 'deliver-materials',
@@ -340,13 +408,17 @@ function startScriptedInitialAction(run: EngineRun, npcId: NpcId): void {
 function applyScriptedEvents(run: EngineRun, tick: number): void {
   const { scenario, state } = run;
   if (scenario.injury && scenario.injury.atTick === tick) {
+    // The scripted injury targets the meal-owner ROLE. The frozen v1.0
+    // scenario data pins that role to Rin (validated by npm run validate);
+    // only the eval harness ever rotates it.
+    const injuredNpcId = run.roles.mealOwner;
     emit(run, {
       type: 'InjuryOccurred',
       tick,
       actorId: null,
-      targetId: scenario.injury.npcId,
+      targetId: injuredNpcId,
       payload: {
-        npcId: scenario.injury.npcId,
+        npcId: injuredNpcId,
         severityMicro: scenario.injury.severityMicro,
         cause: 'scripted',
       },
@@ -558,9 +630,23 @@ function commitmentMonitor(run: EngineRun, tick: number): void {
 }
 
 function endScenario(run: EngineRun, tick: number): void {
-  // Interrupt anything still running; the scenario window is over.
+  // Force-expire any pending decision requests at a fixed point (NPC order)
+  // so the terminal state is never ordering-dependent on outstanding
+  // requests, then interrupt anything still running.
   // (pendingAction is always transient within a single tick's decision phase,
   // so nothing else can be outstanding here.)
+  for (const npcId of NPC_IDS) {
+    const npc = run.state.npcs[npcId];
+    if (npc.pendingDecision) {
+      emit(run, {
+        type: 'DecisionRequestExpired',
+        tick,
+        actorId: npcId,
+        targetId: null,
+        payload: { npcId, requestId: npc.pendingDecision.requestId, reasonCode: 'scenario-ended' },
+      });
+    }
+  }
   for (const npcId of NPC_IDS) {
     const npc = run.state.npcs[npcId];
     if (npc.currentAction) {
@@ -587,23 +673,27 @@ function endScenario(run: EngineRun, tick: number): void {
     });
   }
 
-  // Hash the state exactly as it will be after ScenarioEnded applies
-  // (terminal flag set and state-version advanced by that event).
+  // Hash the state exactly as it will be after ScenarioEnded applies. The
+  // world-state projection excludes the stateVersion/worldRevision counters,
+  // so only the terminal flag needs mirroring on the provisional clone.
   const provisional = structuredClone(run.state);
   provisional.terminal = true;
-  provisional.stateVersion += 1;
-  const finalStateHash = hashCanonicalState(provisional);
+  const finalWorldStateHash = worldStateHash(provisional);
   emit(run, {
     type: 'ScenarioEnded',
     tick,
     actorId: null,
     targetId: null,
     payload: {
-      finalStateHash,
+      worldStateHash: finalWorldStateHash,
       taskOutcome: run.state.taskOutcome as 'completed' | 'deadline-missed',
     },
   });
-  run.finalStateHash = finalStateHash;
+  run.worldStateHash = finalWorldStateHash;
+  // The ledger hash covers the complete canonical stream including
+  // ScenarioEnded, so it can only live at run/file level (a hash cannot be
+  // embedded in an event it covers).
+  run.canonicalLedgerHash = canonicalLedgerHash(run.ledger.events);
   run.ledger.seal();
 }
 
@@ -637,6 +727,24 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
 
   run.counters.decision += 1;
   const requestId = `dec-${String(run.counters.decision).padStart(4, '0')}`;
+
+  // A new decision opportunity supersedes any outstanding request for this NPC.
+  if (npc.pendingDecision) {
+    emit(run, {
+      type: 'DecisionRequestSuperseded',
+      tick,
+      actorId: npc.id,
+      targetId: null,
+      payload: {
+        npcId: npc.id,
+        requestId: npc.pendingDecision.requestId,
+        supersededByRequestId: requestId,
+      },
+    });
+  }
+
+  const fingerprint = hardDependencyFingerprint(run.state, npc.id);
+  const expiresAtTick = tick + DECISION_REQUEST_TTL_TICKS;
   const requested = emit(run, {
     type: 'DecisionRequested',
     tick,
@@ -647,39 +755,51 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
       requestId,
       providerId: run.provider.id,
       stateVersion,
+      worldRevision: run.state.worldRevision,
+      expiresAtTick,
+      hardDependencyFingerprint: fingerprint,
       affordanceIds: affordances.map((a) => a.id),
+      offeredAffordances: affordances,
     },
   });
 
   const ctx = buildDecisionContext(run, npc, tick, stateVersion, requestId, affordances);
-  let result: DecisionResult;
-  let decisionEventId: string;
   try {
     const returned = run.provider.decide(ctx);
-    if (!affordances.some((a) => a.id === returned.affordanceId)) {
-      throw new ProviderFailureError('provider-chose-unoffered-affordance');
-    }
-    result = returned;
-    const returnedEvent = emit(run, {
-      type: 'DecisionReturned',
-      tick,
-      actorId: npc.id,
-      targetId: null,
-      causationId: requested.id,
-      payload: {
-        npcId: npc.id,
+    if (isDeferred(returned)) {
+      // The request stays pending; the world never blocks on a provider.
+      run.externalRequests.push({
         requestId,
-        affordanceId: returned.affordanceId,
-        confidenceBp: returned.confidenceBp,
-        reasonCode: returned.reasonCode,
-        scores: returned.scores,
-      },
-    });
-    decisionEventId = returnedEvent.id;
+        npcId: npc.id,
+        scenarioId: run.state.scenarioId,
+        requestedAtTick: tick,
+        expiresAtTick,
+        worldRevisionAtRequest: run.state.worldRevision,
+        providerId: run.provider.id,
+        offeredAffordances: affordances,
+        offeredAffordanceIds: affordances.map((a) => a.id),
+        hardDependencyFingerprint: fingerprint,
+      });
+      if (!npc.currentAction) {
+        // Idle NPCs act on the deterministic fallback immediately, without
+        // consuming the pending request (provisional behavior).
+        provisionalFallback(run, npc, tick, requestId, ctx, requested.id);
+      }
+      return;
+    }
+    const response = localResponse(run, requestId, npc.id, run.provider.id, returned, '');
+    const outcome = processDecisionResponse(run, response, tick, false);
+    if (!outcome.accepted) {
+      // The provider's own response failed the acceptance gate (unoffered
+      // affordance, constraint violation, ...): one bounded retry through
+      // the deterministic fallback, which terminates on the always-offered
+      // `wait`.
+      runFallbackThroughGate(run, npc, tick, requestId, ctx);
+    }
   } catch (error) {
     const errorCode =
       error instanceof ProviderFailureError ? error.errorCode : 'provider-exception';
-    const failedEvent = emit(run, {
+    emit(run, {
       type: 'DecisionProviderFailed',
       tick,
       actorId: npc.id,
@@ -687,32 +807,293 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
       causationId: requested.id,
       payload: { npcId: npc.id, requestId, providerId: run.provider.id, errorCode },
     });
-    const fallbackResult = run.fallback.decide(ctx);
-    result = fallbackResult;
-    const fallbackEvent = emit(run, {
-      type: 'FallbackDecisionUsed',
+    runFallbackThroughGate(run, npc, tick, requestId, ctx);
+  }
+}
+
+function localResponse(
+  run: EngineRun,
+  requestId: string,
+  npcId: NpcId,
+  providerId: string,
+  result: DecisionResult,
+  suffix: string,
+): DecisionResponse {
+  return {
+    responseId: `${requestId}-res${suffix}`,
+    requestId,
+    npcId,
+    scenarioId: run.state.scenarioId,
+    providerId,
+    selectedAffordanceId: result.affordanceId,
+    confidenceBp: result.confidenceBp,
+    reasonCode: result.reasonCode,
+    scores: result.scores,
+  };
+}
+
+/**
+ * Fallback routed through the same acceptance gate as every other response
+ * (remediation 2, section 6.4). Bounded to a single retry: the fallback is
+ * itself constraint-filtered and the constraint layer's allowed set is never
+ * empty for a non-empty offer, so the gate can only reject its choice if the
+ * world changed mid-tick — in which case the request simply stays pending
+ * until expiry and the NPC re-decides.
+ */
+function runFallbackThroughGate(
+  run: EngineRun,
+  npc: NpcState,
+  tick: number,
+  requestId: string,
+  ctx: DecisionContext,
+): void {
+  const fallbackDecision = run.fallback.decide(ctx);
+  if (isDeferred(fallbackDecision)) {
+    throw new Error('fallback-provider-deferred');
+  }
+  emit(run, {
+    type: 'FallbackDecisionUsed',
+    tick,
+    actorId: npc.id,
+    targetId: null,
+    payload: {
+      npcId: npc.id,
+      requestId,
+      affordanceId: fallbackDecision.affordanceId,
+      reasonCode: fallbackDecision.reasonCode,
+    },
+  });
+  const response = localResponse(run, requestId, npc.id, run.fallback.id, fallbackDecision, '-fb');
+  processDecisionResponse(run, response, tick, true);
+}
+
+/**
+ * Provisional fallback while an external-capable request is pending: the NPC
+ * acts, but the request is NOT consumed — a valid late response may still
+ * preempt the (always interruptible) provisional action.
+ */
+function provisionalFallback(
+  run: EngineRun,
+  npc: NpcState,
+  tick: number,
+  requestId: string,
+  ctx: DecisionContext,
+  causeEventId: string,
+): void {
+  const fallbackDecision = run.fallback.decide(ctx);
+  if (isDeferred(fallbackDecision)) {
+    throw new Error('fallback-provider-deferred');
+  }
+  const used = emit(run, {
+    type: 'FallbackDecisionUsed',
+    tick,
+    actorId: npc.id,
+    targetId: null,
+    causationId: causeEventId,
+    payload: {
+      npcId: npc.id,
+      requestId,
+      affordanceId: fallbackDecision.affordanceId,
+      reasonCode: `provisional:${fallbackDecision.reasonCode}`,
+    },
+  });
+  const chosen = ctx.affordances.find((a) => a.id === fallbackDecision.affordanceId);
+  if (!chosen || chosen.continuesActionId !== null) return;
+  proposeAndLaunch(run, npc, tick, chosen, used.id);
+}
+
+/** Drain scheduled and injected decision responses in deterministic order. */
+function drainDecisionResponses(run: EngineRun, tick: number): void {
+  const due: DecisionResponse[] = [];
+  if (isScheduledResponseSource(run.provider)) {
+    due.push(...run.provider.dueResponses(tick));
+  }
+  if (run.responseInbox.length > 0) {
+    due.push(...run.responseInbox);
+    run.responseInbox.length = 0;
+  }
+  for (const response of due) {
+    processDecisionResponse(run, response, tick, false);
+  }
+}
+
+function expireDecisionRequests(run: EngineRun, tick: number): void {
+  for (const npcId of NPC_IDS) {
+    const npc = run.state.npcs[npcId];
+    const pending = npc.pendingDecision;
+    if (pending && tick > pending.expiresAtTick) {
+      emit(run, {
+        type: 'DecisionRequestExpired',
+        tick,
+        actorId: npcId,
+        targetId: null,
+        payload: { npcId, requestId: pending.requestId, reasonCode: 'ttl-expired' },
+      });
+    }
+  }
+}
+
+/**
+ * THE decision-response acceptance gate (remediations 1 and 2). Every
+ * response — same-tick local, fallback, tick-scheduled, or externally
+ * injected — passes through this single path. Order of checks follows the
+ * audit's lifecycle semantics; every outcome is event-recorded.
+ */
+function processDecisionResponse(
+  run: EngineRun,
+  response: DecisionResponse,
+  tick: number,
+  usedFallback: boolean,
+): { accepted: boolean } {
+  const npc = run.state.npcs[response.npcId];
+  const pending = npc.pendingDecision;
+  const isCurrentRequest = pending !== null && pending.requestId === response.requestId;
+  const seenBefore = isCurrentRequest && pending.responseIdsSeen.includes(response.responseId);
+
+  const received = emit(run, {
+    type: 'DecisionResponseReceived',
+    tick,
+    actorId: response.npcId,
+    targetId: null,
+    payload: {
+      npcId: response.npcId,
+      requestId: response.requestId,
+      responseId: response.responseId,
+      providerId: response.providerId,
+      selectedAffordanceId: response.selectedAffordanceId,
+      confidenceBp: response.confidenceBp,
+      reasonCode: response.reasonCode,
+      scores: response.scores,
+    },
+  });
+
+  const reject = (
+    rejectionReason: DecisionRejectionReason,
+    constraintCodes: string[] = [],
+  ): { accepted: boolean } => {
+    emit(run, {
+      type: 'DecisionResponseRejected',
       tick,
-      actorId: npc.id,
+      actorId: response.npcId,
       targetId: null,
-      causationId: failedEvent.id,
+      causationId: received.id,
       payload: {
-        npcId: npc.id,
-        requestId,
-        affordanceId: fallbackResult.affordanceId,
-        reasonCode: fallbackResult.reasonCode,
+        npcId: response.npcId,
+        requestId: response.requestId,
+        responseId: response.responseId,
+        selectedAffordanceId: response.selectedAffordanceId,
+        rejectionReason,
+        constraintCodes,
       },
     });
-    decisionEventId = fallbackEvent.id;
+    return { accepted: false };
+  };
+
+  if (!isCurrentRequest) {
+    return reject(
+      npc.lastSupersededRequestId === response.requestId ? 'superseded-request' : 'unknown-request',
+    );
+  }
+  if (response.scenarioId !== run.state.scenarioId || response.npcId !== npc.id) {
+    return reject('unknown-request');
+  }
+  if (seenBefore) {
+    return reject('duplicate-response');
+  }
+  if (tick > pending.expiresAtTick) {
+    return reject('response-expired');
+  }
+  const affordance = pending.offeredAffordances.find((a) => a.id === response.selectedAffordanceId);
+  if (!affordance) {
+    return reject('unoffered-affordance');
+  }
+  if (hardDependencyFingerprint(run.state, response.npcId) !== pending.hardDependencyFingerprint) {
+    return reject('stale-dependencies');
   }
 
-  const chosen = affordances.find((a) => a.id === result.affordanceId);
-  if (!chosen) return; // unreachable: both paths guarantee an offered ID
-  if (chosen.continuesActionId !== null) return; // keep doing the current action
+  // Provider-independent constraints, evaluated on the CURRENT context over
+  // the ORIGINAL offer (authoritative; providers cannot opt out).
+  const evaluation = evaluateConstraints(
+    {
+      npcId: npc.id,
+      hungerMicro: npc.hungerMicro,
+      injury: npc.injury,
+      incapacitated: npc.incapacitated,
+      beliefs: npc.beliefs,
+    },
+    pending.offeredAffordances,
+  );
+  if (!evaluation.allowedAffordanceIds.includes(affordance.id)) {
+    const forbidden = evaluation.forbidden.find((f) => f.affordanceId === affordance.id);
+    return reject(
+      'constraint-violation',
+      forbidden ? forbidden.reasonCodes : evaluation.activeConstraintCodes,
+    );
+  }
 
+  if (affordance.continuesActionId !== null) {
+    if (!npc.currentAction || npc.currentAction.id !== affordance.continuesActionId) {
+      return reject('action-no-longer-valid');
+    }
+  } else {
+    if (
+      npc.currentAction &&
+      (npc.currentAction.phase !== 'active' || !npc.currentAction.interruptible)
+    ) {
+      return reject('actor-busy-noninterruptible');
+    }
+    if (npc.transit !== null) {
+      return reject('actor-busy-noninterruptible');
+    }
+    const probe: PendingActionState = {
+      id: 'gate-validation',
+      affordanceId: affordance.id,
+      category: affordance.category,
+      mode: affordance.mode,
+      actorId: npc.id,
+      targetNpcId: affordance.targetNpcId,
+      targetResourceId: affordance.targetResourceId,
+      locationId: affordance.requiredLocationId,
+      durationTicks: affordance.durationTicks,
+      stateVersionAtProposal: run.state.stateVersion,
+      interruptible: affordance.interruptible,
+      violation: affordance.violation,
+      commitmentId: affordance.commitmentId,
+      proposalId: affordance.proposalId,
+      requestId: affordance.requestId,
+      proposedTerms: affordance.proposedTerms ? { ...affordance.proposedTerms } : null,
+    };
+    const check = validateStart(run.state, probe, false);
+    if (!check.ok) {
+      return reject('action-no-longer-valid');
+    }
+  }
+
+  const accepted = emit(run, {
+    type: 'DecisionResponseAccepted',
+    tick,
+    actorId: response.npcId,
+    targetId: null,
+    causationId: received.id,
+    payload: {
+      npcId: response.npcId,
+      requestId: response.requestId,
+      responseId: response.responseId,
+      selectedAffordanceId: response.selectedAffordanceId,
+      confidenceBp: response.confidenceBp,
+      reasonCode: response.reasonCode,
+      usedFallback,
+    },
+  });
+
+  if (affordance.continuesActionId !== null) {
+    return { accepted: true };
+  }
   if (npc.currentAction) {
-    interruptAction(run, npc, tick, 'preempted-by-new-decision', decisionEventId);
+    interruptAction(run, npc, tick, 'preempted-by-new-decision', accepted.id);
   }
-  proposeAndLaunch(run, npc, tick, chosen, decisionEventId);
+  proposeAndLaunch(run, npc, tick, affordance, accepted.id);
+  return { accepted: true };
 }
 
 function proposeAndLaunch(

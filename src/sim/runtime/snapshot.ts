@@ -18,7 +18,8 @@ export function buildSnapshot(
   state: CanonicalState,
   events: readonly EventEnvelope[],
   providerId: string,
-  finalStateHash: string | null,
+  worldStateHash: string | null,
+  canonicalLedgerHash: string | null,
 ): PresentationSnapshot {
   const npcs: SnapshotNpc[] = NPC_IDS.map((npcId) => buildNpc(state, npcId));
   return {
@@ -58,7 +59,9 @@ export function buildSnapshot(
     recentRelationshipChanges: recentRelationshipChanges(events),
     eventCount: events.length,
     stateVersion: state.stateVersion,
-    finalStateHash,
+    worldRevision: state.worldRevision,
+    worldStateHash,
+    canonicalLedgerHash,
     providerId,
   };
 }
@@ -109,6 +112,17 @@ function buildNpc(state: CanonicalState, npcId: NpcId): SnapshotNpc {
           usedFallback: npc.lastDecision.usedFallback,
         }
       : null,
+    pendingDecision: npc.pendingDecision
+      ? {
+          requestId: npc.pendingDecision.requestId,
+          providerId: npc.pendingDecision.providerId,
+          requestedAtTick: npc.pendingDecision.requestedAtTick,
+          expiresAtTick: npc.pendingDecision.expiresAtTick,
+          worldRevisionAtRequest: npc.pendingDecision.worldRevisionAtRequest,
+          offeredAffordanceCount: npc.pendingDecision.offeredAffordances.length,
+          responseIdsSeen: [...npc.pendingDecision.responseIdsSeen],
+        }
+      : null,
     beliefs: npc.beliefs.map((b) => ({
       id: b.id,
       subject: b.subject,
@@ -125,6 +139,10 @@ function buildNpc(state: CanonicalState, npcId: NpcId): SnapshotNpc {
       confidenceMicro: m.confidenceMicro,
       importanceMicro: m.importanceMicro,
       createdTick: m.createdTick,
+      themes: [...m.themes],
+      socialTargetId: m.socialTargetId,
+      valenceMicro: m.valenceMicro,
+      selfRelevanceMicro: m.selfRelevanceMicro,
     })),
     relationships: state.relationships
       .filter((r) => r.fromNpcId === npcId)

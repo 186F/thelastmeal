@@ -9,6 +9,7 @@ import type {
   ScenarioId,
 } from '../../shared/ids';
 import type { CommitmentTerms } from '../domain/state';
+import type { DecisionRejectionReason, OfferedAffordance } from '../../shared/decisionContracts';
 
 /**
  * Typed payloads for every authoritative event. Events are data, never log
@@ -38,7 +39,7 @@ export type ScenarioStartedEvent = Evt<
 
 export type ScenarioEndedEvent = Evt<
   'ScenarioEnded',
-  { finalStateHash: string; taskOutcome: 'completed' | 'deadline-missed' }
+  { worldStateHash: string; taskOutcome: 'completed' | 'deadline-missed' }
 >;
 
 /**
@@ -72,20 +73,67 @@ export type DecisionRequestedEvent = Evt<
     requestId: string;
     providerId: string;
     stateVersion: number;
+    worldRevision: number;
+    expiresAtTick: number;
+    hardDependencyFingerprint: string;
     affordanceIds: string[];
+    /** Complete offered descriptors: a delayed response relaunches from these
+     * stored descriptors, never from regenerated affordances. */
+    offeredAffordances: OfferedAffordance[];
   }
 >;
 
-export type DecisionReturnedEvent = Evt<
-  'DecisionReturned',
+/** A response arrived (same tick for local providers, later for deferred or
+ * externally injected ones). Recording precedes gating: the verdict follows
+ * as DecisionResponseAccepted or DecisionResponseRejected. */
+export type DecisionResponseReceivedEvent = Evt<
+  'DecisionResponseReceived',
   {
     npcId: NpcId;
     requestId: string;
-    affordanceId: string;
+    responseId: string;
+    providerId: string;
+    selectedAffordanceId: string;
     confidenceBp: number;
     reasonCode: string;
     scores: AffordanceScoreRecord[];
   }
+>;
+
+export type DecisionResponseAcceptedEvent = Evt<
+  'DecisionResponseAccepted',
+  {
+    npcId: NpcId;
+    requestId: string;
+    responseId: string;
+    selectedAffordanceId: string;
+    confidenceBp: number;
+    reasonCode: string;
+    usedFallback: boolean;
+  }
+>;
+
+export type DecisionResponseRejectedEvent = Evt<
+  'DecisionResponseRejected',
+  {
+    npcId: NpcId;
+    requestId: string;
+    responseId: string;
+    selectedAffordanceId: string | null;
+    rejectionReason: DecisionRejectionReason;
+    /** Specific constraint codes when rejectionReason is constraint-violation. */
+    constraintCodes: string[];
+  }
+>;
+
+export type DecisionRequestExpiredEvent = Evt<
+  'DecisionRequestExpired',
+  { npcId: NpcId; requestId: string; reasonCode: 'ttl-expired' | 'scenario-ended' }
+>;
+
+export type DecisionRequestSupersededEvent = Evt<
+  'DecisionRequestSuperseded',
+  { npcId: NpcId; requestId: string; supersededByRequestId: string }
 >;
 
 export type DecisionProviderFailedEvent = Evt<
@@ -415,7 +463,11 @@ export type SimEvent =
   | SimulationPausedEvent
   | SimulationResumedEvent
   | DecisionRequestedEvent
-  | DecisionReturnedEvent
+  | DecisionResponseReceivedEvent
+  | DecisionResponseAcceptedEvent
+  | DecisionResponseRejectedEvent
+  | DecisionRequestExpiredEvent
+  | DecisionRequestSupersededEvent
   | DecisionProviderFailedEvent
   | FallbackDecisionUsedEvent
   | ActionProposedEvent

@@ -2,7 +2,7 @@ import {
   ProviderFailureError,
   type DecisionContext,
   type DecisionProvider,
-  type DecisionResult,
+  type ProviderDecision,
 } from './provider';
 
 /**
@@ -21,7 +21,7 @@ export class ScriptedFailureProvider implements DecisionProvider {
     this.id = inner.id;
   }
 
-  decide(ctx: DecisionContext): DecisionResult {
+  decide(ctx: DecisionContext): ProviderDecision {
     if (ctx.tick >= this.failFromTick) {
       throw new ProviderFailureError('scripted-failure-mode');
     }

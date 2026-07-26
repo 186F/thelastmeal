@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MARA_CRITICISM_MEMORY_ID } from '../../src/sim/domain/identities';
 import { buildInitialState } from '../../src/sim/scenarios/initialState';
 import { getScenario } from '../../src/sim/scenarios/definitions';
 import { buildMaraPersistenceStats } from '../../src/sim/reporting';
@@ -12,7 +13,7 @@ describe('B1/B2 memory ablation', () => {
     const s1 = buildInitialState(b1);
     const s2 = buildInitialState(b2);
     // Remove the single expected difference, then require deep equality.
-    s1.npcs.mara.memories = s1.npcs.mara.memories.filter((m) => m.id !== 'mem-mara-criticism');
+    s1.npcs.mara.memories = s1.npcs.mara.memories.filter((m) => m.id !== MARA_CRITICISM_MEMORY_ID);
     s2.scenarioId = 'B1';
     expect(s2).toEqual(s1);
   });

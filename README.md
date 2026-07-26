@@ -11,7 +11,19 @@ The authoritative specification is
 [`documentation/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/VERTICAL_SLICE_001_CODING_BRIEF.md)
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
-version `vs001-1.0.0`.
+version `vs001-1.0.0`, at implementation **remediation release 1.1.0** per
+[`documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md`](documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md)
+(what changed and why: [`documentation/AUDIT_REMEDIATION_REPORT.md`](documentation/AUDIT_REMEDIATION_REPORT.md)).
+The frozen experiment data — scenarios, seeds, identities, needs, rates,
+timelines, weights, the ten action categories — is unchanged; the remediation
+hardened the decision lifecycle, constraint enforcement, schemas, hashing,
+determinism proofs, memory generalization, and evaluation blinding.
+
+**Compatibility break:** ledger exports are now format version 2
+(`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 2).
+Version-1 exports are rejected at import with an explicit
+`unsupported-format-version` error — never silently reinterpreted. Re-export
+from a current run instead.
 
 ---
 
@@ -64,20 +76,21 @@ No API key, cloud service, backend, database, paid asset, or model account is ne
 
 ## npm commands
 
-| Command                    | What it does                                                                                                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`              | Start the Vite dev server (open the URL it prints; the port is not fixed)                                                                                                                                                                              |
-| `npm run build`            | Typecheck, then produce the production bundle in `dist/`                                                                                                                                                                                               |
-| `npm run preview`          | Serve the production bundle locally                                                                                                                                                                                                                    |
-| `npm run typecheck`        | TypeScript strict checking, no emit                                                                                                                                                                                                                    |
-| `npm run lint`             | ESLint (incl. sim-purity rules) + Prettier check                                                                                                                                                                                                       |
-| `npm run test`             | Vitest in watch mode                                                                                                                                                                                                                                   |
-| `npm run test:run`         | All Vitest unit + integration tests, once                                                                                                                                                                                                              |
-| `npm run test:coverage`    | Vitest with V8 coverage over `src/sim` and `src/shared`                                                                                                                                                                                                |
-| `npm run test:e2e`         | Playwright browser suite (starts its own Vite server via `webServer`)                                                                                                                                                                                  |
-| `npm run test:e2e:install` | Install Playwright Chromium                                                                                                                                                                                                                            |
-| `npm run validate`         | Experiment-data validation + architecture checks (sim-purity import scan, required npm scripts); exits nonzero on failure                                                                                                                              |
-| `npm run batch`            | Headless deterministic batch: every scenario, 100 repeat runs each, replay verification, invariant checks; writes `artifacts/` (ledgers, traces, report.json, report.md); exits nonzero on any violation. Use `-- --runs=N` to change the repeat count |
+| Command                      | What it does                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`                | Start the Vite dev server (open the URL it prints; the port is not fixed)                                                                                                                                                                                                                                                            |
+| `npm run build`              | Typecheck, then produce the production bundle in `dist/`                                                                                                                                                                                                                                                                             |
+| `npm run preview`            | Serve the production bundle locally                                                                                                                                                                                                                                                                                                  |
+| `npm run typecheck`          | TypeScript strict checking, no emit                                                                                                                                                                                                                                                                                                  |
+| `npm run lint`               | ESLint (incl. sim-purity rules) + Prettier check                                                                                                                                                                                                                                                                                     |
+| `npm run test`               | Vitest in watch mode                                                                                                                                                                                                                                                                                                                 |
+| `npm run test:run`           | All Vitest unit + integration tests, once                                                                                                                                                                                                                                                                                            |
+| `npm run test:coverage`      | Vitest with V8 coverage over `src/sim` and `src/shared`                                                                                                                                                                                                                                                                              |
+| `npm run test:e2e`           | Playwright browser suite (starts its own Vite server via `webServer`)                                                                                                                                                                                                                                                                |
+| `npm run test:e2e:install`   | Install Playwright Chromium                                                                                                                                                                                                                                                                                                          |
+| `npm run validate`           | Experiment-data validation + architecture checks (sim-purity import scan, required npm scripts); exits nonzero on failure                                                                                                                                                                                                            |
+| `npm run batch`              | Headless deterministic batch: every scenario, 100 repeat runs each, replay verification, invariant checks, and **complete canonical event-stream equality** across repeats; writes `artifacts/` (ledgers, context-rich traces, report.json, report.md); exits nonzero on any violation. Use `-- --runs=N` to change the repeat count |
+| `npm run eval:individuality` | Role-counterbalanced individuality evaluation (separate from v1.0 results): all six identity-role rotations per scenario, blinded behavior-only reviewer packages in `artifacts/individuality-eval/reviewer/`. `-- --answer-key` also writes the separate answer key; `-- --scenarios=A,C` restricts scenarios                       |
 
 ## Running the browser application
 
@@ -97,9 +110,11 @@ Open the printed URL. The page is a single desktop-oriented operator console:
   ledger. _Import ledger…_ opens a file picker; the file is fully validated before it
   is accepted (schema, versions, ordering, IDs, hash) and a rejected file changes
   nothing. _Replay imported_ / _Replay latest_ fold the reducer over the recorded
-  events — no decision provider runs — and report hash match/mismatch in the global
-  panel. _Export traces_ downloads the anonymized individuality traces; _Export batch
-  report_ downloads `batch-report.json` + `batch-report.md` after a batch.
+  events — no decision provider runs — and report both hash comparisons in the
+  global panel. _Export traces_ downloads the context-rich diagnostic traces
+  (behavior-only reviewer packages come from `npm run eval:individuality`);
+  _Export batch report_ downloads `batch-report.json` + `batch-report.md`
+  after a batch.
 - **Validate configuration** runs the same shared validation rules as
   `npm run validate`'s data layer, inside the worker.
 - **Viewport:** orthographic Three.js tabletop with the four locations, three
@@ -148,6 +163,28 @@ Main thread: Three.js renderer + DOM inspectors (read-only)
 - Canonical serialization: objects with sorted keys, arrays in order, integers only
   (floats/undefined/Map/Set/class instances are rejected loudly). Hash: FNV-1a 64-bit
   over the UTF-8 bytes, identical in browser and Node (`src/sim/replay/`).
+- **Two hashes** (remediation 4): `worldStateHash` is a semantic projection of
+  consequential state only — provider confidences, reason codes, fallback
+  flags, and every counter-minted identifier (event/action/request/signal IDs)
+  are excluded, with their behaviorally relevant content projected directly
+  (memories by content + appraisal, transfer requests by parties, actions by
+  mode/target/timing). Two decision sources producing the same consequential
+  world get the same `worldStateHash` even if their diagnostics or emitted
+  event counts differ. `canonicalLedgerHash` covers the complete canonical
+  event stream (IDs, types, ticks, actors, targets, causation, correlation,
+  exact payloads) with pause/resume markers and raw `seq` excluded — canonical
+  event IDs come from a marker-independent counter, so they are the
+  pause-invariant ordering witness. Diagnostics DO affect the ledger hash
+  (they are audit history); they never affect the world hash.
+- **Import is all-or-nothing** (remediation 3): exact per-event payload
+  schemas (`src/sim/events/eventSchemas.ts`), ordering/reference integrity
+  (causation, correlation, action and decision lifecycle references), a full
+  isolated replay, structural invariants, and recomputation of both hashes and
+  every summary field — all before a file is accepted. Scenario expectation
+  codes are reported as warnings, not rejections (a genuine ledger from a
+  different provider may legitimately differ behaviorally). This proves
+  internal consistency, not authorship: a party who recomputes every unsigned
+  field produces an acceptable file; cryptographic signing is out of scope.
 - A seeded RNG (`src/sim/rng`) is the core's only permitted randomness source. This
   slice's deterministic provider consumes none; any future draw must record its
   outcome as an event to keep replay reducer-only.
@@ -163,21 +200,96 @@ Main thread: Three.js renderer + DOM inspectors (read-only)
 - **Scenario definitions (IDs, versions, seeds, scripted events, expected
   invariants):** `src/sim/scenarios/definitions.ts`
 - **Decision weights and scoring constants:** `src/sim/decisions/weights.ts`
+  (including the generic memory-appraisal theme weights, whose values are
+  derived so that confidence×importance scaling at the frozen fixture
+  appraisals reproduces the v1.0 constants exactly — the derivation is
+  documented inline)
 - **Presentation coordinates (display-only):** `src/shared/viewConfig.ts`
+
+## The decision lifecycle (remediation 1)
+
+The simulation clock never awaits a provider. "Asynchronous" means a response
+can be submitted on a later logical tick through a separate command — never a
+`Promise` inside canonical code.
+
+```text
+Decision opportunity (idle NPC / relevant change / 60-tick cadence)
+        ↓
+Generate concrete affordances (full physical menu, violations flagged)
+        ↓
+Create immutable DecisionRequest  →  recorded in DecisionRequested
+  (requestId, expiry, worldRevision, hard dependency fingerprint,
+   complete offered-affordance descriptors)
+        ↓
+Local provider: response on the same tick
+Deferred provider: request stays pending (replayable canonical state);
+  the NPC continues its current action, or an idle NPC acts on the
+  provisional deterministic fallback immediately
+        ↓
+Response arrives (same tick, later tick via the tick-scheduled test
+  provider, or externally via the `submit-decision-response` command;
+  external responses drain at ONE fixed point inside stepTick, so
+  outcomes are independent of operator tick-batch sizes)
+        ↓
+THE acceptance gate (single path for every response):
+  duplicate? unknown/superseded request? expired? unoffered affordance?
+  hard dependency fingerprint changed? provider-independent constraints?
+  actor busy/non-interruptible/in transit? action still valid?
+        ↓
+DecisionResponseAccepted (may preempt only an interruptible action)
+  or DecisionResponseRejected with a structured reason
+```
+
+- **`worldRevision`** is a monotonic counter that advances only for events
+  that change action legality, decision context, or future behavior — never
+  for decision bookkeeping, diagnostics, or pause markers. It is recorded on
+  every request for audit; acceptance is gated on the **hard dependency
+  fingerprint** instead, because needs drift every tick would otherwise make
+  every delayed response stale.
+- **Hard dependency fingerprint** (`src/sim/decisions/dependencyFingerprint.ts`):
+  a canonical hash over meal existence/ownership, bench occupancy, task
+  completion, commitments and proposals, pending transfer requests, every
+  NPC's injury/treatment/incapacity, and OTHER NPCs' locations and actions.
+  The actor's own location/transit/current action are excluded (own occupancy
+  is enforced by the gate's interruptibility checks; otherwise the provisional
+  fallback would permanently invalidate the request it bridges). Soft inputs
+  (hunger, fatigue) are excluded by design and bounded by expiry plus the
+  constraint/validation gates.
+- A new decision opportunity **supersedes** an outstanding request; unanswered
+  requests **expire** after 60 ticks (`DECISION_REQUEST_TTL_TICKS`) or at
+  scenario end. Every transition is a typed event, so pending-request state is
+  fully replayable.
+- Run `npx vitest run tests/integration/async-lifecycle.test.ts` for the
+  simulated asynchronous suite (responses after 1/5/30 ticks, never, duplicated,
+  out of order, unoffered, across world changes — all scheduled by logical
+  tick, never wall clock).
+
+## Provider-independent constraints (remediation 2)
+
+Survival overrides and hard identity boundaries live in
+`src/sim/decisions/constraints.ts` — one pure module consumed by the
+deterministic provider (so forbidden choices are never scored), by the
+fallback provider (so fallback choices are legal), and by the engine's
+acceptance gate (authoritative: a hostile provider selecting an
+offered-but-forbidden affordance gets `DecisionResponseRejected` with
+`constraint-violation` + specific codes, no `ActionProposed`, and the
+deterministic fallback continues the simulation). `eat-violation` remains
+physically executable for NPCs whose constraints permit it — only Jonas's
+boundary forbids it.
 
 ## How a future decision provider plugs in
 
-Implement `DecisionProvider` (`src/sim/decisions/provider.ts`): receive a structured
-`DecisionContext` (identity, needs, injury, beliefs, memories, goal, commitments,
-offered affordances, request ID, logical tick, canonical state-version token) and
-return one **offered** affordance ID + confidence + reason code + optional scores.
-The engine treats every provider identically: it validates the returned ID against
-the offer list, revalidates the action against current state before start and
-completion, and falls back deterministically (`FallbackProvider`) on any throw,
-invalid result, or scripted failure — the world simulation never knows which provider
-decided. Provider transport/SDK types stay outside `src/sim`; a future model gateway
-belongs in a separate Node process, never in browser code, and no API key may appear
-in client code, committed files, storage, or exported ledgers.
+Implement `DecisionProvider` (`src/sim/decisions/provider.ts`): receive a
+structured `DecisionContext` and either return one **offered** affordance ID +
+confidence + reason code + optional scores, or return `{ deferred: true }` and
+submit a `DecisionResponse` later (worker command `submit-decision-response`;
+the worker emits pending requests as diagnostics-only `decision-request`
+messages — this build never forwards them to any network). Every response
+passes the same acceptance gate regardless of source; the world simulation
+never knows which provider decided. Provider transport/SDK types stay outside
+`src/sim`; a future model gateway belongs in a separate Node process, never in
+browser code, and no API key may appear in client code, committed files,
+storage, or exported ledgers.
 
 ## Deployment
 
@@ -230,7 +342,12 @@ Documented choices, all deterministic and centrally configured:
   consumption begins ≈ tick 210). **Scenario F** keeps the standard injury so the
   fallback runs under pressure.
 - **Fallback policy:** continue the current action if a continue affordance is
-  offered, else wait, else the lexicographically first legal affordance.
+  allowed, else wait, else the lexicographically first allowed affordance —
+  where "allowed" means it passed the shared provider-independent constraint
+  layer (remediation 2). **Documented behavioral change from the v1.0
+  baseline:** in Scenario F, injured Rin's fallback decisions are now
+  care-seeking (`ask-help`, `stay-at-cot`) instead of the former wait loop;
+  see the remediation report for the before/after comparison.
 - **Social actions** (requests, responses, proposals, help/break signals) take 30
   simulated seconds and are abstract room-scale communication (no co-location
   required). A refused meal request imposes a 10-minute re-request cooldown.
@@ -239,13 +356,40 @@ Documented choices, all deterministic and centrally configured:
   eating, treating, moving, and the scripted delivery are non-interruptible.
 - **Pause markers** are informational ledger events (separate ID counter, no
   canonical effect), so the brief's pause-invariance requirement holds exactly.
-- **Traces:** actor labels are a seed-derived permutation of the three NPCs, stable
-  per export, with names/trait labels/biography text removed.
+- **Traces (remediation 7):** two distinct modes. _Context-rich_ (browser
+  export, batch artifacts): real NPC ids, full structured context, explicitly
+  labeled unsuitable for measuring personality recognition independently of
+  role. _Behavior-only_ (reviewer packages from `npm run eval:individuality`):
+  no names, no meal-owner/debtor/creditor facts, no scenario id or seed,
+  injuries banded, generalized context flags only; actor and session labels
+  come from a cryptographically random blinding map generated OUTSIDE the
+  simulation core and never derived from the public seed. The label→NPC
+  mapping ships only in the separate answer key (`--answer-key`). The
+  role-counterbalancing harness (`src/sim/evaluation/individuality.ts`,
+  version `individuality-eval-1.0.0`) rotates the three identities through the
+  three structural roles (bench worker/creditor, promise debtor, meal
+  owner/injury target) in all six permutations — each identity holds each role
+  exactly twice — and stays entirely outside the v1.0 experimental report; the
+  default assignment is proven byte-identical to v1.0.
 - **"Six seeded scenario variants":** B1/B2 form one memory-ablation pair sharing a
   seed, giving seven runnable configurations (A, B1, B2, C, D, E, F).
 - **Ledger imports** replay against the _local_ scenario definition (matching ID,
   version, seed, and config version are required); the file supplies only the events
   and expected hash.
+
+## Continuous integration
+
+GitHub Actions (`.github/workflows/`):
+
+- **`ci.yml`** — on every push/PR, from a clean checkout: `npm ci`, typecheck,
+  lint, validate, unit/integration tests, production build, Playwright e2e,
+  and a fast 10-run deterministic batch. Any failing required command fails
+  the workflow; batch and Playwright reports upload as artifacts. Dependency
+  caching covers `node_modules` sources only — no generated output is ever
+  cached as an authoritative input.
+- **`deterministic-batch.yml`** — scheduled weekly and manually dispatchable:
+  the full 100-runs-per-scenario batch with complete canonical event-stream
+  equality, uploading ledgers and reports.
 
 ## Dependency roles
 

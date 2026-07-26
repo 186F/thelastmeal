@@ -36,7 +36,79 @@ export function applyEvent(state: CanonicalState, event: SimEvent): void {
   if (event.type !== 'SimulationPaused' && event.type !== 'SimulationResumed') {
     state.stateVersion += 1;
   }
+  if (ADVANCES_WORLD_REVISION[event.type]) {
+    state.worldRevision += 1;
+  }
 }
+
+/**
+ * Static per-event-type worldRevision classification (remediation 1).
+ *
+ * `worldRevision` advances only for events that mutate state relevant to
+ * action legality, decision context, or future NPC behavior. It never
+ * advances for decision-lifecycle bookkeeping (requests, responses,
+ * rejections, expiry, supersession, provider failure, fallback diagnostics),
+ * for pure observation records, or for operator pause/resume markers.
+ *
+ * The classification is deliberately a static function of the event TYPE —
+ * never of payload contents or engine context — because applyEvent must be a
+ * pure function of (state, event) for replay to agree with live execution.
+ *
+ * Decision-cadence bookkeeping (lastDecisionTick, needsReevaluation) is NOT
+ * treated as world state: DecisionRequested itself mutates those fields and
+ * the audit brief fixes it as non-advancing, so the same rule is applied to
+ * the whole lifecycle family (including expiry) and to PerceptionRecorded,
+ * whose only mutation is the re-evaluation flag; the perceived change itself
+ * arrives via its own advancing event (belief/resource/injury/...).
+ */
+export const ADVANCES_WORLD_REVISION: Record<SimEvent['type'], boolean> = {
+  ScenarioStarted: false,
+  ScenarioEnded: true,
+  TimeAdvanced: true,
+  SimulationPaused: false,
+  SimulationResumed: false,
+  DecisionRequested: false,
+  DecisionResponseReceived: false,
+  DecisionResponseAccepted: false,
+  DecisionResponseRejected: false,
+  DecisionRequestExpired: false,
+  DecisionRequestSuperseded: false,
+  DecisionProviderFailed: false,
+  FallbackDecisionUsed: false,
+  ActionProposed: true,
+  ActionStarted: true,
+  ActionCompleted: true,
+  ActionRejected: true,
+  ActionInterrupted: true,
+  MovementStarted: true,
+  MovementCompleted: true,
+  RepairProgressed: true,
+  InjuryOccurred: true,
+  InjuryWorsened: true,
+  TreatmentStarted: true,
+  TreatmentCompleted: true,
+  ResourceReserved: true,
+  ReservationTransferRequested: true,
+  ReservationTransferred: true,
+  ReservationTransferRefused: true,
+  ReservationReleased: true,
+  ResourceRemoved: true,
+  MealConsumed: true,
+  OwnershipViolated: true,
+  CommitmentCreated: true,
+  CommitmentRenegotiationProposed: true,
+  CommitmentRenegotiationAccepted: true,
+  CommitmentRenegotiationRejected: true,
+  CommitmentFulfilled: true,
+  CommitmentBroken: true,
+  TaskCompleted: true,
+  TaskDeadlineMissed: true,
+  PerceptionRecorded: false,
+  BeliefUpdated: true,
+  RelationshipChanged: true,
+  HelpRequested: true,
+  ReliefRequested: true,
+};
 
 function applyEventBody(state: CanonicalState, event: SimEvent): void {
   switch (event.type) {
@@ -64,24 +136,94 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
       break;
 
     case 'DecisionRequested': {
-      const npc = getNpc(state, event.payload.npcId);
+      const p = event.payload;
+      const npc = getNpc(state, p.npcId);
+      if (npc.pendingDecision !== null) {
+        // The engine must supersede an outstanding request before creating a
+        // new one; overlapping requests would make acceptance ambiguous.
+        throw new Error(`reduce-decision-request-overlap: ${npc.pendingDecision.requestId}`);
+      }
       npc.lastDecisionTick = event.tick;
       npc.needsReevaluation = false;
+      npc.pendingDecision = {
+        requestId: p.requestId,
+        providerId: p.providerId,
+        requestedAtTick: event.tick,
+        expiresAtTick: p.expiresAtTick,
+        worldRevisionAtRequest: p.worldRevision,
+        hardDependencyFingerprint: p.hardDependencyFingerprint,
+        offeredAffordances: p.offeredAffordances.map((a) => ({
+          ...a,
+          preconditions: [...a.preconditions],
+          reservations: [...a.reservations],
+          proposedTerms: a.proposedTerms ? { ...a.proposedTerms } : null,
+        })),
+        responseIdsSeen: [],
+      };
       break;
     }
 
-    case 'DecisionReturned': {
-      const npc = getNpc(state, event.payload.npcId);
+    case 'DecisionResponseReceived': {
+      const p = event.payload;
+      const npc = getNpc(state, p.npcId);
+      const pending = npc.pendingDecision;
+      if (
+        pending &&
+        pending.requestId === p.requestId &&
+        !pending.responseIdsSeen.includes(p.responseId)
+      ) {
+        pending.responseIdsSeen.push(p.responseId);
+      }
+      break;
+    }
+
+    case 'DecisionResponseAccepted': {
+      const p = event.payload;
+      const npc = getNpc(state, p.npcId);
+      if (npc.pendingDecision === null || npc.pendingDecision.requestId !== p.requestId) {
+        throw new Error(`reduce-acceptance-without-pending-request: ${p.requestId}`);
+      }
+      npc.pendingDecision = null;
       npc.lastDecision = {
-        requestId: event.payload.requestId,
-        affordanceId: event.payload.affordanceId,
+        requestId: p.requestId,
+        affordanceId: p.selectedAffordanceId,
         category: null,
         mode: null,
-        confidenceBp: event.payload.confidenceBp,
-        reasonCode: event.payload.reasonCode,
-        usedFallback: false,
+        confidenceBp: p.confidenceBp,
+        reasonCode: p.reasonCode,
+        usedFallback: p.usedFallback,
         tick: event.tick,
       };
+      break;
+    }
+
+    case 'DecisionResponseRejected':
+      // The response ID was already recorded by DecisionResponseReceived; a
+      // rejection leaves the request pending (a later, valid response may
+      // still be accepted before expiry).
+      break;
+
+    case 'DecisionRequestExpired': {
+      const p = event.payload;
+      const npc = getNpc(state, p.npcId);
+      if (npc.pendingDecision === null || npc.pendingDecision.requestId !== p.requestId) {
+        throw new Error(`reduce-expiry-without-pending-request: ${p.requestId}`);
+      }
+      npc.pendingDecision = null;
+      if (p.reasonCode === 'ttl-expired') {
+        npc.needsReevaluation = true;
+      }
+      break;
+    }
+
+    case 'DecisionRequestSuperseded': {
+      const p = event.payload;
+      const npc = getNpc(state, p.npcId);
+      if (npc.pendingDecision === null || npc.pendingDecision.requestId !== p.requestId) {
+        throw new Error(`reduce-supersede-without-pending-request: ${p.requestId}`);
+      }
+      npc.pendingDecision = null;
+      npc.lastSupersededRequestId = p.requestId;
       break;
     }
 
@@ -287,6 +429,10 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
         confidenceMicro: 950_000,
         importanceMicro: 700_000,
         createdTick: event.tick,
+        themes: ['care-received'],
+        socialTargetId: event.payload.healerId,
+        valenceMicro: 600_000,
+        selfRelevanceMicro: 800_000,
       });
       break;
     }
@@ -409,6 +555,10 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
         confidenceMicro: 950_000,
         importanceMicro: 900_000,
         createdTick: event.tick,
+        themes: ['ownership-violation'],
+        socialTargetId: p.actorId,
+        valenceMicro: -800_000,
+        selfRelevanceMicro: 900_000,
       });
       break;
     }
@@ -510,6 +660,10 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
         confidenceMicro: 950_000,
         importanceMicro: 800_000,
         createdTick: event.tick,
+        themes: ['promise-broken'],
+        socialTargetId: c.debtorId,
+        valenceMicro: -500_000,
+        selfRelevanceMicro: 600_000,
       });
       break;
     }

@@ -9,26 +9,53 @@ import { completedRun, freshState, mkEvent } from '../helpers';
 
 /** Regression tests for defects confirmed by the adversarial review pass. */
 
-describe('replay error boundary (review: stale replay verdict)', () => {
-  it('a payload-corrupted but schema-valid import replays to an explicit failure, never a lost result', () => {
+describe('corrupted payloads are stopped at import (remediation 3 upgrade)', () => {
+  it('a payload-corrupted but schema-shaped ledger is REJECTED at import; no imported replay exists', () => {
     const file = JSON.parse(JSON.stringify(buildLedgerFile(completedRun('A'))));
-    // Corrupt one RepairProgressed payload so the reducer's hard guard trips
-    // mid-replay. The import validator checks envelope integrity, not payload
-    // semantics, so the file is accepted — replay must then fail loudly.
+    // Corrupt one RepairProgressed payload so the reducer's hard guard trips.
+    // Import validation now performs the isolated replay itself, so this file
+    // never becomes available for a later replay command.
     const repairEvent = file.events.find(
       (e: { type: string }) => e.type === 'RepairProgressed',
     ) as { payload: { progressUnits: number } };
     repairEvent.payload.progressUnits += 1;
 
     const host = new SimulationHost();
-    const imported = host.importLedger(JSON.stringify(file));
-    expect(imported.ok).toBe(true);
+    host.loadScenario('A');
+    host.stepTicks(10);
+    const liveBefore = JSON.stringify(host.snapshot());
 
-    const outcome = host.replay('imported');
+    const imported = host.importLedger(JSON.stringify(file));
+    expect(imported.ok).toBe(false);
+    expect(
+      imported.issues.some(
+        (i) => i.code === 'replay-aborted' && i.message.includes('reduce-repair-mismatch'),
+      ),
+    ).toBe(true);
+    expect(host.hasImportedLedger).toBe(false);
+    expect(host.replay('imported').errors[0]).toBe('no-imported-ledger');
+    // The active live run is untouched.
+    expect(JSON.stringify(host.snapshot())).toBe(liveBefore);
+  });
+});
+
+describe('replay error boundary (review: stale replay verdict)', () => {
+  it('a reducer abort during a LIVE replay still yields an explicit failure, never a lost result', () => {
+    // The import path now rejects corrupted files outright, so the error
+    // boundary is exercised on the live path: corrupt the completed run's
+    // own in-memory ledger and replay it.
+    const host = new SimulationHost();
+    host.loadScenario('A');
+    host.runToCompletion();
+    const live = host.activeRun!;
+    const repairEvent = live.ledger.events.find((e) => e.type === 'RepairProgressed')!;
+    (repairEvent.payload as { progressUnits: number }).progressUnits += 1;
+
+    const outcome = host.replay('live');
     expect(outcome.ok).toBe(false);
     expect(outcome.match).toBe(false);
-    expect(outcome.computedHash).toBeNull();
-    expect(outcome.expectedHash).toBe(file.finalStateHash);
+    expect(outcome.computedWorldStateHash).toBeNull();
+    expect(outcome.expectedWorldStateHash).toBe(live.worldStateHash);
     expect(outcome.errors[0]).toMatch(/replay-aborted: reduce-repair-mismatch/);
   });
 });

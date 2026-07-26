@@ -38,6 +38,7 @@ export function mountInspector(root: HTMLElement, store: ViewStore): void {
     decision: kvRow(dl, 'Chosen affordance', 'npc-decision'),
     confidence: kvRow(dl, 'Decision confidence', 'npc-confidence'),
     reason: kvRow(dl, 'Primary reason', 'npc-reason'),
+    request: kvRow(dl, 'Decision request', 'npc-request'),
   };
   const beliefsTitle = el('h2', { class: 'panel-title', text: 'Beliefs' });
   const beliefsList = el('ul', { class: 'sub-list', id: 'npc-beliefs' });
@@ -123,6 +124,23 @@ export function mountInspector(root: HTMLElement, store: ViewStore): void {
       : '—';
     fields.reason.textContent = npc.lastDecision?.reasonCode ?? '—';
 
+    // Decision-lifecycle diagnostics (remediation 1): request ID, age,
+    // status, and worldRevision at request time. Rejection reasons appear in
+    // the event log as DecisionResponseRejected rows.
+    if (npc.pendingDecision) {
+      const age = s.snapshot.tick - npc.pendingDecision.requestedAtTick;
+      fields.request.textContent =
+        `${npc.pendingDecision.requestId} PENDING — age ${age} ticks, ` +
+        `expires ${formatTickClock(npc.pendingDecision.expiresAtTick)}, ` +
+        `worldRev@request ${npc.pendingDecision.worldRevisionAtRequest}, ` +
+        `${npc.pendingDecision.offeredAffordanceCount} offered, ` +
+        `${npc.pendingDecision.responseIdsSeen.length} response(s) seen`;
+    } else if (npc.lastDecision) {
+      fields.request.textContent = `${npc.lastDecision.requestId} resolved at ${formatTickClock(npc.lastDecision.tick)}`;
+    } else {
+      fields.request.textContent = '—';
+    }
+
     beliefsList.replaceChildren(
       ...npc.beliefs.map((b) =>
         el('li', {}, [
@@ -135,7 +153,7 @@ export function mountInspector(root: HTMLElement, store: ViewStore): void {
       ...npc.memories.map((m) =>
         el('li', {}, [
           el('b', { text: m.canonicalFact }),
-          ` — perceived: ${m.perception}; interpreted: ${m.interpretation}; conf ${formatMicro(m.confidenceMicro)}, importance ${formatMicro(m.importanceMicro)}`,
+          ` — perceived: ${m.perception}; interpreted: ${m.interpretation}; conf ${formatMicro(m.confidenceMicro)}, importance ${formatMicro(m.importanceMicro)}; themes: ${m.themes.join(', ') || 'none'}${m.socialTargetId ? ` (about ${m.socialTargetId})` : ''}, valence ${formatMicro(m.valenceMicro)}`,
         ]),
       ),
     );

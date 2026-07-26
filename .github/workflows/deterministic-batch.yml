@@ -1,0 +1,37 @@
+name: Full deterministic batch (100 runs)
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  hundred-run-batch:
+    name: 100 runs per scenario, full canonical-stream equality
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Full deterministic batch
+        run: npm run batch -- --runs=100
+
+      - name: Upload batch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-batch-artifacts
+          path: |
+            artifacts/report.json
+            artifacts/report.md
+            artifacts/ledgers/
+          if-no-files-found: ignore

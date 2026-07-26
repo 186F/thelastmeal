@@ -134,6 +134,15 @@ export const SOCIAL_SIGNAL_RECENCY_TICKS = 10 * TICKS_PER_MINUTE; // 600
 export const MAX_REEVALUATION_INTERVAL_TICKS = 60;
 
 /**
+ * Decision requests expire this many ticks after creation (remediation 1).
+ * Implementation constant (not brief-fixed): matches the maximum
+ * re-evaluation interval so an unanswered request never outlives the cadence
+ * at which the NPC would re-decide anyway. Local providers respond on the
+ * same tick, so this only governs deferred/external responses.
+ */
+export const DECISION_REQUEST_TTL_TICKS = 60;
+
+/**
  * The commitment relief affordance opens this many ticks before the promised
  * start so the debtor can travel and take the bench on time.
  */

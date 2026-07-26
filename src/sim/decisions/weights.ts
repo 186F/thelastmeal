@@ -190,20 +190,6 @@ export const SCORING = {
   routineIndustriousnessScale: 0.4,
   /** Conflict-avoidance drag on blunt refusals (reads the identity trait). */
   refuseConflictAvoidanceScale: 0.1,
-  /** Memory effects (structured, per seed memory). */
-  memoryCriticism: {
-    workBonus: 150_000,
-    requestBreakPenalty: 400_000,
-    restPenalty: 100_000,
-    askHelpPenalty: 150_000,
-  },
-  memoryShiftCovered: {
-    relieveBonus: 60_000,
-  },
-  memorySupplyTaken: {
-    refuseJonasBonus: 100_000,
-    transferJonasPenalty: 200_000,
-  },
   /** Confidence mapping. */
   confidenceBaseBp: 1_000,
   confidenceMarginDivisor: 200,
@@ -215,3 +201,54 @@ export const RELIEVE_SKILL_RATE: Record<NpcId, number> = {
   jonas: 14,
   rin: 7,
 };
+
+/**
+ * Generic memory-appraisal base weights (remediation 6).
+ *
+ * Influence is computed per memory as
+ *   round(base * confidenceMicro/1e6 * importanceMicro/1e6)
+ * with exactly one rounding point (the component push in the provider), so
+ * lower confidence or importance reduces influence monotonically.
+ *
+ * Equivalence-at-fixture-values derivation (change-control requirement: the
+ * generic restructure must be mathematically equivalent to the frozen v1.0
+ * constants at the frozen fixture appraisals; weights were NOT re-tuned):
+ *  - competence-threat fixture (conf .90, imp .90, factor .81):
+ *      185_185*.81 -> 150_000   493_827*.81 -> 400_000
+ *      123_457*.81 -> 100_000   185_185*.81 -> 150_000
+ *  - reciprocity-debt fixture (conf .90, imp .70, factor .63):
+ *      95_238*.63 -> 60_000
+ *  - ownership-violation fixture (conf .85, imp .80, factor .68):
+ *      147_059*.68 -> 100_000   294_118*.68 -> 200_000
+ *  - care-received / promise-broken have no v1.0 scoring constant (runtime
+ *    memories previously had no influence); their bases are new, small, and
+ *    scoped so no frozen scenario outcome changes (verified by the scenario
+ *    signature tests).
+ *
+ * Bounded combination rule: contributions with the same component code are
+ * summed, then clamped to +/- MEMORY_STACKING_CAP_FACTOR times the base for
+ * that effect, so stacked memories can never grow without bound.
+ */
+export const MEMORY_THEME_WEIGHTS = {
+  'competence-threat': {
+    workBonus: 185_185,
+    requestBreakPenalty: 493_827,
+    restPenalty: 123_457,
+    askHelpPenalty: 185_185,
+  },
+  'reciprocity-debt': {
+    relieveBonus: 95_238,
+  },
+  'ownership-violation': {
+    refuseBonus: 147_059,
+    transferPenalty: 294_118,
+  },
+  'care-received': {
+    cooperationBonus: 50_000,
+  },
+  'promise-broken': {
+    trustPenalty: 50_000,
+  },
+} as const;
+
+export const MEMORY_STACKING_CAP_FACTOR = 2;

@@ -1,15 +1,17 @@
 import type { PresentationSnapshot } from '../../shared/snapshots';
+import type { DecisionRequest, DecisionResponse } from '../../shared/decisionContracts';
 import type { LedgerFile } from '../../shared/ledgerFile';
 import { ledgerFileName } from '../../shared/ledgerFile';
 import type { ScenarioId } from '../../shared/ids';
-import type { TraceExport } from '../../shared/traces';
+import type { ContextRichTraceExport } from '../../shared/traces';
 import type { ValidationIssue } from '../../shared/validation';
 import { makeDraft } from '../events/ledger';
 import { applyEvent } from '../events/reduce';
+import { canonicalLedgerHash } from '../replay/ledgerHash';
 import { replayLedger } from '../replay/replay';
 import { validateLedgerFile } from '../replay/validateLedger';
 import { SCENARIO_LIST } from '../scenarios/definitions';
-import { buildAnonymizedTraces } from '../traces';
+import { buildContextRichTraces } from '../traces';
 import { createRun, runToCompletion, stepTick, type EngineRun } from './engine';
 import { buildLedgerFile } from './ledgerFileBuilder';
 import { buildSnapshot } from './snapshot';
@@ -27,9 +29,12 @@ import type { SimEvent } from '../events/types';
 
 export interface ReplayOutcome {
   ok: boolean;
+  /** True when both hash comparisons match. */
   match: boolean;
-  computedHash: string | null;
-  expectedHash: string | null;
+  computedWorldStateHash: string | null;
+  expectedWorldStateHash: string | null;
+  computedLedgerHash: string | null;
+  expectedLedgerHash: string | null;
   errors: string[];
 }
 
@@ -80,6 +85,29 @@ export class SimulationHost {
     this.run = createRun(this.run.scenario.id);
   }
 
+  /**
+   * Queue an externally produced decision response (remediation 1). The
+   * response is NOT processed here: it drains at the fixed response-drain
+   * point inside the next stepTick, so canonical outcomes are independent of
+   * when and in what batch sizes the operator advances time.
+   */
+  submitDecisionResponse(response: DecisionResponse): void {
+    const run = this.requireRun();
+    if (run.state.terminal) throw new Error('run-already-complete');
+    run.responseInbox.push(response);
+  }
+
+  /**
+   * Drain pending external decision requests (provider deferred). These are
+   * the messages a future external gateway would consume; this build only
+   * surfaces them as diagnostics.
+   */
+  drainExternalDecisionRequests(): DecisionRequest[] {
+    const run = this.run;
+    if (!run || run.externalRequests.length === 0) return [];
+    return run.externalRequests.splice(0, run.externalRequests.length);
+  }
+
   /** Process up to `ticks` whole logical ticks; stops early at terminal. */
   stepTicks(ticks: number): number {
     const run = this.requireRun();
@@ -123,7 +151,13 @@ export class SimulationHost {
 
   snapshot(): PresentationSnapshot {
     const run = this.requireRun();
-    return buildSnapshot(run.state, run.ledger.events, run.provider.id, run.finalStateHash);
+    return buildSnapshot(
+      run.state,
+      run.ledger.events,
+      run.provider.id,
+      run.worldStateHash,
+      run.canonicalLedgerHash,
+    );
   }
 
   eventsSince(seq: number): SimEvent[] {
@@ -162,7 +196,8 @@ export class SimulationHost {
   /**
    * Replay: 'imported' replays the imported file; 'live' replays the current
    * completed run's own ledger. Both fold the reducer over recorded events —
-   * no decision provider is consulted — and compare final-state hashes.
+   * no decision provider is consulted — and compare the semantic world-state
+   * hash plus the canonical ledger hash.
    */
   replay(source: 'imported' | 'live'): ReplayOutcome {
     if (source === 'imported') {
@@ -176,53 +211,70 @@ export class SimulationHost {
       // response: a replay command always yields a replay outcome.
       try {
         const result = replayLedger(file.scenario.id, file.events);
+        const computedLedgerHash = canonicalLedgerHash(file.events);
         return {
           ok: true,
-          match: result.finalStateHash === file.finalStateHash,
-          computedHash: result.finalStateHash,
-          expectedHash: file.finalStateHash,
+          match:
+            result.worldStateHash === file.worldStateHash &&
+            computedLedgerHash === file.canonicalLedgerHash,
+          computedWorldStateHash: result.worldStateHash,
+          expectedWorldStateHash: file.worldStateHash,
+          computedLedgerHash,
+          expectedLedgerHash: file.canonicalLedgerHash,
           errors: [],
         };
       } catch (error) {
         return {
           ok: false,
           match: false,
-          computedHash: null,
-          expectedHash: file.finalStateHash,
+          computedWorldStateHash: null,
+          expectedWorldStateHash: file.worldStateHash,
+          computedLedgerHash: null,
+          expectedLedgerHash: file.canonicalLedgerHash,
           errors: [`replay-aborted: ${(error as Error).message}`],
         };
       }
     }
     const run = this.run;
-    if (!run || !run.state.terminal || run.finalStateHash === null) {
+    if (!run || !run.state.terminal || run.worldStateHash === null) {
       return notReplayable('live-run-not-complete');
     }
     try {
       const result = replayLedger(run.scenario.id, run.ledger.events);
+      const computedLedgerHash = canonicalLedgerHash(run.ledger.events);
       return {
         ok: true,
-        match: result.finalStateHash === run.finalStateHash,
-        computedHash: result.finalStateHash,
-        expectedHash: run.finalStateHash,
+        match:
+          result.worldStateHash === run.worldStateHash &&
+          computedLedgerHash === run.canonicalLedgerHash,
+        computedWorldStateHash: result.worldStateHash,
+        expectedWorldStateHash: run.worldStateHash,
+        computedLedgerHash,
+        expectedLedgerHash: run.canonicalLedgerHash,
         errors: [],
       };
     } catch (error) {
       return {
         ok: false,
         match: false,
-        computedHash: null,
-        expectedHash: run.finalStateHash,
+        computedWorldStateHash: null,
+        expectedWorldStateHash: run.worldStateHash,
+        computedLedgerHash: null,
+        expectedLedgerHash: run.canonicalLedgerHash,
         errors: [`replay-aborted: ${(error as Error).message}`],
       };
     }
   }
 
-  exportTraces(): { fileName: string; json: string; traces: TraceExport } {
+  /** Browser trace export: the CONTEXT-RICH diagnostic mode. Behavior-only
+   * reviewer packages are produced by the evaluation CLI, where the blinding
+   * map is generated with cryptographic randomness outside the sim core. */
+  exportTraces(): { fileName: string; json: string; traces: ContextRichTraceExport } {
     const run = this.requireRun();
     if (!run.state.terminal) throw new Error('traces-require-terminal-run');
-    const traces = buildAnonymizedTraces(run.scenario, run.ledger.events);
+    const traces = buildContextRichTraces(run.scenario, run.ledger.events);
     return {
-      fileName: `traces-${run.scenario.id}-v${run.scenario.version}-seed${run.scenario.seed}.json`,
+      fileName: `traces-context-rich-${run.scenario.id}-v${run.scenario.version}-seed${run.scenario.seed}.json`,
       json: JSON.stringify(traces, null, 2),
       traces,
     };
@@ -235,5 +287,13 @@ export class SimulationHost {
 }
 
 function notReplayable(code: string): ReplayOutcome {
-  return { ok: false, match: false, computedHash: null, expectedHash: null, errors: [code] };
+  return {
+    ok: false,
+    match: false,
+    computedWorldStateHash: null,
+    expectedWorldStateHash: null,
+    computedLedgerHash: null,
+    expectedLedgerHash: null,
+    errors: [code],
+  };
 }

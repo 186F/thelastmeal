@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { PROTOCOL_VERSION } from './versions';
 import { eventEnvelopeSchema, type EventEnvelope } from './events';
+import type { DecisionRequest, DecisionResponse } from './decisionContracts';
 import type { PresentationSnapshot, RunStatus } from './snapshots';
 import type { BatchReport, FinalSummary } from './reports';
-import type { ScenarioId } from './ids';
+import { ACTION_MODES, type ScenarioId } from './ids';
 import type { ValidationIssue } from './validation';
 
 /**
@@ -48,6 +49,7 @@ export type WorkerCommand = CommandBase &
     | { type: 'export-traces' }
     | { type: 'export-batch-report' }
     | { type: 'validate-config' }
+    | { type: 'submit-decision-response'; response: DecisionResponse }
   );
 
 const commandBase = {
@@ -55,6 +57,32 @@ const commandBase = {
   commandId: z.string().min(1),
   commandSeq: z.number().int().nonnegative(),
 };
+
+/** Exact runtime schema for an externally submitted decision response. */
+export const decisionResponseSchema = z
+  .object({
+    responseId: z.string().min(1).max(200),
+    requestId: z.string().min(1).max(200),
+    npcId: z.enum(['mara', 'jonas', 'rin']),
+    scenarioId: z.enum(['A', 'B1', 'B2', 'C', 'D', 'E', 'F']),
+    providerId: z.string().min(1).max(200),
+    selectedAffordanceId: z.string().min(1).max(500),
+    confidenceBp: z.number().int().min(0).max(10_000),
+    reasonCode: z.string().min(1).max(200),
+    scores: z.array(
+      z
+        .object({
+          affordanceId: z.string().min(1).max(500),
+          mode: z.enum(ACTION_MODES),
+          totalScore: z.number().int(),
+          components: z.array(
+            z.object({ code: z.string().min(1).max(200), value: z.number().int() }).strict(),
+          ),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 
 export const workerCommandSchema = z.discriminatedUnion('type', [
   z.object({ ...commandBase, type: z.literal('hello') }).strict(),
@@ -99,6 +127,13 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   z.object({ ...commandBase, type: z.literal('export-traces') }).strict(),
   z.object({ ...commandBase, type: z.literal('export-batch-report') }).strict(),
   z.object({ ...commandBase, type: z.literal('validate-config') }).strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('submit-decision-response'),
+      response: decisionResponseSchema,
+    })
+    .strict(),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -130,17 +165,26 @@ export type WorkerResponse = { protocolVersion: number } & (
       snapshot: PresentationSnapshot;
     }
   | { type: 'events'; events: EventEnvelope[]; totalCount: number }
-  | { type: 'run-complete'; scenarioId: ScenarioId; finalStateHash: string; summary: FinalSummary }
+  | {
+      type: 'run-complete';
+      scenarioId: ScenarioId;
+      worldStateHash: string;
+      canonicalLedgerHash: string;
+      summary: FinalSummary;
+    }
   | { type: 'ledger-export'; fileName: string; json: string }
   | { type: 'import-result'; ok: boolean; errors: string[]; scenarioId: ScenarioId | null }
   | {
       type: 'replay-result';
       ok: boolean;
       match: boolean;
-      computedHash: string | null;
-      expectedHash: string | null;
+      computedWorldStateHash: string | null;
+      expectedWorldStateHash: string | null;
+      computedLedgerHash: string | null;
+      expectedLedgerHash: string | null;
       errors: string[];
     }
+  | { type: 'decision-request'; request: DecisionRequest }
   | { type: 'batch-progress'; completed: number; total: number; currentScenarioId: ScenarioId }
   | { type: 'batch-result'; report: BatchReport; reportJson: string; reportMarkdown: string }
   | { type: 'traces-export'; fileName: string; json: string }
@@ -166,6 +210,7 @@ export const workerResponseEnvelopeSchema = z
       'ledger-export',
       'import-result',
       'replay-result',
+      'decision-request',
       'batch-progress',
       'batch-result',
       'traces-export',

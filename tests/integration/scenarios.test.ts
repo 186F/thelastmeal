@@ -10,7 +10,8 @@ describe('every scenario runs to a valid terminal state', () => {
       const run = completedRun(id);
       expect(run.state.terminal).toBe(true);
       expect(run.state.tick).toBe(2700);
-      expect(run.finalStateHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(run.worldStateHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(run.canonicalLedgerHash).toMatch(/^[0-9a-f]{16}$/);
       expect(['completed', 'deadline-missed']).toContain(run.state.taskOutcome);
       const violations = checkInvariants(getScenario(id), run.ledger.events, run.state);
       expect(violations).toEqual([]);
@@ -69,5 +70,21 @@ describe('scenario-specific outcomes', () => {
     // No provider failure before minute 10; every decision after fails.
     expect(failures.every((e) => e.tick >= 600)).toBe(true);
     expect(run.state.terminal).toBe(true);
+  });
+
+  it('F: the constrained fallback keeps injured Rin on care-seeking, never bare waiting (remediation 2 baseline)', () => {
+    // Documented behavioral change from the v1.0 baseline (remediation
+    // report, Scenario F): the fallback now routes through the shared
+    // survival constraints, so after the untreated injury Rin's fallback
+    // choices are care-seeking actions instead of the former wait loop.
+    const run = completedRun('F');
+    const rinStartsAfterInjury = eventsOfType(run, 'ActionStarted').filter((e) => {
+      const p = e.payload as { npcId: string; mode: string };
+      return p.npcId === 'rin' && e.tick >= 720 && e.tick < 1320;
+    });
+    expect(rinStartsAfterInjury.length).toBeGreaterThan(0);
+    const modes = new Set(rinStartsAfterInjury.map((e) => (e.payload as { mode: string }).mode));
+    expect([...modes].every((m) => m === 'ask-help' || m === 'stay-at-cot')).toBe(true);
+    expect(modes.has('stay-at-cot') || modes.has('ask-help')).toBe(true);
   });
 });

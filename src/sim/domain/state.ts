@@ -2,10 +2,12 @@ import type {
   ActionCategory,
   ActionMode,
   LocationId,
+  MemoryTheme,
   NpcId,
   ResourceId,
   ScenarioId,
 } from '../../shared/ids';
+import type { OfferedAffordance } from '../../shared/decisionContracts';
 
 /**
  * Canonical world state.
@@ -80,6 +82,38 @@ export interface MemoryState {
   confidenceMicro: number;
   importanceMicro: number;
   createdTick: number; // -1 for pre-scenario memories
+  /**
+   * Typed appraisal (remediation 6). Decision logic reads themes, target,
+   * confidence, and importance — never the memory ID or prose fields. A
+   * memory with an empty themes list has no behavioral influence even if its
+   * prose fact remains.
+   */
+  themes: MemoryTheme[];
+  /** NPC this memory is about, when target-specific effects apply. */
+  socialTargetId: NpcId | null;
+  /** Emotional valence of the remembered experience, -1..1 in micro units. */
+  valenceMicro: number;
+  /** How strongly the memory bears on the NPC's own standing/safety, 0..1 micro. */
+  selfRelevanceMicro: number;
+}
+
+/**
+ * A replayable pending decision request (remediation 1). Installed by the
+ * DecisionRequested reducer case and removed on acceptance, expiry, or
+ * supersession — every transition is event-recorded, so replay reconstructs
+ * this registry exactly. Only the currently pending request is kept; resolved
+ * request history lives in the ledger.
+ */
+export interface PendingDecisionState {
+  requestId: string;
+  providerId: string;
+  requestedAtTick: number;
+  expiresAtTick: number;
+  worldRevisionAtRequest: number;
+  hardDependencyFingerprint: string;
+  offeredAffordances: OfferedAffordance[];
+  /** Ordered list of response IDs already processed for this request. */
+  responseIdsSeen: string[];
 }
 
 export interface InjuryState {
@@ -104,6 +138,11 @@ export interface NpcState {
   lastDecisionTick: number;
   /** Set by relevant events; cleared when a decision is requested. */
   needsReevaluation: boolean;
+  /** The currently pending decision request, if any (remediation 1). */
+  pendingDecision: PendingDecisionState | null;
+  /** Most recently superseded request ID, kept so a late response to it can
+   * be rejected as 'superseded-request' rather than 'unknown-request'. */
+  lastSupersededRequestId: string | null;
   /** After a refused meal-transfer request, suppress re-requests until this tick. */
   requestCooldownUntilTick: number;
   lastDecision: {
@@ -202,9 +241,20 @@ export interface CanonicalState {
   /**
    * Canonical state-version token: counts applied canonical events. Operator
    * pause/resume markers do NOT advance it, so pausing can never leak into
-   * staleness tokens or the final-state hash.
+   * staleness tokens or hashes.
    */
   stateVersion: number;
+  /**
+   * Monotonic world-relevance revision (remediation 1). Advances only when an
+   * event mutates state relevant to action legality, decision context, or
+   * future NPC behavior — never for decision-lifecycle bookkeeping, provider
+   * diagnostics, or operator markers. The advancing set is a static
+   * per-event-type classification (see events/reduce.ts) so replay agrees
+   * with live execution by construction. Recorded on every DecisionRequested
+   * for audit; response acceptance is gated on the hard dependency
+   * fingerprint, not on revision equality.
+   */
+  worldRevision: number;
   tick: number;
   endTick: number;
   terminal: boolean;

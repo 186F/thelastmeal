@@ -1,4 +1,5 @@
 import type { NpcId, ScenarioId } from '../../shared/ids';
+import type { DecisionResponse } from '../../shared/decisionContracts';
 import type { Affordance } from '../actions/affordances';
 import type { NpcIdentity } from '../domain/identities';
 import type {
@@ -70,9 +71,44 @@ export interface DecisionResult {
   scores: AffordanceScoreRecord[];
 }
 
+/**
+ * A provider that cannot answer on the current logical tick returns
+ * `{ deferred: true }` (remediation 1). The request stays pending in
+ * canonical state; the simulation continues (current action or provisional
+ * fallback) and the eventual response enters through the engine's single
+ * acceptance gate on a later tick. The simulation clock NEVER awaits a
+ * provider: "asynchronous" means later-tick response submission, not
+ * Promises inside canonical code.
+ */
+export interface DeferredDecision {
+  deferred: true;
+}
+
+export type ProviderDecision = DecisionResult | DeferredDecision;
+
+export function isDeferred(decision: ProviderDecision): decision is DeferredDecision {
+  return 'deferred' in decision;
+}
+
 export interface DecisionProvider {
   readonly id: string;
-  decide(ctx: DecisionContext): DecisionResult;
+  decide(ctx: DecisionContext): ProviderDecision;
+}
+
+/**
+ * Implemented by providers that schedule responses by logical tick (the
+ * simulated asynchronous test provider). The engine drains due responses at
+ * one fixed point inside stepTick, so canonical outcomes are independent of
+ * operator tick-batch sizes. Wall-clock time is never involved.
+ */
+export interface ScheduledResponseSource {
+  dueResponses(tick: number): DecisionResponse[];
+}
+
+export function isScheduledResponseSource(
+  provider: DecisionProvider,
+): provider is DecisionProvider & ScheduledResponseSource {
+  return typeof (provider as Partial<ScheduledResponseSource>).dueResponses === 'function';
 }
 
 /** Thrown by providers in failure mode; the engine records it and falls back. */

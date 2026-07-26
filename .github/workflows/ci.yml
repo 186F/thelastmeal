@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Required checks (clean checkout)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Validate frozen experiment data
+        run: npm run validate
+
+      - name: Unit and integration tests
+        run: npm run test:run
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+
+      - name: Browser end-to-end tests
+        run: npm run test:e2e
+
+      - name: Deterministic batch (fast CI mode, 10 runs/scenario)
+        run: npm run batch -- --runs=10
+
+      - name: Upload batch report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-report
+          path: |
+            artifacts/report.json
+            artifacts/report.md
+          if-no-files-found: ignore
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore

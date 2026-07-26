@@ -26,7 +26,10 @@ export interface LedgerFile {
   providerId: string;
   events: EventEnvelope[];
   finalSummary: FinalSummary;
-  finalStateHash: string;
+  /** Semantic world-state hash (remediation 4; replaces v1 finalStateHash). */
+  worldStateHash: string;
+  /** Canonical event-stream hash (pause/resume markers and seq excluded). */
+  canonicalLedgerHash: string;
 }
 
 const finalSummarySchema = z
@@ -63,7 +66,8 @@ export const ledgerFileSchema = z
     providerId: z.string().min(1),
     events: z.array(eventEnvelopeSchema),
     finalSummary: finalSummarySchema,
-    finalStateHash: z.string().regex(/^[0-9a-f]{16}$/),
+    worldStateHash: z.string().regex(/^[0-9a-f]{16}$/),
+    canonicalLedgerHash: z.string().regex(/^[0-9a-f]{16}$/),
   })
   .strict();
 

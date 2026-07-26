@@ -52,7 +52,9 @@ export interface ScenarioReportRow {
   interruptedActionCount: number;
   finalRelationships: RelationshipValue[];
   eventCount: number;
-  finalStateHash: string;
+  worldStateHash: string;
+  canonicalLedgerHash: string;
+  /** Reducer-only replay reproduced the semantic world-state hash. */
   replayHashMatch: boolean;
   npcStats: Record<NpcId, NpcActionStats>;
 }
@@ -78,6 +80,8 @@ export interface MemoryComparison {
 export interface DeterminismReport {
   runsPerScenario: number;
   allHashesStable: boolean;
+  /** Every repeat run's complete canonical event stream matched run 1. */
+  allEventStreamsStable: boolean;
   invariantViolations: string[];
 }
 

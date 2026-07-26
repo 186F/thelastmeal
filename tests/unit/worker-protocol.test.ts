@@ -111,7 +111,8 @@ describe('worker snapshot/response flow (Node-driven)', () => {
     expect(done.some((r) => r.type === 'run-complete')).toBe(true);
     const complete = done.find((r) => r.type === 'run-complete');
     if (complete && complete.type === 'run-complete') {
-      expect(complete.finalStateHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(complete.worldStateHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(complete.canonicalLedgerHash).toMatch(/^[0-9a-f]{16}$/);
       expect(complete.summary.taskOutcome).toBe('completed');
     }
   });

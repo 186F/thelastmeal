@@ -1,15 +1,17 @@
 import type { BatchReport, MemoryComparison, ScenarioReportRow } from '../shared/reports';
 import type { LedgerFile } from '../shared/ledgerFile';
-import type { TraceExport } from '../shared/traces';
+import type { ContextRichTraceExport } from '../shared/traces';
 import type { ScenarioId } from '../shared/ids';
 import { CONFIG_VERSION, EXPERIMENT_ID, SCHEMA_VERSION } from '../shared/versions';
 import { checkInvariants } from './invariants';
 import { buildMaraPersistenceStats, buildScenarioReportRow } from './reporting';
+import { serializeCanonicalEventStream } from './replay/ledgerHash';
+import { diffCanonicalStreams } from './replay/streamDiff';
 import { replayLedger } from './replay/replay';
 import { SCENARIO_LIST } from './scenarios/definitions';
 import { createRun, runToCompletion } from './runtime/engine';
 import { buildLedgerFile } from './runtime/ledgerFileBuilder';
-import { buildAnonymizedTraces } from './traces';
+import { buildContextRichTraces } from './traces';
 
 /**
  * The deterministic batch: run every scenario headlessly, replay every
@@ -25,16 +27,19 @@ export interface BatchOptions {
 export interface BatchOutput {
   report: BatchReport;
   ledgers: { scenarioId: ScenarioId; file: LedgerFile }[];
-  traces: TraceExport[];
+  /** Deterministic context-rich traces (the reproducible batch never uses
+   * random blinding; reviewer packages come from the evaluation CLI). */
+  traces: ContextRichTraceExport[];
 }
 
 export function runFullBatch(options: BatchOptions): BatchOutput {
   const { runsPerScenario } = options;
   const rows: ScenarioReportRow[] = [];
   const ledgers: BatchOutput['ledgers'] = [];
-  const traces: TraceExport[] = [];
+  const traces: ContextRichTraceExport[] = [];
   const violations: string[] = [];
   let allHashesStable = true;
+  let allEventStreamsStable = true;
   const total = SCENARIO_LIST.length;
   let completed = 0;
 
@@ -46,34 +51,51 @@ export function runFullBatch(options: BatchOptions): BatchOutput {
     const file = buildLedgerFile(firstRun);
     eventsByScenario.set(scenario.id, file);
     ledgers.push({ scenarioId: scenario.id, file });
-    traces.push(buildAnonymizedTraces(scenario, file.events));
+    traces.push(buildContextRichTraces(scenario, file.events));
 
     for (const violation of checkInvariants(scenario, file.events, firstRun.state)) {
       violations.push(`${scenario.id}: ${violation}`);
     }
 
-    // Replay verification: reducer-only replay must reproduce the hash.
+    // Replay verification: reducer-only replay must reproduce the semantic
+    // world-state hash.
     const replay = replayLedger(scenario.id, file.events);
-    const replayHashMatch = replay.finalStateHash === file.finalStateHash;
+    const replayHashMatch = replay.worldStateHash === file.worldStateHash;
     if (!replayHashMatch) {
       violations.push(
-        `${scenario.id}: replay-hash-mismatch (${replay.finalStateHash} != ${file.finalStateHash})`,
+        `${scenario.id}: replay-hash-mismatch (${replay.worldStateHash} != ${file.worldStateHash})`,
       );
     }
 
-    // Repeat-run determinism.
+    // Repeat-run determinism: both hashes stable AND the complete canonical
+    // event stream identical (remediation 5) — never just length/hash.
+    const referenceStream = serializeCanonicalEventStream(file.events);
     for (let i = 1; i < runsPerScenario; i += 1) {
       const repeat = createRun(scenario.id);
       runToCompletion(repeat);
-      if (repeat.finalStateHash !== file.finalStateHash) {
+      if (repeat.worldStateHash !== file.worldStateHash) {
         allHashesStable = false;
         violations.push(
-          `${scenario.id}: hash-unstable-on-run-${i + 1} (${repeat.finalStateHash} != ${file.finalStateHash})`,
+          `${scenario.id}: world-hash-unstable-on-run-${i + 1} (${repeat.worldStateHash} != ${file.worldStateHash})`,
         );
       }
-      if (repeat.ledger.length !== file.events.length) {
+      if (repeat.canonicalLedgerHash !== file.canonicalLedgerHash) {
         allHashesStable = false;
-        violations.push(`${scenario.id}: ledger-length-unstable-on-run-${i + 1}`);
+        violations.push(
+          `${scenario.id}: ledger-hash-unstable-on-run-${i + 1} (${repeat.canonicalLedgerHash} != ${file.canonicalLedgerHash})`,
+        );
+      }
+      const repeatStream = serializeCanonicalEventStream(repeat.ledger.events);
+      if (repeatStream !== referenceStream) {
+        allEventStreamsStable = false;
+        violations.push(
+          `${scenario.id}: event-stream-unstable-on-run-${i + 1}: ${diffCanonicalStreams(
+            scenario.id,
+            scenario.seed,
+            file.events,
+            repeat.ledger.events,
+          )}`,
+        );
       }
     }
 
@@ -82,7 +104,8 @@ export function runFullBatch(options: BatchOptions): BatchOutput {
         scenario,
         firstRun.state,
         file.events,
-        file.finalStateHash,
+        file.worldStateHash,
+        file.canonicalLedgerHash,
         replayHashMatch,
       ),
     );
@@ -113,10 +136,15 @@ export function runFullBatch(options: BatchOptions): BatchOutput {
     determinism: {
       runsPerScenario,
       allHashesStable,
+      allEventStreamsStable,
       invariantViolations: violations,
     },
     memoryComparison,
-    ok: violations.length === 0 && allHashesStable && rows.every((r) => r.replayHashMatch),
+    ok:
+      violations.length === 0 &&
+      allHashesStable &&
+      allEventStreamsStable &&
+      rows.every((r) => r.replayHashMatch),
   };
 
   return { report, ledgers, traces };

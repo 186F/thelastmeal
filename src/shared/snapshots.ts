@@ -9,7 +9,7 @@ import type { ActionCategory, ActionMode, LocationId, NpcId, ScenarioId } from '
  * All normalized quantities are integer micro units (1.0 == 1_000_000).
  */
 
-export type RunStatus = 'idle' | 'running' | 'paused' | 'replaying' | 'complete';
+export type RunStatus = 'idle' | 'running' | 'paused' | 'replaying' | 'importing' | 'complete';
 
 export interface SnapshotTransit {
   fromLocationId: LocationId;
@@ -59,6 +59,10 @@ export interface SnapshotMemory {
   confidenceMicro: number;
   importanceMicro: number;
   createdTick: number;
+  themes: string[];
+  socialTargetId: NpcId | null;
+  valenceMicro: number;
+  selfRelevanceMicro: number;
 }
 
 export interface SnapshotRelationship {
@@ -75,6 +79,17 @@ export interface SnapshotRelationshipChange {
   causeEventIds: string[];
 }
 
+/** Diagnostics view of a pending decision request (remediation 1). */
+export interface SnapshotPendingDecision {
+  requestId: string;
+  providerId: string;
+  requestedAtTick: number;
+  expiresAtTick: number;
+  worldRevisionAtRequest: number;
+  offeredAffordanceCount: number;
+  responseIdsSeen: string[];
+}
+
 export interface SnapshotNpc {
   id: NpcId;
   displayName: string;
@@ -87,6 +102,7 @@ export interface SnapshotNpc {
   goal: string;
   currentAction: SnapshotAction | null;
   lastDecision: SnapshotDecision | null;
+  pendingDecision: SnapshotPendingDecision | null;
   beliefs: SnapshotBelief[];
   memories: SnapshotMemory[];
   relationships: SnapshotRelationship[];
@@ -135,6 +151,8 @@ export interface PresentationSnapshot {
   recentRelationshipChanges: SnapshotRelationshipChange[];
   eventCount: number;
   stateVersion: number;
-  finalStateHash: string | null;
+  worldRevision: number;
+  worldStateHash: string | null;
+  canonicalLedgerHash: string | null;
   providerId: string;
 }

@@ -1,4 +1,5 @@
-import { LOCATION_IDS, NPC_IDS, SCENARIO_IDS } from '../../shared/ids';
+import { LOCATION_IDS, MEMORY_THEMES, NPC_IDS, SCENARIO_IDS } from '../../shared/ids';
+import { V1_ROLES } from '../scenarios/roles';
 import { LOCATION_POSITIONS, NPC_VISUALS } from '../../shared/viewConfig';
 import type { ValidationIssue } from '../../shared/validation';
 import { validationOk } from '../../shared/validation';
@@ -104,6 +105,65 @@ export function validateExperimentData(): { ok: boolean; issues: ValidationIssue
   for (const memory of SEED_MEMORIES) {
     if (!NPC_IDS.includes(memory.npcId)) {
       err('broken-npc-reference', `Seed memory ${memory.id} belongs to ${memory.npcId}`);
+    }
+    // Typed appraisal integrity (remediation 6).
+    if (memory.themes.length === 0) {
+      err('memory-missing-themes', `Seed memory ${memory.id} has no appraisal themes`);
+    }
+    for (const theme of memory.themes) {
+      if (!MEMORY_THEMES.includes(theme)) {
+        err('unknown-memory-theme', `Seed memory ${memory.id} theme ${theme}`);
+      }
+    }
+    if (memory.socialTargetId !== null && !NPC_IDS.includes(memory.socialTargetId)) {
+      err('broken-npc-reference', `Seed memory ${memory.id} targets ${memory.socialTargetId}`);
+    }
+    if (memory.socialTargetId === memory.npcId) {
+      err('memory-self-target', `Seed memory ${memory.id} targets its own holder`);
+    }
+    if (
+      !Number.isInteger(memory.valenceMicro) ||
+      memory.valenceMicro < -1_000_000 ||
+      memory.valenceMicro > 1_000_000
+    ) {
+      err('invalid-memory-appraisal', `Seed memory ${memory.id} valence ${memory.valenceMicro}`);
+    }
+    if (
+      !Number.isInteger(memory.selfRelevanceMicro) ||
+      memory.selfRelevanceMicro < 0 ||
+      memory.selfRelevanceMicro > 1_000_000
+    ) {
+      err(
+        'invalid-memory-appraisal',
+        `Seed memory ${memory.id} selfRelevance ${memory.selfRelevanceMicro}`,
+      );
+    }
+  }
+
+  // Structural-role consistency (remediation 7): the frozen v1.0 scenario
+  // data must agree with the default role assignment the engine wires at
+  // tick 0.
+  for (const s of SCENARIO_LIST) {
+    if (s.injury && s.injury.npcId !== V1_ROLES.mealOwner) {
+      err(
+        'role-injury-target-mismatch',
+        `Scenario ${s.id} injury targets ${s.injury.npcId}, but the meal-owner role is ${V1_ROLES.mealOwner}`,
+      );
+    }
+  }
+  {
+    const expectedModes: Record<string, string> = {
+      [V1_ROLES.benchWorker]: 'work',
+      [V1_ROLES.debtor]: 'routine-work',
+      [V1_ROLES.mealOwner]: 'deliver-materials',
+    };
+    for (const npcId of NPC_IDS) {
+      if (IDENTITIES[npcId].initial.initialActionMode !== expectedModes[npcId]) {
+        err(
+          'role-initial-action-mismatch',
+          `${npcId} identity card initial action ${IDENTITIES[npcId].initial.initialActionMode} != role-derived ${expectedModes[npcId]}`,
+        );
+      }
     }
   }
 

@@ -1,8 +1,8 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.0.0",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed",
+  "version": "1.1.0",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "validate": "tsx scripts/validate/run.ts",
-    "batch": "tsx scripts/batch/run.ts"
+    "batch": "tsx scripts/batch/run.ts",
+    "eval:individuality": "tsx scripts/evaluation/individuality.ts"
   },
   "dependencies": {
     "three": "^0.170.0",

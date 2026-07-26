@@ -45,7 +45,7 @@ for (const { file } of ledgers) {
   writeFileSync(join(artifactsDir, 'ledgers', name), JSON.stringify(file, null, 2), 'utf8');
 }
 for (const trace of traces) {
-  const name = `traces-${trace.scenarioId}-seed${trace.seed}-anonymized.json`;
+  const name = `traces-context-rich-${trace.scenarioId}-seed${trace.seed}.json`;
   writeFileSync(join(artifactsDir, 'traces', name), JSON.stringify(trace, null, 2), 'utf8');
 }
 writeFileSync(join(artifactsDir, 'report.json'), JSON.stringify(report, null, 2), 'utf8');
@@ -57,7 +57,7 @@ for (const row of report.scenarios) {
   console.log(
     `  ${row.scenarioId}: ${(row.finalProgressPctTimes100 / 100).toFixed(2)}% ${row.taskOutcome}, ` +
       `meal=${row.mealConsumedBy ?? 'none'}, promise=${row.promiseOutcome}, ` +
-      `events=${row.eventCount}, hash=${row.finalStateHash}, replay=${row.replayHashMatch ? 'match' : 'MISMATCH'}`,
+      `events=${row.eventCount}, world=${row.worldStateHash}, ledger=${row.canonicalLedgerHash}, replay=${row.replayHashMatch ? 'match' : 'MISMATCH'}`,
   );
 }
 console.log('');

@@ -1,4 +1,5 @@
 import { PROTOCOL_VERSION } from '../shared/versions';
+import type { DecisionResponse } from '../shared/decisionContracts';
 import type { ScenarioId } from '../shared/ids';
 import {
   workerEventsResponseSchema,
@@ -121,6 +122,9 @@ export class WorkerClient {
   validateConfig(): void {
     this.send({ type: 'validate-config' });
   }
+  submitDecisionResponse(response: DecisionResponse): void {
+    this.send({ type: 'submit-decision-response', response });
+  }
 
   terminate(): void {
     this.terminated = true;
@@ -184,7 +188,8 @@ export class WorkerClient {
       }
       case 'run-complete':
         this.store.update((s) => {
-          s.finalHash = response.finalStateHash;
+          s.finalWorldHash = response.worldStateHash;
+          s.finalLedgerHash = response.canonicalLedgerHash;
           s.runStatus = 'complete';
         });
         break;
@@ -208,10 +213,20 @@ export class WorkerClient {
           s.replayResult = {
             ok: response.ok,
             match: response.match,
-            computedHash: response.computedHash,
-            expectedHash: response.expectedHash,
+            computedWorldStateHash: response.computedWorldStateHash,
+            expectedWorldStateHash: response.expectedWorldStateHash,
+            computedLedgerHash: response.computedLedgerHash,
+            expectedLedgerHash: response.expectedLedgerHash,
             errors: response.errors,
           };
+        });
+        break;
+      case 'decision-request':
+        this.store.update((s) => {
+          s.externalDecisionRequests.push(response.request);
+          if (s.externalDecisionRequests.length > 50) {
+            s.externalDecisionRequests.splice(0, s.externalDecisionRequests.length - 50);
+          }
         });
         break;
       case 'batch-progress':

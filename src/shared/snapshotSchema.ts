@@ -52,6 +52,18 @@ const decisionSchema = z
   })
   .strict();
 
+const pendingDecisionSchema = z
+  .object({
+    requestId: z.string(),
+    providerId: z.string(),
+    requestedAtTick: z.number().int().nonnegative(),
+    expiresAtTick: z.number().int().nonnegative(),
+    worldRevisionAtRequest: z.number().int().nonnegative(),
+    offeredAffordanceCount: z.number().int().nonnegative(),
+    responseIdsSeen: z.array(z.string()),
+  })
+  .strict();
+
 const npcSchema = z
   .object({
     id: npcIdSchema,
@@ -65,6 +77,7 @@ const npcSchema = z
     goal: z.string(),
     currentAction: actionSchema.nullable(),
     lastDecision: decisionSchema.nullable(),
+    pendingDecision: pendingDecisionSchema.nullable(),
     beliefs: z.array(
       z
         .object({
@@ -87,6 +100,10 @@ const npcSchema = z
           confidenceMicro: micro,
           importanceMicro: micro,
           createdTick: z.number().int(),
+          themes: z.array(z.string()),
+          socialTargetId: npcIdSchema.nullable(),
+          valenceMicro: z.number().int().min(-1_000_000).max(1_000_000),
+          selfRelevanceMicro: micro,
         })
         .strict(),
     ),
@@ -158,7 +175,12 @@ export const presentationSnapshotSchema = z
     ),
     eventCount: z.number().int().nonnegative(),
     stateVersion: z.number().int().nonnegative(),
-    finalStateHash: z
+    worldRevision: z.number().int().nonnegative(),
+    worldStateHash: z
+      .string()
+      .regex(/^[0-9a-f]{16}$/)
+      .nullable(),
+    canonicalLedgerHash: z
       .string()
       .regex(/^[0-9a-f]{16}$/)
       .nullable(),

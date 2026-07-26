@@ -75,8 +75,15 @@ function renderRow(event: EventEnvelope): HTMLElement {
 function summarize(event: EventEnvelope): string {
   const p = event.payload as Record<string, unknown>;
   switch (event.type) {
-    case 'DecisionReturned':
-      return `${p.npcId}: ${p.affordanceId} (${p.reasonCode})`;
+    case 'DecisionResponseReceived':
+      return `${p.npcId}: ${p.selectedAffordanceId} (${p.reasonCode})`;
+    case 'DecisionResponseAccepted':
+      return `${p.npcId}: ${p.selectedAffordanceId}${p.usedFallback ? ' (fallback)' : ''}`;
+    case 'DecisionResponseRejected':
+      return `${p.npcId}: ${p.rejectionReason}`;
+    case 'DecisionRequestExpired':
+    case 'DecisionRequestSuperseded':
+      return `${p.npcId}: ${p.requestId}`;
     case 'FallbackDecisionUsed':
       return `${p.npcId}: ${p.affordanceId} (${p.reasonCode})`;
     case 'DecisionProviderFailed':
@@ -112,7 +119,7 @@ function summarize(event: EventEnvelope): string {
     case 'CommitmentBroken':
       return String(p.commitmentId);
     case 'ScenarioEnded':
-      return `hash=${p.finalStateHash}`;
+      return `hash=${p.worldStateHash}`;
     case 'TaskCompleted':
     case 'TaskDeadlineMissed':
       return `progress=${p.progressUnits}`;

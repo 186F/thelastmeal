@@ -19,7 +19,9 @@ export function mountGlobalPanel(root: HTMLElement, store: ViewStore): void {
     events: kvRow(dl, 'Event count', 'event-count'),
     workerState: kvRow(dl, 'Worker', 'worker-status'),
     stateVersion: kvRow(dl, 'State version', 'state-version'),
-    finalHash: kvRow(dl, 'Final-state hash', 'final-hash'),
+    worldRevision: kvRow(dl, 'World revision', 'world-revision'),
+    worldHash: kvRow(dl, 'World-state hash', 'final-hash'),
+    ledgerHash: kvRow(dl, 'Ledger hash', 'ledger-hash'),
     replay: kvRow(dl, 'Replay hash check', 'replay-match'),
     importState: kvRow(dl, 'Imported ledger', 'import-status'),
     batch: kvRow(dl, 'Batch', 'batch-status'),
@@ -64,12 +66,14 @@ export function mountGlobalPanel(root: HTMLElement, store: ViewStore): void {
     fields.events.textContent = snap ? String(snap.eventCount) : '—';
     fields.workerState.textContent = `${s.connection} — snapshot #${s.snapshotSeq}`;
     fields.stateVersion.textContent = snap ? String(snap.stateVersion) : '—';
-    fields.finalHash.textContent = s.finalHash ?? snap?.finalStateHash ?? '—';
+    fields.worldRevision.textContent = snap ? String(snap.worldRevision) : '—';
+    fields.worldHash.textContent = s.finalWorldHash ?? snap?.worldStateHash ?? '—';
+    fields.ledgerHash.textContent = s.finalLedgerHash ?? snap?.canonicalLedgerHash ?? '—';
     if (s.replayResult) {
       fields.replay.textContent = s.replayResult.ok
         ? s.replayResult.match
-          ? `match (${s.replayResult.computedHash})`
-          : `MISMATCH (${s.replayResult.computedHash} != ${s.replayResult.expectedHash})`
+          ? `match (world ${s.replayResult.computedWorldStateHash}, ledger ${s.replayResult.computedLedgerHash})`
+          : `MISMATCH (world ${s.replayResult.computedWorldStateHash} != ${s.replayResult.expectedWorldStateHash}; ledger ${s.replayResult.computedLedgerHash} != ${s.replayResult.expectedLedgerHash})`
         : `failed: ${s.replayResult.errors.join(', ')}`;
       fields.replay.className = s.replayResult.match ? 'value-good' : 'value-bad';
     } else {

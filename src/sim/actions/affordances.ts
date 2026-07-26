@@ -1,11 +1,9 @@
 import {
   MODE_TO_CATEGORY,
   NPC_IDS,
-  type ActionCategory,
   type ActionMode,
   type LocationId,
   type NpcId,
-  type ResourceId,
 } from '../../shared/ids';
 import {
   BENCH_LOCATION,
@@ -29,6 +27,7 @@ import {
   WAIT_DURATION_TICKS,
 } from '../config';
 import type { CanonicalState, CommitmentTerms } from '../domain/state';
+import type { OfferedAffordance } from '../../shared/decisionContracts';
 import { TICKS_PER_MINUTE } from '../../shared/units';
 
 /**
@@ -40,30 +39,13 @@ import { TICKS_PER_MINUTE } from '../../shared/units';
  * legality and physics are the engine's.
  */
 
-export interface Affordance {
-  id: string;
-  category: ActionCategory;
-  mode: ActionMode;
-  actorId: NpcId;
-  targetNpcId: NpcId | null;
-  targetResourceId: ResourceId | null;
-  requiredLocationId: LocationId | null;
-  durationTicks: number;
-  expectedTravelTicks: number;
-  /** Structured precondition codes revalidated before start and completion. */
-  preconditions: string[];
-  /** Exclusive resources this action holds while active. */
-  reservations: ResourceId[];
-  violation: boolean;
-  interruptible: boolean;
-  commitmentId: string | null;
-  proposalId: string | null;
-  requestId: string | null;
-  proposedTerms: CommitmentTerms | null;
-  /** Set on the continue-current pseudo-affordance. */
-  continuesActionId: string | null;
-  stateVersion: number;
-}
+/**
+ * An affordance IS the serializable offered-affordance contract (remediation
+ * 1): the exact objects generated here are recorded verbatim in the
+ * DecisionRequested payload so a delayed response can be revalidated and
+ * launched from the stored descriptor.
+ */
+export type Affordance = OfferedAffordance;
 
 export function generateAffordances(
   state: CanonicalState,
@@ -275,14 +257,20 @@ export function generateAffordances(
         tick - s.tick < 300,
     );
     if (!recentAsk) {
-      const healer: NpcId = npcId === 'jonas' ? 'mara' : 'jonas';
-      out.push(
-        mk('ask-help', {
-          targetNpcId: healer,
-          durationTicks: SOCIAL_ACTION_DURATION_TICKS,
-          preconditions: ['actor-injured-untreated'],
-        }),
-      );
+      // Ask the most capable OTHER treatment-capable NPC (shortest treatment
+      // duration wins; capability is identity data, not a hardcoded name).
+      const healer = NPC_IDS.filter((id) => id !== npcId && TREATMENT_BY_HEALER[id]).sort(
+        (a, b) => TREATMENT_BY_HEALER[a]!.durationTicks - TREATMENT_BY_HEALER[b]!.durationTicks,
+      )[0];
+      if (healer) {
+        out.push(
+          mk('ask-help', {
+            targetNpcId: healer,
+            durationTicks: SOCIAL_ACTION_DURATION_TICKS,
+            preconditions: ['actor-injured-untreated'],
+          }),
+        );
+      }
     }
   }
 

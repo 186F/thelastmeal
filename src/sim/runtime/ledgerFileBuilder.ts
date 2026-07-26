@@ -5,7 +5,7 @@ import type { EngineRun } from './engine';
 
 /** Builds the exportable ledger file for a completed run. */
 export function buildLedgerFile(run: EngineRun): LedgerFile {
-  if (!run.state.terminal || run.finalStateHash === null) {
+  if (!run.state.terminal || run.worldStateHash === null || run.canonicalLedgerHash === null) {
     throw new Error('export-requires-terminal-run');
   }
   return {
@@ -21,6 +21,7 @@ export function buildLedgerFile(run: EngineRun): LedgerFile {
     providerId: run.provider.id,
     events: run.ledger.toJSON(),
     finalSummary: buildFinalSummary(run.state, run.ledger.events),
-    finalStateHash: run.finalStateHash,
+    worldStateHash: run.worldStateHash,
+    canonicalLedgerHash: run.canonicalLedgerHash,
   };
 }

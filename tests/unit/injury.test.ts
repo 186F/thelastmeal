@@ -61,7 +61,12 @@ describe('injury lifecycle', () => {
     const run = completedRun('C');
     const rel = run.state.relationships.find((r) => r.fromNpcId === 'rin' && r.toNpcId === 'jonas');
     expect(rel?.valueMicro).toBe(100_000);
-    // ...but does not erase Rin's suspicious memory of Jonas.
-    expect(run.state.npcs.rin.memories.some((m) => m.id === 'mem-rin-supply-taken')).toBe(true);
+    // ...but does not erase Rin's suspicious memory of Jonas (identified by
+    // its typed appraisal, not by ID — remediation 6).
+    expect(
+      run.state.npcs.rin.memories.some(
+        (m) => m.themes.includes('ownership-violation') && m.socialTargetId === 'jonas',
+      ),
+    ).toBe(true);
   });
 });

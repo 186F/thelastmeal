@@ -6,35 +6,79 @@ import {
   type ActionMode,
   type NpcId,
 } from '../shared/ids';
-import type { AnonymizedTrace, TraceExport, TraceRow } from '../shared/traces';
+import {
+  CONTEXT_RICH_NOTE,
+  type BehaviorOnlyTraceExport,
+  type BehaviorTraceRow,
+  type BlindingMap,
+  type ContextRichTraceExport,
+  type TraceRow,
+} from '../shared/traces';
 import type { ScenarioDefinition } from './scenarios/definitions';
+import { severityBand } from './cognition/perception';
 import { applyEvent } from './events/reduce';
 import type { SimEvent } from './events/types';
 import { buildInitialState } from './scenarios/initialState';
 
 /**
- * Anonymized individuality traces (brief section 20).
+ * Individuality traces (brief section 20; remediation 7).
  *
- * Built by folding the recorded ledger and sampling structured context at
- * every decision. NPC names are replaced with stable scrambled actor labels
- * (a deterministic seed-derived permutation) so a human reviewer must infer
- * identity from behavior alone. No trait labels or biography text appear.
+ * Both exports are built by folding the recorded ledger and sampling
+ * structured context at every decision. This module is pure and
+ * deterministic: the behavior-only export takes an externally generated
+ * blinding map as a PARAMETER — no randomness (and no seed-derived label
+ * permutation) exists inside the simulation core.
  */
-export function buildAnonymizedTraces(
+
+interface DecisionSample {
+  npcId: NpcId;
+  row: TraceRow;
+  behaviorFlags: string[];
+  injurySeverityMicro: number;
+}
+
+function buildDecisionSamples(
   scenario: ScenarioDefinition,
   events: readonly EventEnvelope[],
-): TraceExport {
-  const rowsByNpc: Record<NpcId, TraceRow[]> = { mara: [], jonas: [], rin: [] };
+): Record<NpcId, DecisionSample[]> {
+  const samples: Record<NpcId, DecisionSample[]> = { mara: [], jonas: [], rin: [] };
   const state = buildInitialState(scenario);
 
-  interface PendingDecision {
+  interface PendingSample {
     npcId: NpcId;
-    tick: number;
     affordanceIds: string[];
-    row: Partial<TraceRow>;
+    partialRow: Omit<TraceRow, 'chosenCategory' | 'chosenMode' | 'usedFallback' | 'outcome'>;
+    behaviorFlags: string[];
+    injurySeverityMicro: number;
   }
-  const pendingByRequest = new Map<string, PendingDecision>();
+  const pendingByRequest = new Map<string, PendingSample>();
   const chosenAffordanceRows = new Map<string, TraceRow>(); // affordanceId -> row
+
+  const completeSample = (
+    requestId: string,
+    npcId: NpcId,
+    affordanceId: string,
+    usedFallback: boolean,
+  ): void => {
+    const pending = pendingByRequest.get(requestId);
+    if (!pending || pending.npcId !== npcId) return;
+    const mode = modeFromAffordanceId(affordanceId);
+    const row: TraceRow = {
+      ...pending.partialRow,
+      chosenCategory: mode ? MODE_TO_CATEGORY[mode] : 'rest-or-wait',
+      chosenMode: mode ?? 'wait',
+      usedFallback,
+      outcome: affordanceId.includes(':continue:') ? 'continued' : 'started',
+    };
+    samples[npcId].push({
+      npcId,
+      row,
+      behaviorFlags: pending.behaviorFlags,
+      injurySeverityMicro: pending.injurySeverityMicro,
+    });
+    chosenAffordanceRows.set(affordanceId, row);
+    pendingByRequest.delete(requestId);
+  };
 
   for (const event of events) {
     // Sample the decision context BEFORE the event mutates state.
@@ -49,22 +93,33 @@ export function buildAnonymizedTraces(
         (c) => c.debtorId === p.npcId || c.creditorId === p.npcId,
       );
       const contextFlags: string[] = [];
+      const behaviorFlags: string[] = [];
       if (state.meal.exists && state.meal.reservedForNpcId === p.npcId) {
-        contextFlags.push('owns-meal-reservation');
+        contextFlags.push('owns-meal-reservation'); // context-rich only (role leak)
       }
-      if (!state.meal.exists) contextFlags.push('meal-gone');
+      if (!state.meal.exists) {
+        contextFlags.push('meal-gone');
+        behaviorFlags.push('meal-gone');
+      }
       for (const otherId of NPC_IDS) {
         if (otherId !== p.npcId && state.npcs[otherId].injury.severityMicro > 0) {
           contextFlags.push('other-npc-injured');
+          behaviorFlags.push('other-agent-injured');
           break;
         }
       }
-      if (state.pendingTransferRequests.length > 0) contextFlags.push('transfer-request-pending');
+      if (state.pendingTransferRequests.length > 0) {
+        contextFlags.push('transfer-request-pending');
+        behaviorFlags.push('resource-conflict-present');
+      }
+      if (state.commitments.some((c) => c.status === 'active')) {
+        // Role-free: present for every actor whenever any obligation is live.
+        behaviorFlags.push('obligation-present');
+      }
       pendingByRequest.set(p.requestId, {
         npcId: p.npcId,
-        tick: event.tick,
         affordanceIds: p.affordanceIds,
-        row: {
+        partialRow: {
           tick: event.tick,
           hungerMicro: npc.hungerMicro,
           fatigueMicro: npc.fatigueMicro,
@@ -75,24 +130,32 @@ export function buildAnonymizedTraces(
             : 'none',
           contextFlags,
         },
+        behaviorFlags,
+        injurySeverityMicro: npc.injury.severityMicro,
       });
     }
 
-    if (event.type === 'DecisionReturned' || event.type === 'FallbackDecisionUsed') {
-      const p = event.payload as { npcId: NpcId; requestId: string; affordanceId: string };
-      const pending = pendingByRequest.get(p.requestId);
-      if (pending) {
-        const mode = modeFromAffordanceId(p.affordanceId);
-        const row: TraceRow = {
-          ...(pending.row as TraceRow),
-          chosenCategory: mode ? MODE_TO_CATEGORY[mode] : 'rest-or-wait',
-          chosenMode: mode ?? 'wait',
-          usedFallback: event.type === 'FallbackDecisionUsed',
-          outcome: p.affordanceId.includes(':continue:') ? 'continued' : 'started',
-        };
-        rowsByNpc[p.npcId].push(row);
-        chosenAffordanceRows.set(p.affordanceId, row);
-        pendingByRequest.delete(p.requestId);
+    if (event.type === 'DecisionResponseAccepted') {
+      const p = event.payload as {
+        npcId: NpcId;
+        requestId: string;
+        selectedAffordanceId: string;
+        usedFallback: boolean;
+      };
+      completeSample(p.requestId, p.npcId, p.selectedAffordanceId, p.usedFallback);
+    }
+
+    // Provisional fallback acts without consuming the request; record the
+    // choice but keep the pending sample available for a later acceptance.
+    if (event.type === 'FallbackDecisionUsed') {
+      const p = event.payload as {
+        npcId: NpcId;
+        requestId: string;
+        affordanceId: string;
+        reasonCode: string;
+      };
+      if (p.reasonCode.startsWith('provisional:')) {
+        completeSample(p.requestId, p.npcId, p.affordanceId, true);
       }
     }
 
@@ -105,17 +168,63 @@ export function buildAnonymizedTraces(
     applyEvent(state, event as SimEvent);
   }
 
-  // Deterministic, seed-derived label permutation.
-  const perms: NpcId[][] = permutations(NPC_IDS as readonly NpcId[]);
-  const perm = perms[scenario.seed % perms.length]!;
-  const traces: AnonymizedTrace[] = perm.map((npcId, index) => ({
+  return samples;
+}
+
+/** Context-rich diagnostic trace: real NPC ids, full context, labeled unsuitable
+ * for role-blind evaluation. */
+export function buildContextRichTraces(
+  scenario: ScenarioDefinition,
+  events: readonly EventEnvelope[],
+): ContextRichTraceExport {
+  const samples = buildDecisionSamples(scenario, events);
+  return {
+    formatVersion: 2,
+    mode: 'context-rich',
+    note: CONTEXT_RICH_NOTE,
     scenarioId: scenario.id,
     seed: scenario.seed,
-    actorLabel: `actor-${index + 1}`,
-    rows: rowsByNpc[npcId],
-  }));
+    traces: NPC_IDS.map((npcId) => ({
+      actorId: npcId,
+      rows: samples[npcId].map((s) => s.row),
+    })),
+  };
+}
 
-  return { formatVersion: 1, scenarioId: scenario.id, seed: scenario.seed, traces };
+/**
+ * Behavior-only blinded trace. The blinding map is generated OUTSIDE the
+ * simulation core (cryptographic randomness) and injected; this function is
+ * a pure projection. No names, no role facts, no scenario identity, no seed,
+ * banded injuries, generalized context flags only.
+ */
+export function buildBehaviorOnlyTraces(
+  scenario: ScenarioDefinition,
+  events: readonly EventEnvelope[],
+  blinding: BlindingMap,
+): BehaviorOnlyTraceExport {
+  const samples = buildDecisionSamples(scenario, events);
+  return {
+    formatVersion: 2,
+    mode: 'behavior-only',
+    sessionLabel: blinding.sessionLabel,
+    traces: NPC_IDS.map((npcId) => ({
+      actorLabel: blinding.labelByNpc[npcId],
+      rows: samples[npcId].map((s): BehaviorTraceRow => {
+        return {
+          tick: s.row.tick,
+          hungerMicro: s.row.hungerMicro,
+          fatigueMicro: s.row.fatigueMicro,
+          injuryBand: severityBand(s.injurySeverityMicro) as BehaviorTraceRow['injuryBand'],
+          availableCategories: s.row.availableCategories,
+          chosenCategory: s.row.chosenCategory,
+          chosenMode: s.row.chosenMode,
+          contextFlags: [...s.behaviorFlags],
+          usedFallback: s.row.usedFallback,
+          outcome: s.row.outcome,
+        };
+      }),
+    })),
+  };
 }
 
 function uniqueCategories(affordanceIds: string[]): ActionCategory[] {
@@ -135,14 +244,4 @@ export function modeFromAffordanceId(id: string): ActionMode | null {
   if (raw === null && id.startsWith('scripted:')) raw = id.slice('scripted:'.length);
   const modes = Object.keys(MODE_TO_CATEGORY) as ActionMode[];
   return raw !== null && (modes as string[]).includes(raw) ? (raw as ActionMode) : null;
-}
-
-function permutations<T>(items: readonly T[]): T[][] {
-  if (items.length <= 1) return [[...items]];
-  const out: T[][] = [];
-  items.forEach((item, i) => {
-    const rest = [...items.slice(0, i), ...items.slice(i + 1)];
-    for (const p of permutations(rest)) out.push([item, ...p]);
-  });
-  return out;
 }

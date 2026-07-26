@@ -3,7 +3,6 @@ import {
   HUNGER_HIGH,
   HUNGER_MODERATE,
   INCAPACITATION_SEVERITY,
-  INJURY_NEEDS_TREATMENT_SEVERITY,
   COMMITMENT_LEAD_TICKS,
   COMMITMENT_RELIEF_MIN_DURATION_TICKS,
   REPAIR_TOTAL_UNITS,
@@ -11,6 +10,8 @@ import {
 } from '../config';
 import type { Affordance } from '../actions/affordances';
 import type { AffordanceScoreRecord, AffordanceScoreComponent } from '../events/types';
+import { evaluateConstraints } from './constraints';
+import { memoryInfluence, type MemoryEffectKind } from './memoryInfluence';
 import type { DecisionContext, DecisionProvider, DecisionResult } from './provider';
 import { NPC_WEIGHTS, RELIEVE_SKILL_RATE, SCORING } from './weights';
 
@@ -19,10 +20,14 @@ import { NPC_WEIGHTS, RELIEVE_SKILL_RATE, SCORING } from './weights';
  *
  * Layered evaluation, in fixed order:
  *  L0 — incapacitated NPCs make no decisions (engine skips them entirely).
- *  L1 — survival overrides: an untreated serious own injury restricts choice
- *       to care-seeking; critical hunger with a legal meal restricts to eating.
- *  L2 — hard identity boundaries filter affordances (never scored around).
+ *  L1/L2 — survival overrides and hard identity boundaries come from the
+ *       shared provider-independent constraint module (decisions/
+ *       constraints.ts). The provider filters to the allowed set so
+ *       prohibited choices are never scored; the engine's acceptance gate
+ *       enforces the same module authoritatively regardless of provider.
  *  L3 — transparent additive utility scoring with per-component debug output.
+ *       Memory effects flow exclusively through the generic appraisal module
+ *       (decisions/memoryInfluence.ts); no memory IDs are ever inspected.
  *
  * Ties break deterministically: higher score first, then ascending
  * affordance ID. The provider never mutates state and only ever returns an
@@ -32,7 +37,9 @@ export class DeterministicProvider implements DecisionProvider {
   readonly id = 'deterministic-utility-v1';
 
   decide(ctx: DecisionContext): DecisionResult {
-    const candidates = applyHardLayers(ctx);
+    const evaluation = evaluateConstraints(ctx, ctx.affordances);
+    const allowed = new Set(evaluation.allowedAffordanceIds);
+    const candidates = ctx.affordances.filter((a) => allowed.has(a.id));
     const scored = candidates.map((a) => scoreAffordance(ctx, a));
     scored.sort(
       (x, y) => y.totalScore - x.totalScore || (x.affordanceId < y.affordanceId ? -1 : 1),
@@ -56,65 +63,6 @@ export class DeterministicProvider implements DecisionProvider {
   }
 }
 
-/** L1 + L2: survival overrides and hard identity boundaries. */
-function applyHardLayers(ctx: DecisionContext): Affordance[] {
-  let list = [...ctx.affordances];
-
-  // L1a — untreated serious own injury: seek care (move to / stay at the cot,
-  // ask for help). Survival ranks above personality and above food.
-  if (
-    ctx.injury.severityMicro >= INJURY_NEEDS_TREATMENT_SEVERITY &&
-    ctx.injury.treatmentStartedTick === null &&
-    !ctx.incapacitated
-  ) {
-    const careModes = new Set(['stay-at-cot', 'ask-help']);
-    const care = list.filter((a) => careModes.has(a.mode));
-    if (care.length > 0) return care;
-    return list; // safety fall-through; engine always offers wait
-  }
-
-  // L1b — critical hunger with a legal meal available: survival eating.
-  if (ctx.hungerMicro >= HUNGER_CRITICAL) {
-    const legalEat = list.filter((a) => a.mode === 'eat');
-    if (legalEat.length > 0) return legalEat;
-  }
-
-  // L2 — hard boundaries (identity constraints, never bypassed by scores).
-  if (ctx.npcId === 'jonas') {
-    // Jonas will not knowingly consume food reserved for someone else.
-    list = list.filter((a) => a.mode !== 'eat-violation');
-  }
-  if (ctx.npcId === 'rin') {
-    // Rin will not voluntarily surrender essential food while vulnerable.
-    const vulnerable =
-      ctx.injury.severityMicro >= INJURY_NEEDS_TREATMENT_SEVERITY || ctx.hungerMicro >= HUNGER_HIGH;
-    if (vulnerable) {
-      list = list.filter((a) => a.mode !== 'transfer' && a.mode !== 'release');
-    }
-  }
-  if (ctx.npcId === 'mara') {
-    // Mara will not ignore a life-threatening injury when nobody else can
-    // intervene: if someone is incapacitated, untreated, and no other capable
-    // healer is available, treating overrides everything else.
-    const lethalTreat = list.filter(
-      (a) =>
-        a.mode === 'treat' && a.targetNpcId !== null && soleHelperEmergency(ctx, a.targetNpcId),
-    );
-    if (lethalTreat.length > 0) return lethalTreat;
-  }
-  return list;
-}
-
-function soleHelperEmergency(ctx: DecisionContext, patientId: string): boolean {
-  const patientInjury = ctx.beliefs.find((b) => b.subject === `injury:${patientId}`);
-  if (!patientInjury || patientInjury.value !== 'incapacitating') return false;
-  // Jonas is the only other treat-capable NPC in this slice; Mara is the sole
-  // helper when Jonas is the patient or otherwise incapacitated.
-  if (patientId === 'jonas') return true;
-  const jonasInjury = ctx.beliefs.find((b) => b.subject === 'injury:jonas');
-  return jonasInjury !== undefined && jonasInjury.value === 'incapacitating';
-}
-
 // ---------------------------------------------------------------------------
 // L3 — utility scoring
 // ---------------------------------------------------------------------------
@@ -125,7 +73,14 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
   const add = (code: string, value: number): void => {
     if (value !== 0) parts.push({ code, value: Math.round(value) });
   };
-  const hasMemory = (id: string): boolean => ctx.memories.some((m) => m.id === id);
+  const addMemoryEffects = (
+    effect: MemoryEffectKind,
+    counterpartyId: typeof a.targetNpcId,
+  ): void => {
+    for (const component of memoryInfluence(ctx.memories, effect, counterpartyId)) {
+      add(component.code, component.value);
+    }
+  };
   const isContinue = a.continuesActionId !== null;
 
   switch (a.mode) {
@@ -145,9 +100,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
           SCORING.deadlinePressure,
         );
       }
-      if (ctx.npcId === 'mara' && hasMemory('mem-mara-criticism')) {
-        add('memory:criticism', SCORING.memoryCriticism.workBonus);
-      }
+      addMemoryEffects('work', null);
       const drag = Math.max(0, ctx.hungerMicro - HUNGER_HIGH) * SCORING.workHungerDragFactor;
       add('hunger-drag', -Math.min(SCORING.workHungerDragCap, drag));
 
@@ -158,9 +111,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
         );
         if (commitment && ctx.tick >= commitment.terms.startTick - COMMITMENT_LEAD_TICKS) {
           add('commitment-due', w.promiseDutyMicro * SCORING.relieveCommitmentScale);
-          if (ctx.npcId === 'jonas' && hasMemory('mem-jonas-shift-covered')) {
-            add('memory:shift-covered', SCORING.memoryShiftCovered.relieveBonus);
-          }
+          addMemoryEffects('relieve-commitment-due', commitment.otherPartyId);
         }
         if (occupant) {
           const requestedRelief = ctx.recentSignals.some(
@@ -242,9 +193,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
           : (ctx.relationships.find((r) => r.toNpcId === a.targetNpcId)?.valueMicro ?? 0);
       add('relationship', rel * SCORING.transferRelationshipScale);
       if (ctx.hungerMicro >= HUNGER_MODERATE) add('self-need', -SCORING.transferSelfNeedPenalty);
-      if (ctx.npcId === 'rin' && a.targetNpcId === 'jonas' && hasMemory('mem-rin-supply-taken')) {
-        add('memory:supply-taken', -SCORING.memorySupplyTaken.transferJonasPenalty);
-      }
+      addMemoryEffects('transfer', a.targetNpcId);
       break;
     }
 
@@ -258,9 +207,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
         -(ctx.identity.traits['conflictAvoidance'] ?? 0) * SCORING.refuseConflictAvoidanceScale,
       );
       if (ctx.hungerMicro >= HUNGER_MODERATE) add('self-need', SCORING.refuseSelfNeedBonus);
-      if (ctx.npcId === 'rin' && a.targetNpcId === 'jonas' && hasMemory('mem-rin-supply-taken')) {
-        add('memory:supply-taken', SCORING.memorySupplyTaken.refuseJonasBonus);
-      }
+      addMemoryEffects('refuse-request', a.targetNpcId);
       break;
     }
 
@@ -273,9 +220,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
     case 'ask-help': {
       add('base', SCORING.base.askHelp);
       add('self-preservation', w.selfPreservationMicro * SCORING.askHelpSelfPreservationScale);
-      if (ctx.npcId === 'mara' && hasMemory('mem-mara-criticism')) {
-        add('memory:criticism', -SCORING.memoryCriticism.askHelpPenalty);
-      }
+      addMemoryEffects('ask-help', null);
       break;
     }
 
@@ -290,9 +235,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
       }
       add('need-break', need);
       add('pride-penalty', -w.prideMicro * SCORING.breakPrideScale);
-      if (ctx.npcId === 'mara' && hasMemory('mem-mara-criticism')) {
-        add('memory:criticism', -SCORING.memoryCriticism.requestBreakPenalty);
-      }
+      addMemoryEffects('request-break', null);
       break;
     }
 
@@ -348,9 +291,7 @@ function scoreAffordance(ctx: DecisionContext, a: Affordance): AffordanceScoreRe
           (ctx.fatigueMicro - SCORING.restFatigueThreshold) * SCORING.restFatigueFactor,
         );
       }
-      if (ctx.npcId === 'mara' && hasMemory('mem-mara-criticism')) {
-        add('memory:criticism', -SCORING.memoryCriticism.restPenalty);
-      }
+      addMemoryEffects('rest', null);
       break;
     }
 

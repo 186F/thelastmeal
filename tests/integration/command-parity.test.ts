@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_VERSION } from '../../src/shared/versions';
 import type { WorkerCommand } from '../../src/shared/workerProtocol';
+import { serializeCanonicalEventStream } from '../../src/sim/replay/ledgerHash';
 import { SimulationHost } from '../../src/sim/runtime/host';
 import { handleCommand, WorkerSession } from '../../src/worker/commandProcessor';
 
@@ -24,7 +25,8 @@ describe('worker-command semantics match direct Node execution', () => {
     host.stepTicks(100);
     host.stepTicks(1);
     host.runToCompletion();
-    const directHash = host.activeRun!.finalStateHash;
+    const directHash = host.activeRun!.worldStateHash;
+    const directLedgerHash = host.activeRun!.canonicalLedgerHash;
 
     // Worker-command path (same protocol the browser uses, minus postMessage).
     const session = new WorkerSession();
@@ -34,9 +36,13 @@ describe('worker-command semantics match direct Node execution', () => {
     handleCommand(session, cmd('step', { ticks: 1 }));
     handleCommand(session, cmd('resume'));
     handleCommand(session, cmd('run-to-completion'));
-    const workerHash = session.host.activeRun!.finalStateHash;
 
-    expect(workerHash).toBe(directHash);
+    expect(session.host.activeRun!.worldStateHash).toBe(directHash);
+    expect(session.host.activeRun!.canonicalLedgerHash).toBe(directLedgerHash);
+    // Complete canonical stream equality across the two execution paths.
+    expect(serializeCanonicalEventStream(session.host.activeRun!.ledger.events)).toBe(
+      serializeCanonicalEventStream(host.activeRun!.ledger.events),
+    );
   });
 
   it('export -> import -> replay through worker commands reports a hash match', () => {

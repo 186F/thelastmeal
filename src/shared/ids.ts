@@ -91,13 +91,23 @@ export const MODE_TO_CATEGORY: Record<ActionMode, ActionCategory> = {
  * Event vocabulary. The first block is the minimum set required by the brief
  * (section 12); the second block documents deliberate additions needed by this
  * slice (the brief's list is a minimum).
+ *
+ * Remediation 1 (audit section 5.6): the original 'DecisionReturned' event is
+ * replaced by the explicit response lifecycle
+ * DecisionResponseReceived -> Accepted | Rejected, plus request Expired /
+ * Superseded events, so delayed and injected responses share one recorded
+ * acceptance path with the local provider.
  */
 export const EVENT_TYPES = [
   'ScenarioStarted',
   'ScenarioEnded',
   'TimeAdvanced',
   'DecisionRequested',
-  'DecisionReturned',
+  'DecisionResponseReceived',
+  'DecisionResponseAccepted',
+  'DecisionResponseRejected',
+  'DecisionRequestExpired',
+  'DecisionRequestSuperseded',
   'DecisionProviderFailed',
   'FallbackDecisionUsed',
   'ActionProposed',
@@ -138,6 +148,20 @@ export const EVENT_TYPES = [
   'ReliefRequested', // category 8 social signal
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+
+/**
+ * Typed semantic memory themes (remediation 6). Decision logic reads themes,
+ * targets, confidence, and importance — never exact memory IDs. Themes are
+ * generic concepts, not scenario names or action outcomes.
+ */
+export const MEMORY_THEMES = [
+  'competence-threat',
+  'reciprocity-debt',
+  'ownership-violation',
+  'care-received',
+  'promise-broken',
+] as const;
+export type MemoryTheme = (typeof MEMORY_THEMES)[number];
 
 export const NPC_DISPLAY_NAMES: Record<NpcId, string> = {
   mara: 'Mara',
