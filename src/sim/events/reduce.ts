@@ -113,6 +113,10 @@ export const ADVANCES_WORLD_REVISION: Record<SimEvent['type'], boolean> = {
 function applyEventBody(state: CanonicalState, event: SimEvent): void {
   switch (event.type) {
     case 'ScenarioStarted':
+      // The payload's scenarioVersion is authoritative for reconstruction:
+      // eval-harness runs relabel the version while reusing a base scenario
+      // definition. A no-op for every v1.0 ledger (values already agree).
+      state.scenarioVersion = event.payload.scenarioVersion;
       break;
 
     case 'ScenarioEnded':

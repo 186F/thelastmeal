@@ -8,6 +8,8 @@ import {
 } from '../../src/sim/evaluation/individuality';
 import { createRun, createRunWithRoles, runToCompletion } from '../../src/sim/runtime/engine';
 import { serializeCanonicalEventStream } from '../../src/sim/replay/ledgerHash';
+import { replayLedger } from '../../src/sim/replay/replay';
+import { buildLedgerFile } from '../../src/sim/runtime/ledgerFileBuilder';
 import { getScenario } from '../../src/sim/scenarios/definitions';
 import { V1_ROLES } from '../../src/sim/scenarios/roles';
 
@@ -57,7 +59,7 @@ describe('role permutations', () => {
 });
 
 describe('eval harness separation', () => {
-  it('eval runs carry the eval version label, never the v1.0 scenario version', () => {
+  it('eval runs carry the eval version label, never the v1.0 scenario version, and replay with their roles (review: roles threading)', () => {
     const results = runRoleCounterbalancedEval(['A']);
     expect(results).toHaveLength(6);
     for (const result of results) {
@@ -65,8 +67,22 @@ describe('eval harness separation', () => {
       expect(result.scenario.version).toBe(INDIVIDUALITY_EVAL_VERSION);
       expect(result.worldStateHash).toMatch(/^[0-9a-f]{16}$/);
       expect(result.events.length).toBeGreaterThan(0);
+      // Reducer-only replay with the run's role assignment reproduces the
+      // semantic hash for every permutation, not just the default.
+      const replay = replayLedger(result.baseScenarioId, result.events, result.roles);
+      expect(replay.worldStateHash, JSON.stringify(result.roles)).toBe(result.worldStateHash);
     }
     // Rotations genuinely change outcomes (they are different worlds).
     expect(new Set(results.map((r) => r.worldStateHash)).size).toBeGreaterThan(1);
+  });
+
+  it('rotated runs refuse ledger export: the file format records no role assignment', () => {
+    const rotated = createRunWithRoles(getScenario('A'), {
+      benchWorker: 'jonas',
+      debtor: 'rin',
+      mealOwner: 'mara',
+    });
+    runToCompletion(rotated);
+    expect(() => buildLedgerFile(rotated)).toThrow('export-requires-v1-roles');
   });
 });

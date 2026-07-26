@@ -106,6 +106,23 @@ describe('behavior-only blinded traces (remediation 7)', () => {
     );
   });
 
+  it('emission order follows the assigned labels, never identity (review: positional leak)', () => {
+    // With a fixed NPC-order array, traces[0] would be Mara in every reviewer
+    // package regardless of labels — array position itself would be the
+    // answer key. Order must track the blinding.
+    const run = completedRun('A');
+    const other: BlindingMap = {
+      sessionLabel: 'session-test0003',
+      labelByNpc: { mara: 'agent-A', jonas: 'agent-B', rin: 'agent-C' },
+    };
+    const first = buildBehaviorOnlyTraces(getScenario('A'), run.ledger.events, TEST_BLINDING); // rin -> agent-A
+    const second = buildBehaviorOnlyTraces(getScenario('A'), run.ledger.events, other); // mara -> agent-A
+    expect(first.traces.map((t) => t.actorLabel)).toEqual(['agent-A', 'agent-B', 'agent-C']);
+    expect(second.traces.map((t) => t.actorLabel)).toEqual(['agent-A', 'agent-B', 'agent-C']);
+    // Same position, different identity behind it -> different rows.
+    expect(JSON.stringify(first.traces[0]!.rows)).not.toBe(JSON.stringify(second.traces[0]!.rows));
+  });
+
   it('retains generalized context flags only', () => {
     const run = completedRun('D');
     const blinded = buildBehaviorOnlyTraces(getScenario('D'), run.ledger.events, TEST_BLINDING);

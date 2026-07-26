@@ -92,7 +92,12 @@ function main(): void {
 
   for (const result of results) {
     const blinding = makeBlinding();
-    const packageJson = buildBehaviorOnlyTraces(result.scenario, result.events, blinding);
+    const packageJson = buildBehaviorOnlyTraces(
+      result.scenario,
+      result.events,
+      blinding,
+      result.roles,
+    );
     writeFileSync(
       path.join(reviewerDir, `${blinding.sessionLabel}.json`),
       JSON.stringify(packageJson, null, 2),

@@ -104,12 +104,20 @@ const offeredAffordance = z
   })
   .strict();
 
-const scoreRecord = z
+/**
+ * Score record as recorded on DecisionResponseReceived (the only event that
+ * carries scores): external providers may score their own internal options,
+ * so the affordance ID is tolerated as an opaque bounded string — consistent
+ * with the deliberately loosened requestId/responseId/selectedAffordanceId
+ * on the same event. Both the array and each component list are bounded so a
+ * single injected response cannot bloat the canonical ledger.
+ */
+const externalScoreRecord = z
   .object({
-    affordanceId,
+    affordanceId: z.string().min(1).max(500),
     mode: actionMode,
     totalScore: scoreInt,
-    components: z.array(z.object({ code: shortCode, value: scoreInt }).strict()),
+    components: z.array(z.object({ code: shortCode, value: scoreInt }).strict()).max(64),
   })
   .strict();
 
@@ -190,7 +198,7 @@ const eventSchemaList = [
     selectedAffordanceId: z.string().min(1).max(500),
     confidenceBp: z.number().int().min(0).max(10_000),
     reasonCode: shortCode,
-    scores: z.array(scoreRecord),
+    scores: z.array(externalScoreRecord).max(64),
   }),
   ev('DecisionResponseAccepted', {
     npcId,

@@ -899,7 +899,14 @@ function provisionalFallback(
   });
   const chosen = ctx.affordances.find((a) => a.id === fallbackDecision.affordanceId);
   if (!chosen || chosen.continuesActionId !== null) return;
-  proposeAndLaunch(run, npc, tick, chosen, used.id);
+  // The bridging action is preemptible BY CONSTRUCTION: the request it
+  // bridges is still pending, and a valid late response must be able to
+  // displace it (constraint-mandated choices like survival eating would
+  // otherwise lock the provider out for their whole duration). Only the
+  // launched descriptor is altered — the affordance recorded in
+  // DecisionRequested keeps its original interruptibility. Movement legs are
+  // still never preempted (the acceptance gate rejects during transit).
+  proposeAndLaunch(run, npc, tick, { ...chosen, interruptible: true }, used.id);
 }
 
 /** Drain scheduled and injected decision responses in deterministic order. */

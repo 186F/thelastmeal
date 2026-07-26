@@ -397,6 +397,61 @@ batch with artifact upload.
    with the v1.0 baseline for comparison; scenario data and pre-registered
    purpose unchanged; new baseline pinned by test.
 
+## Adversarial review of the remediation itself
+
+A two-pass adversarial review (8 finder dimensions, then refutation
+verifiers on every deduped finding; 26 agents total) ran over the remediation
+commit. 11 findings survived adversarial verification and were fixed with
+regression tests (`tests/integration/review-regressions-2.test.ts`,
+`tests/integration/golden-hashes.test.ts`, plus additions to the traces and
+individuality-eval suites); 7 were refuted with grounded rebuttals; 12
+low-severity unverified candidates were triaged as non-blocking.
+
+Confirmed and fixed:
+
+1. **Response-payload poisoning** — an externally submitted (and correctly
+   rejected) response with gateway-internal score IDs was recorded verbatim in
+   `DecisionResponseReceived`, whose score schema was stricter than the
+   protocol boundary, making the run's own export un-importable while the
+   worker acked success. Fix: the Received event's score records tolerate
+   opaque bounded IDs (consistent with its deliberately loosened sibling
+   fields) and both layers bound score/component array sizes (≤64).
+2. **Interrupt-in-transit lifecycle** — actions interrupted while still in
+   their moving phase (scenario end, injury worsening) have no
+   `ActionStarted`; the import validator rejected such genuine ledgers. Fix:
+   the validator tracks `MovementStarted` and accepts `ActionInterrupted` for
+   in-transit actions (completions still require a start).
+3. **Positional identity leak in blinded traces** — traces were emitted in
+   fixed NPC order, so array position itself was the answer key. Fix:
+   emission order follows the assigned labels.
+4. **Non-preemptible provisional bridges** — constraint-mandated fallback
+   choices (survival eating, care-seeking) are generated non-interruptible,
+   which would have locked a deferred provider out for their whole duration.
+   Fix: provisional bridge actions launch with `interruptible: true` (only
+   the launched descriptor; the recorded offer is untouched), so a valid late
+   response can displace them once the (never-preempted) travel leg ends.
+5. **Mid-tick-transient fingerprints** — requests created inside the decision
+   phase snapshotted other NPCs' momentarily-absent actions, making the
+   fingerprint unreproducible at the drain point and permanently staling
+   valid responses. Fix: the fingerprint covers DURABLE dependencies only
+   (meal, bench, task, commitments, transfer requests, injuries/treatment/
+   incapacity); transient activity is enforced by the acceptance-time and
+   arrival-time validation gates. This changed `DecisionRequested` payload
+   bytes, so the canonical ledger hashes below were re-baselined once
+   (world-state hashes are byte-identical, proving behavior unchanged).
+6. **No golden pin** — hash-projection changes could re-baseline silently.
+   Fix: `golden-hashes.test.ts` pins all fourteen published hashes.
+7. **Provisional trace-sample consumption** — the later accepted decision was
+   dropped from traces. Fix: provisional rows no longer consume the pending
+   sample; both rows are emitted.
+8. **Roles not threaded into reconstruction** — replay and the trace fold
+   rebuilt rotated eval runs on a V1-roles initial state. Fix: `replayLedger`
+   and both trace builders take a role assignment (default `V1_ROLES` keeps
+   every v1.0 caller byte-identical), the reducer takes `scenarioVersion`
+   from the `ScenarioStarted` payload, eval replay round-trips are under test
+   for all six permutations, and `buildLedgerFile` refuses rotated runs with
+   `export-requires-v1-roles` (the file format records no role assignment).
+
 ## Final command results (remediation release 1.1.0)
 
 All executed on Windows 11, Node v24 — each command below was actually run and
@@ -407,7 +462,7 @@ passed:
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS (ESLint + Prettier) |
 | `npm run validate` | PASS — 0 errors, 0 warnings |
-| `npm run test:run` | PASS — 29 files, 210 tests |
+| `npm run test:run` | PASS — 31 files, 224 tests |
 | `npm run test:e2e` | PASS — 9 tests (Chromium) |
 | `npm run build` | PASS |
 | `npm run batch` (100 runs/scenario) | PASS — hashes stable, complete event streams stable, 0 invariant violations, all replays match |
@@ -417,13 +472,13 @@ passed:
 
 | Scenario | Outcome | Events | `worldStateHash` | `canonicalLedgerHash` | Replay |
 | --- | --- | --- | --- | --- | --- |
-| A | 100.00% completed, meal=rin, promise fulfilled | 5715 | `8bf6de492261aa78` | `a04eaf39b4ea6996` | match |
-| B1 | 100.00% completed, meal=rin, promise fulfilled | 5715 | `7e06428489f9020f` | `a95ffafcf3e4fa13` | match |
-| B2 | 95.61% deadline-missed, meal=rin, promise fulfilled | 5957 | `19f9352327928f64` | `431caf5eae57efd3` | match |
-| C | 100.00% completed, promise fulfilled-after-renegotiation, treatment jonas→rin @1020 | 5779 | `dc9e39d03bbdf240` | `8ec1fb8566c6172e` | match |
-| D | 92.75% deadline-missed, meal=rin, promise fulfilled, 1 rejected action | 5906 | `f1837eb45f154f26` | `1802b64a14e5e38d` | match |
-| E | 100.00% completed, meal=none (removed), promise fulfilled, 1 rejected action | 5733 | `72c9d8d32e575df8` | `0efa388cc4a4cfb8` | match |
-| F | 100.00% completed, promise broken, 127 provider failures, fallback care-seeking | 6139 | `099557a99bde1fb4` | `aa046a81a3a28850` | match |
+| A | 100.00% completed, meal=rin, promise fulfilled | 5715 | `8bf6de492261aa78` | `2b37e828af8d8b30` | match |
+| B1 | 100.00% completed, meal=rin, promise fulfilled | 5715 | `7e06428489f9020f` | `7db80afdf2565999` | match |
+| B2 | 95.61% deadline-missed, meal=rin, promise fulfilled | 5957 | `19f9352327928f64` | `7e7bfb303b11655f` | match |
+| C | 100.00% completed, promise fulfilled-after-renegotiation, treatment jonas→rin @1020 | 5779 | `dc9e39d03bbdf240` | `a155bf545ed70250` | match |
+| D | 92.75% deadline-missed, meal=rin, promise fulfilled, 1 rejected action | 5906 | `f1837eb45f154f26` | `ce705feae7451f0a` | match |
+| E | 100.00% completed, meal=none (removed), promise fulfilled, 1 rejected action | 5733 | `72c9d8d32e575df8` | `0da42ae4ea8cf2f0` | match |
+| F | 100.00% completed, promise broken, 127 provider failures, fallback care-seeking | 6139 | `099557a99bde1fb4` | `36daff45eae4fcd3` | match |
 
 Hash values are re-baselined by definition (new hash semantics, new lifecycle
 events shift every event ID); the behavioral signatures the v1.0 experiment

@@ -15,6 +15,7 @@ import {
   type TraceRow,
 } from '../shared/traces';
 import type { ScenarioDefinition } from './scenarios/definitions';
+import { V1_ROLES, type RoleAssignment } from './scenarios/roles';
 import { severityBand } from './cognition/perception';
 import { applyEvent } from './events/reduce';
 import type { SimEvent } from './events/types';
@@ -40,9 +41,10 @@ interface DecisionSample {
 function buildDecisionSamples(
   scenario: ScenarioDefinition,
   events: readonly EventEnvelope[],
+  roles: RoleAssignment,
 ): Record<NpcId, DecisionSample[]> {
   const samples: Record<NpcId, DecisionSample[]> = { mara: [], jonas: [], rin: [] };
-  const state = buildInitialState(scenario);
+  const state = buildInitialState(scenario, roles);
 
   interface PendingSample {
     npcId: NpcId;
@@ -59,12 +61,14 @@ function buildDecisionSamples(
     npcId: NpcId,
     affordanceId: string,
     usedFallback: boolean,
+    consume = true,
   ): void => {
     const pending = pendingByRequest.get(requestId);
     if (!pending || pending.npcId !== npcId) return;
     const mode = modeFromAffordanceId(affordanceId);
     const row: TraceRow = {
       ...pending.partialRow,
+      contextFlags: [...pending.partialRow.contextFlags],
       chosenCategory: mode ? MODE_TO_CATEGORY[mode] : 'rest-or-wait',
       chosenMode: mode ?? 'wait',
       usedFallback,
@@ -73,11 +77,11 @@ function buildDecisionSamples(
     samples[npcId].push({
       npcId,
       row,
-      behaviorFlags: pending.behaviorFlags,
+      behaviorFlags: [...pending.behaviorFlags],
       injurySeverityMicro: pending.injurySeverityMicro,
     });
     chosenAffordanceRows.set(affordanceId, row);
-    pendingByRequest.delete(requestId);
+    if (consume) pendingByRequest.delete(requestId);
   };
 
   for (const event of events) {
@@ -146,7 +150,8 @@ function buildDecisionSamples(
     }
 
     // Provisional fallback acts without consuming the request; record the
-    // choice but keep the pending sample available for a later acceptance.
+    // choice but keep the pending sample available (consume = false) so a
+    // later acceptance for the same request yields its own row.
     if (event.type === 'FallbackDecisionUsed') {
       const p = event.payload as {
         npcId: NpcId;
@@ -155,7 +160,7 @@ function buildDecisionSamples(
         reasonCode: string;
       };
       if (p.reasonCode.startsWith('provisional:')) {
-        completeSample(p.requestId, p.npcId, p.affordanceId, true);
+        completeSample(p.requestId, p.npcId, p.affordanceId, true, false);
       }
     }
 
@@ -176,8 +181,9 @@ function buildDecisionSamples(
 export function buildContextRichTraces(
   scenario: ScenarioDefinition,
   events: readonly EventEnvelope[],
+  roles: RoleAssignment = V1_ROLES,
 ): ContextRichTraceExport {
-  const samples = buildDecisionSamples(scenario, events);
+  const samples = buildDecisionSamples(scenario, events, roles);
   return {
     formatVersion: 2,
     mode: 'context-rich',
@@ -201,13 +207,23 @@ export function buildBehaviorOnlyTraces(
   scenario: ScenarioDefinition,
   events: readonly EventEnvelope[],
   blinding: BlindingMap,
+  roles: RoleAssignment = V1_ROLES,
 ): BehaviorOnlyTraceExport {
-  const samples = buildDecisionSamples(scenario, events);
+  const samples = buildDecisionSamples(scenario, events, roles);
+  // Emission order follows the ASSIGNED LABELS, never identity: a fixed
+  // NPC-order array would make position itself a stable identity key that
+  // nullifies the blinding. Labels are a bijection, so the sort is total and
+  // this stays a pure function of (scenario, events, blinding, roles).
+  const labelOrdered = [...NPC_IDS].sort((a, b) => {
+    const la = blinding.labelByNpc[a];
+    const lb = blinding.labelByNpc[b];
+    return la < lb ? -1 : la > lb ? 1 : 0;
+  });
   return {
     formatVersion: 2,
     mode: 'behavior-only',
     sessionLabel: blinding.sessionLabel,
-    traces: NPC_IDS.map((npcId) => ({
+    traces: labelOrdered.map((npcId) => ({
       actorLabel: blinding.labelByNpc[npcId],
       rows: samples[npcId].map((s): BehaviorTraceRow => {
         return {

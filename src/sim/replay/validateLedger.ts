@@ -206,6 +206,10 @@ function validateOrderingAndReferences(
   const seenEventIds = new Set<string>();
   const proposedActionIds = new Set<string>();
   const startedActionIds = new Set<string>();
+  // An action can legally END while still in its 'moving' phase: the reducer
+  // installs currentAction on MovementStarted, and scenario end or injury
+  // worsening interrupts it before ActionStarted is ever emitted.
+  const movingActionIds = new Set<string>();
   const requestedDecisionIds = new Set<string>();
   const resolvedDecisionIds = new Set<string>();
   const createdCommitmentIds = new Set<string>();
@@ -300,10 +304,16 @@ function validateOrderingAndReferences(
         startedActionIds.add(actionId);
         break;
       }
+      case 'MovementStarted': {
+        movingActionIds.add(payload.actionId as string);
+        break;
+      }
       case 'ActionCompleted':
       case 'ActionInterrupted': {
         const actionId = payload.actionId as string;
-        if (!startedActionIds.has(actionId)) {
+        const interruptedInTransit =
+          event.type === 'ActionInterrupted' && movingActionIds.has(actionId);
+        if (!startedActionIds.has(actionId) && !interruptedInTransit) {
           err(
             'action-lifecycle-without-start',
             `${event.type} ${event.id} references unstarted action ${actionId}`,

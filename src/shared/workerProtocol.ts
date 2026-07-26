@@ -69,18 +69,22 @@ export const decisionResponseSchema = z
     selectedAffordanceId: z.string().min(1).max(500),
     confidenceBp: z.number().int().min(0).max(10_000),
     reasonCode: z.string().min(1).max(200),
-    scores: z.array(
-      z
-        .object({
-          affordanceId: z.string().min(1).max(500),
-          mode: z.enum(ACTION_MODES),
-          totalScore: z.number().int(),
-          components: z.array(
-            z.object({ code: z.string().min(1).max(200), value: z.number().int() }).strict(),
-          ),
-        })
-        .strict(),
-    ),
+    scores: z
+      .array(
+        z
+          .object({
+            affordanceId: z.string().min(1).max(500),
+            mode: z.enum(ACTION_MODES),
+            totalScore: z.number().int(),
+            components: z
+              .array(
+                z.object({ code: z.string().min(1).max(200), value: z.number().int() }).strict(),
+              )
+              .max(64),
+          })
+          .strict(),
+      )
+      .max(64),
   })
   .strict();
 

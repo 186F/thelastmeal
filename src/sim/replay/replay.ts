@@ -4,6 +4,7 @@ import { applyEvent } from '../events/reduce';
 import type { SimEvent } from '../events/types';
 import { getScenario } from '../scenarios/definitions';
 import { buildInitialState } from '../scenarios/initialState';
+import { V1_ROLES, type RoleAssignment } from '../scenarios/roles';
 import { worldStateHash } from './worldHash';
 import type { ScenarioId } from '../../shared/ids';
 
@@ -28,9 +29,10 @@ export interface ReplayResult {
 export function replayLedger(
   scenarioId: ScenarioId,
   events: readonly EventEnvelope[],
+  roles: RoleAssignment = V1_ROLES,
 ): ReplayResult {
   const scenario = getScenario(scenarioId);
-  const state = buildInitialState(scenario);
+  const state = buildInitialState(scenario, roles);
   let recordedWorldStateHash: string | null = null;
   for (const event of events) {
     applyEvent(state, event as SimEvent);

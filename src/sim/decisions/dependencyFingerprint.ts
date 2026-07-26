@@ -19,15 +19,26 @@ import { canonicalSerialize } from '../replay/serialize';
  * expiration plus the constraint and action-validation gates that rerun at
  * acceptance time.
  *
- * The ACTOR's own location, transit, and current action are also excluded:
- * a deferred request's provisional fallback action (and ordinary continued
- * activity) must not permanently invalidate the request it is bridging —
- * the audit's preemption rule requires a late valid response to displace an
- * interruptible action. The actor's own occupancy is enforced authoritatively
- * by the acceptance gate's dedicated interruptibility/transit checks, and
- * travel is re-planned from the current location at launch. The actor's own
- * incapacity and injury/treatment status ARE included (they change action
- * legality and the mandatory constraint set).
+ * TRANSIENT ACTIVITY — every NPC's current action, location, and transit —
+ * is also excluded, for two reasons the audit's own design anticipates:
+ *
+ *  1. The actor's side: a deferred request's provisional fallback action
+ *     (and ordinary continued activity) must not permanently invalidate the
+ *     request it is bridging — the preemption rule requires a late valid
+ *     response to displace an interruptible action. Actor occupancy is
+ *     enforced authoritatively by the acceptance gate's dedicated
+ *     interruptibility/transit checks.
+ *  2. The others' side: requests are created inside the per-NPC decision
+ *     phase, where later-ordered NPCs can be MID-TICK transiently actionless
+ *     (their action completed earlier in the same tick and re-launches later
+ *     in the same tick). A fingerprint over that transient snapshot is
+ *     unreproducible at the response-drain point, permanently invalidating
+ *     perfectly valid late responses. Durable consequences of activity
+ *     changes (bench occupancy, reservations, treatment markers) ARE
+ *     fingerprinted, and the selected action is independently revalidated
+ *     against live state at acceptance and again on arrival after any travel
+ *     leg — exactly the audit's "final constraint and action revalidation
+ *     gates".
  *
  * The projection contains only integers, strings, booleans, and null, and is
  * hashed with the same canonical serializer + FNV-1a 64 used everywhere else.
@@ -45,24 +56,11 @@ export function hardDependencyFingerprint(state: CanonicalState, actorId: NpcId)
     },
     npcs: NPC_IDS.map((npcId) => {
       const npc = state.npcs[npcId];
-      const action = npc.currentAction;
-      const isActor = npcId === actorId;
       return {
         id: npcId,
         incapacitated: npc.incapacitated,
-        locationId: isActor ? null : npc.locationId,
-        transitTo: isActor || !npc.transit ? null : npc.transit.toLocationId,
         injurySeverityMicro: npc.injury.severityMicro,
         treatmentStarted: npc.injury.treatmentStartedTick !== null,
-        currentAction:
-          action && !isActor
-            ? {
-                mode: action.mode,
-                phase: action.phase,
-                interruptible: action.interruptible,
-                targetNpcId: action.targetNpcId,
-              }
-            : null,
       };
     }),
     commitments: state.commitments.map((c) => ({
