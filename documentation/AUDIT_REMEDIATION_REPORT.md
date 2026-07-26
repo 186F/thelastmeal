@@ -454,8 +454,9 @@ Confirmed and fixed:
 
 ## Final command results (remediation release 1.1.0)
 
-All executed on Windows 11, Node v24 — each command below was actually run and
-passed:
+Each command below was actually run and passed — first in the working tree
+during development, then again end-to-end from a CLEAN CLONE of the final
+commit (`git clone` → `npm ci` → all commands), on Windows 11 / Node v24:
 
 | Command | Result |
 | --- | --- |
@@ -466,6 +467,7 @@ passed:
 | `npm run test:e2e` | PASS — 9 tests (Chromium) |
 | `npm run build` | PASS |
 | `npm run batch` (100 runs/scenario) | PASS — hashes stable, complete event streams stable, 0 invariant violations, all replays match |
+| `npm run test:e2e:install` | PASS |
 | `npm run eval:individuality -- --scenarios=A --answer-key` | PASS — 6 sessions, balance 2/2/2 per identity/role |
 
 ## Scenario hashes after remediation (batch of 100 runs each)
