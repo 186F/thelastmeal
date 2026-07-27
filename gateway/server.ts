@@ -33,40 +33,16 @@ import type { ModelTraceWriter } from './tracing/modelTraceWriter';
 import type { ExternalFailureCode } from '../src/shared/decisionContracts';
 
 /**
- * The model gateway (milestone 001, section 10): a small server-side HTTP
- * boundary between the browser orchestrator and the model adapter.
+ * The model gateway: a small server-side HTTP boundary between the browser
+ * orchestrator and the model adapter.
  *
- * For ALL routes, before dispatch: a present Origin header must be
- * equivalent to the single configured browser origin (403 origin-forbidden
- * otherwise) and a present Host header must name a loopback host —
- * localhost / 127.0.0.1 / [::1], any port (403 host-forbidden otherwise).
- * An ABSENT Origin stays allowed for loopback CLI clients and tests.
- *
- * Responsibilities, in order, for POST /v1/decision:
- *   1. exact envelope validation (size-limited, JSON-only)
- *   2. registered provider / experiment / condition / prompt / Mara identity
- *   3. context-hash recomputation
- *   4. reduced idempotency (re-audit remediation G3): a repeat of an already
- *      seen runId+requestId with the SAME contextHash replays the first
- *      terminal result (no adapter call, no budget, no trace row, no
- *      sidecar); the SAME requestId with a DIFFERENT contextHash is a 400
- *      idempotency-conflict — a forgery/bug, never a duplicate
- *   5. run-manifest seed + exact-envelope sidecar persisted at first sight
- *      of the validated non-duplicate envelope (G2; seed-at-first-sight is
- *      1.5.0 G3)
- *   6. concurrency, per-run budget, and the process-wide spend cap
- *   7. server-owned prompt construction
- *   8. adapter call under an abort-on-timeout signal
- *   9. strict structured-output validation over the DYNAMIC offered-ID enum
- *  10. engine DecisionResponse constructed HERE, identity fields copied from
- *      the validated request — never from model text
- *  11. noncanonical trace entry (schema v2)
- *  12. a valid response or a typed failure — the transport never throws
- *      free-form errors at the client
+ * For ALL routes, before dispatch: a present Origin header must be equivalent
+ * to the configured browser origin and a present Host header must name a
+ * loopback host. An absent Origin remains allowed for loopback CLI clients.
  *
  * The engine independently repeats provider binding, request identity,
- * duplicate/expiry/offer/staleness/constraint/validity checks: gateway
- * validation is defense in depth, never a replacement (section 14).
+ * duplicate/expiry/offer/staleness/constraint/validity checks. Gateway
+ * validation is defense in depth, never a replacement for engine authority.
  */
 
 export interface GatewayInstance {
@@ -75,8 +51,6 @@ export interface GatewayInstance {
   stop(): Promise<void>;
 }
 
-/** Terminal HTTP result of one dispatched decision, replayed verbatim to
- * every idempotent duplicate waiter. */
 interface TerminalResult {
   statusCode: number;
   body: unknown;
@@ -89,10 +63,6 @@ type IdempotencyRecord = { contextHash: string } & (
 
 interface RunBudgetState {
   calls: number;
-  /** Reduced idempotency store (G3): first terminal result per requestId.
-   * Rides inside the run's budget state so the 64-run FIFO evicts budget and
-   * idempotency together — best-effort semantics: an evicted run forgets its
-   * results, and a completion write-back never resurrects it. */
   results: Map<string, IdempotencyRecord>;
 }
 
@@ -107,9 +77,6 @@ function parseOrigin(value: string): { scheme: string; host: string; port: strin
   }
 }
 
-/** Origin equivalence (G4): lowercase scheme+host, trailing slash stripped,
- * with localhost / 127.0.0.1 / [::1] interchangeable when scheme and port
- * match. Unparsable values fall back to an exact normalized string compare. */
 export function originEquivalent(origin: string, allowed: string): boolean {
   const a = parseOrigin(origin);
   const b = parseOrigin(allowed);
@@ -121,7 +88,6 @@ export function originEquivalent(origin: string, allowed: string): boolean {
   return LOOPBACK_HOSTNAMES.has(a.host) && LOOPBACK_HOSTNAMES.has(b.host);
 }
 
-/** Host-header check (G4): loopback hosts only (any port). */
 export function isLoopbackHost(value: string): boolean {
   const host = value.trim().toLowerCase();
   const name = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0]!;
@@ -134,9 +100,6 @@ export function createGateway(
   trace: ModelTraceWriter,
 ): GatewayInstance {
   let inFlight = 0;
-  /** Process-wide upstream spend counter (G4): increments in lockstep with
-   * every per-run budget consumption; at/over the cap every call fails as a
-   * typed budget-exhausted BEFORE the adapter. */
   let totalCalls = 0;
   const maxTotalCalls = config.maxTotalCalls ?? DEFAULT_MAX_TOTAL_CALLS;
   let duplicateReplays = 0;
@@ -144,9 +107,6 @@ export function createGateway(
 
   const server = createServer((req, res) => {
     void route(req, res).catch(() => {
-      // Absolute backstop: the route handler already maps every known
-      // failure to a typed result; anything else becomes a bare 500 with no
-      // internals echoed.
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' });
       }
@@ -155,8 +115,6 @@ export function createGateway(
   });
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Origin + Host enforcement for ALL routes, before any dispatch (G4).
-    // No `connection: close` on the 403s — the connection stays reusable.
     const origin = req.headers.origin;
     if (origin !== undefined && !originEquivalent(origin, config.allowedBrowserOrigin)) {
       json(res, 403, { error: 'origin-forbidden' });
@@ -185,10 +143,6 @@ export function createGateway(
   }
 
   function applyCors(req: IncomingMessage, res: ServerResponse): void {
-    // The origin gate above already rejected anything not equivalent to the
-    // configured browser origin, so a present Origin here is safe to echo —
-    // CORS requires ACAO to equal the request origin exactly, otherwise the
-    // accepted loopback alias (127.0.0.1 / [::1]) is unusable in a browser.
     res.setHeader('access-control-allow-origin', req.headers.origin ?? config.allowedBrowserOrigin);
     res.setHeader('vary', 'origin');
     res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
@@ -210,11 +164,6 @@ export function createGateway(
       json(res, 415, { error: 'json-only' });
       return;
     }
-    // Declared-size precheck so oversized clients get a clean 413 before the
-    // body streams; the in-stream guard below remains the hard backstop and
-    // drains (never destroys) on overflow, so chunked bodies with no
-    // content-length get the same clean 413. No `connection: close` — the
-    // old close+resume pair ECONNRESET multi-megabyte uploads.
     const declaredLength = Number(req.headers['content-length'] ?? '0');
     if (Number.isFinite(declaredLength) && declaredLength > config.maxRequestBodyBytes) {
       json(res, 413, { error: 'request-too-large' });
@@ -225,7 +174,7 @@ export function createGateway(
       body = await readBody(req, config.maxRequestBodyBytes);
     } catch {
       json(res, 413, { error: 'request-too-large' });
-      req.resume(); // body already past the cap; drain the rest so the socket stays clean
+      req.resume();
       return;
     }
     let parsedJson: unknown;
@@ -245,10 +194,6 @@ export function createGateway(
     }
     const envelope = parsed.data as ExternalDecisionRequestEnvelope;
 
-    // Registered identity checks beyond schema shape (section 10.3): only
-    // the registered Mara model provider, only Mara, only the registered
-    // condition, only the pinned prompt version — all against the shared
-    // experiment literals (src/shared/modelExperiment.ts).
     if (
       envelope.providerId !== EXTERNAL_MARA_PROVIDER_ID ||
       envelope.request.npcId !== MODEL_TARGET_NPC_ID ||
@@ -258,15 +203,11 @@ export function createGateway(
       json(res, 400, { error: 'unregistered-request' });
       return;
     }
-    // Context-hash recomputation (section 10.4).
     if (externalContextHash(envelope.context) !== envelope.contextHash) {
       json(res, 400, { error: 'context-hash-mismatch' });
       return;
     }
 
-    // Reduced idempotency (G3): looked up AFTER full validation, BEFORE any
-    // budget/concurrency accounting. The budget state (with its results map)
-    // is created here so the existing 64-run FIFO drops both together.
     const budget = runBudgets.get(envelope.runId) ?? { calls: 0, results: new Map() };
     runBudgets.set(envelope.runId, budget);
     if (runBudgets.size > 64) {
@@ -277,8 +218,6 @@ export function createGateway(
     const prior = budget.results.get(requestId);
     if (prior !== undefined) {
       if (prior.contextHash !== envelope.contextHash) {
-        // Same requestId, different content: a forgery or client bug, never
-        // a duplicate — reject instead of replaying or double-spending.
         json(res, 400, { error: 'idempotency-conflict' });
         return;
       }
@@ -292,8 +231,6 @@ export function createGateway(
       json(res, terminal.statusCode, terminal.body);
       return;
     }
-    // The shared promise never rejects: waiters must always receive a
-    // serializable terminal result.
     const promise = dispatchDecision(envelope, budget).catch((): TerminalResult => ({
       statusCode: 500,
       body: { error: 'internal-error' },
@@ -304,8 +241,6 @@ export function createGateway(
       promise,
     });
     const terminal = await promise;
-    // Best-effort write-back: if the FIFO evicted this run mid-flight, the
-    // run has forgotten its results — do NOT resurrect it.
     if (runBudgets.get(envelope.runId) === budget) {
       budget.results.set(requestId, {
         contextHash: envelope.contextHash,
@@ -316,11 +251,6 @@ export function createGateway(
     json(res, terminal.statusCode, terminal.body);
   }
 
-  /** Owns everything after validation/idempotency for ONE non-duplicate
-   * dispatch: the envelope sidecar, budget/concurrency/spend-cap checks, the
-   * adapter call, identity-copying response construction, and the trace
-   * write. The HTTP handler serializes the returned TerminalResult per
-   * waiter. */
   async function dispatchDecision(
     envelope: ExternalDecisionRequestEnvelope,
     budget: RunBudgetState,
@@ -357,18 +287,9 @@ export function createGateway(
       return { statusCode: 200, body: result };
     };
 
-    // Seed-at-first-sight (1.5.0 G3): the run manifest is seeded together
-    // with the envelope sidecar on the first validated non-duplicate
-    // envelope — not at the first terminal result — so a first request
-    // killed mid-adapter still leaves a manifest on disk.
     seedRunManifest(envelope);
-    // Envelope sidecar (G2, deviation D3): the exact validated envelope,
-    // persisted once per non-duplicate dispatch — replays and rejects never
-    // reach this point.
     trace.writeRequest(envelope.runId, envelope.request.requestId, envelope);
 
-    // Budget, spend-cap, and concurrency limits (section 26 + G4): typed
-    // failures, never a frozen simulation and never a silent drop.
     if (budget.calls >= config.maxCallsPerRun) {
       return failureResult('budget-exhausted', false);
     }
@@ -398,8 +319,6 @@ export function createGateway(
       );
       const choiceParsed = modelChoiceSchema(offeredIds).safeParse(adapterResult.choice);
       if (!choiceParsed.success) {
-        // Adapter-captured raw text when present, else the serialized parsed
-        // choice — bounded by writeTrace before persisting.
         return failureResult(
           'invalid-model-output',
           false,
@@ -408,9 +327,6 @@ export function createGateway(
         );
       }
       const choice = choiceParsed.data as ModelChoice;
-      // The gateway constructs the COMPLETE engine response itself; request,
-      // NPC, scenario, and provider identity come from the validated
-      // request, never from model text (section 14).
       const result: GatewayDecisionResult = {
         outcome: 'response',
         response: {
@@ -445,7 +361,7 @@ export function createGateway(
         return failureResult(
           error.failureCode,
           error.failureCode === 'upstream-timeout',
-          null,
+          error.meta ?? null,
           error.rawOutput ?? null,
         );
       }
@@ -459,12 +375,13 @@ export function createGateway(
     }
   }
 
-  /** Seeds the write-once run manifest at first sight of a validated
-   * non-duplicate envelope (1.5.0 G3; the trace writer dedupes per runId).
-   * `startedAtUtc` is therefore the FIRST-VALIDATED-ENVELOPE time for the
-   * run — never the time of the run's first terminal result, which may be
-   * arbitrarily later or (gateway killed mid-adapter) never come at all. */
   function seedRunManifest(envelope: ExternalDecisionRequestEnvelope): void {
+    const requestedModelId =
+      config.adapterKind === 'openrouter'
+        ? (config.openRouterModel ?? adapter.id)
+        : config.adapterKind === 'openai'
+          ? config.openaiModel
+          : adapter.id;
     trace.seedManifest({
       traceSchemaVersion: MODEL_TRACE_SCHEMA_VERSION,
       experimentId: envelope.experimentId,
@@ -475,23 +392,24 @@ export function createGateway(
       providerPlanId: envelope.conditionId,
       externalProviderId: envelope.providerId,
       promptVersion: envelope.promptVersion,
-      // The REQUESTED model (configuration), so run-manifest.final.json's
-      // requestedModelId can be cross-checked against returnedModelIds
-      // derived from the trace rows' upstream-reported modelId (S2).
-      modelId: config.adapterKind === 'openai' ? config.openaiModel : adapter.id,
-      // modelSettings gained maxTotalCalls + maxRequestBodyBytes in 1.5.0
-      // (G2) — additive keys in an open record, so the gateway trace schema
-      // stays v2. maxTotalCalls records the RESOLVED process-wide cap: the
-      // optional config field JSON-drops when undefined, the seed key must
-      // not.
+      modelId: requestedModelId,
       modelSettings: {
         adapter: adapter.id,
+        adapterKind: config.adapterKind,
         requestTimeoutMs: config.requestTimeoutMs,
         maxOutputTokens: config.maxOutputTokens,
         maxCallsPerRun: config.maxCallsPerRun,
         maxConcurrency: config.maxConcurrency,
         maxTotalCalls,
         maxRequestBodyBytes: config.maxRequestBodyBytes,
+        ...(config.adapterKind === 'openrouter'
+          ? {
+              openRouterProvider: config.openRouterProvider ?? null,
+              openRouterRequireParameters: true,
+              openRouterAllowFallbacks: false,
+              openRouterRouterMetadata: true,
+            }
+          : {}),
       },
       startedAtUtc: new Date().toISOString(),
     });
@@ -507,9 +425,6 @@ export function createGateway(
     concurrentInFlight: number,
   ): void {
     const requestId = envelope.request.requestId;
-    // Raw model text is persisted (bounded) ONLY on invalid-model-output /
-    // upstream-refusal outcomes; every other outcome — success included —
-    // records null (trace schema v2).
     const keepRaw =
       gatewayOutcome === 'invalid-model-output' || gatewayOutcome === 'upstream-refusal';
     trace.append({
@@ -542,6 +457,15 @@ export function createGateway(
       engineOutcome: null,
       engineRejectionReason: null,
     });
+    if (meta?.routerMetadata !== undefined || meta?.upstreamProviderId !== undefined) {
+      trace.writeRouterMetadata({
+        routingSchemaVersion: 1,
+        runId: envelope.runId,
+        requestId,
+        upstreamProviderId: meta.upstreamProviderId ?? null,
+        metadata: meta.routerMetadata ?? null,
+      });
+    }
   }
 
   return {
@@ -561,13 +485,6 @@ export function createGateway(
   };
 }
 
-/** Graceful stop with a bounded drain (1.5.0 G1): awaits `stop()` — which
- * refuses new connections and waits for in-flight requests — and if the
- * drain has not finished after `fallbackMs` (default 2s), force-destroys
- * every remaining connection via `server.closeAllConnections()` so the close
- * always completes. The CLI's SIGINT/SIGTERM handlers await this and then
- * exit 0; the helper lives here (not in main.ts) so the shutdown behavior is
- * unit-testable without sending process signals. */
 export async function stopWithFallback(
   gateway: GatewayInstance,
   fallbackMs = 2_000,
@@ -594,11 +511,11 @@ function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
     let size = 0;
     let overflowed = false;
     req.on('data', (chunk: Buffer) => {
-      if (overflowed) return; // keep draining, buffer nothing
+      if (overflowed) return;
       size += chunk.length;
       if (size > maxBytes) {
         overflowed = true;
-        chunks = []; // release what was buffered
+        chunks = [];
         reject(new Error('body-too-large'));
         return;
       }
