@@ -13,7 +13,7 @@ import { MODEL_CONDITION_ID, MODEL_EXPERIMENT_ID } from '../src/shared/modelExpe
  */
 
 export interface GatewayConfig {
-  adapterKind: 'fake' | 'openai';
+  adapterKind: 'fake' | 'openai' | 'openrouter';
   port: number;
   requestTimeoutMs: number;
   maxConcurrency: number;
@@ -21,21 +21,33 @@ export interface GatewayConfig {
   traceDir: string;
   /** Normalized on load: trimmed, trailing slash stripped. */
   allowedBrowserOrigin: string;
-  /** Present only for the live adapter; never logged, never echoed. */
+  /** Legacy direct-OpenAI adapter fields retained for fixture compatibility;
+   * the registered live experiment now uses the OpenRouter fields below. */
   openaiApiKey: string | null;
   openaiModel: string | null;
+  /** OpenRouter secret and pinned route. These fields are optional on the
+   * interface so existing fake-adapter test literals remain source-compatible;
+   * loadGatewayConfig('openrouter') always supplies and validates them. */
+  openRouterApiKey?: string | null;
+  openRouterModel?: string | null;
+  openRouterProvider?: string | null;
+  openRouterHttpReferer?: string | null;
+  openRouterAppTitle?: string | null;
   maxRequestBodyBytes: number;
   maxOutputTokens: number;
-  /** Process-wide upstream spend cap across ALL runs (re-audit remediation
-   * G4). Optional so pre-1.4.0 GatewayConfig literals (test harnesses) stay
-   * valid; loadGatewayConfig always sets it and an absent value means the
-   * default 400. */
+  /** Process-wide upstream spend cap across ALL runs. Optional so older
+   * GatewayConfig literals stay valid; loadGatewayConfig always sets it and
+   * an absent value means the default 400. */
   maxTotalCalls?: number;
 }
 
 export const DEFAULT_MAX_TOTAL_CALLS = 400;
 
-/** G4: the allowed browser origin is normalized once on load so the server's
+/** The OpenRouter route is deliberately pinned in code for this experiment;
+ * it is not an arbitrary proxy URL. */
+export const OPENROUTER_RESPONSES_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** The allowed browser origin is normalized once on load so the server's
  * origin-equivalence check always compares canonical forms. */
 function normalizeAllowedOrigin(value: string): string {
   return value.trim().replace(/\/$/, '');
@@ -68,8 +80,13 @@ function intOr(value: string | undefined, fallback: number, name: string): numbe
   return parsed;
 }
 
+function optional(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+}
+
 export function loadGatewayConfig(
-  adapterKind: 'fake' | 'openai',
+  adapterKind: 'fake' | 'openai' | 'openrouter',
   env: Record<string, string | undefined> = process.env,
   root: string = process.cwd(),
 ): GatewayConfig {
@@ -86,8 +103,13 @@ export function loadGatewayConfig(
     allowedBrowserOrigin: normalizeAllowedOrigin(
       get('ALLOWED_BROWSER_ORIGIN') ?? 'http://localhost:5173',
     ),
-    openaiApiKey: get('OPENAI_API_KEY') ?? null,
-    openaiModel: get('OPENAI_MODEL') ?? null,
+    openaiApiKey: optional(get('OPENAI_API_KEY')),
+    openaiModel: optional(get('OPENAI_MODEL')),
+    openRouterApiKey: optional(get('OPENROUTER_API_KEY')),
+    openRouterModel: optional(get('OPENROUTER_MODEL')),
+    openRouterProvider: optional(get('OPENROUTER_PROVIDER')),
+    openRouterHttpReferer: optional(get('OPENROUTER_HTTP_REFERER')),
+    openRouterAppTitle: optional(get('OPENROUTER_APP_TITLE')) ?? 'The Last Meal',
     maxRequestBodyBytes: 512 * 1024,
     maxOutputTokens: 300,
     maxTotalCalls: intOr(
@@ -98,16 +120,42 @@ export function loadGatewayConfig(
   };
 
   if (adapterKind === 'openai') {
-    // Fail fast with a clear message (section 19) — and without echoing any
-    // configured value.
     if (!config.openaiApiKey) {
       throw new Error(
-        'gateway-config-missing: OPENAI_API_KEY is required for the live gateway (set it in .env.gateway or the environment; use gateway:dev:fake for keyless development)',
+        'gateway-config-missing: OPENAI_API_KEY is required for the legacy direct OpenAI adapter',
       );
     }
     if (!config.openaiModel) {
       throw new Error(
-        'gateway-config-missing: OPENAI_MODEL is required for the live gateway (the model name is configuration, never source code)',
+        'gateway-config-missing: OPENAI_MODEL is required for the legacy direct OpenAI adapter',
+      );
+    }
+  }
+
+  if (adapterKind === 'openrouter') {
+    if (!config.openRouterApiKey) {
+      throw new Error(
+        'gateway-config-missing: OPENROUTER_API_KEY is required for the live OpenRouter gateway (set it in .env.gateway or the environment; use gateway:dev:fake for keyless development)',
+      );
+    }
+    if (!config.openRouterModel) {
+      throw new Error(
+        'gateway-config-missing: OPENROUTER_MODEL is required and must be an exact provider/model slug',
+      );
+    }
+    if (!config.openRouterModel.includes('/')) {
+      throw new Error(
+        'gateway-config-invalid: OPENROUTER_MODEL must use the exact provider/model slug form',
+      );
+    }
+    if (!config.openRouterProvider) {
+      throw new Error(
+        'gateway-config-missing: OPENROUTER_PROVIDER is required so the formal experiment uses one pinned provider endpoint',
+      );
+    }
+    if (config.openRouterProvider.includes(',')) {
+      throw new Error(
+        'gateway-config-invalid: OPENROUTER_PROVIDER must name exactly one provider slug, not a list',
       );
     }
   }
@@ -116,9 +164,7 @@ export function loadGatewayConfig(
 
 /** Nonsecret view exposed by /health and /v1/provider-config. The advertised
  * experimentId/conditionId come straight from the shared experiment literals
- * (re-audit remediation F2/G4) so the browser client can pin the full
- * contract; the shape must stay exactly what the client's strict
- * providerConfigSchema expects. */
+ * so the browser client can pin the full contract. */
 export function publicConfig(
   config: GatewayConfig,
   providerId: string,
@@ -126,6 +172,12 @@ export function publicConfig(
   requestSchemaVersion: number,
   experimentVersion: string,
 ): Record<string, unknown> {
+  const modelId =
+    config.adapterKind === 'openrouter'
+      ? (config.openRouterModel ?? null)
+      : config.adapterKind === 'openai'
+        ? config.openaiModel
+        : 'fake-adapter';
   return {
     status: 'ok',
     experimentId: MODEL_EXPERIMENT_ID,
@@ -134,6 +186,6 @@ export function publicConfig(
     providerId,
     promptVersion,
     requestSchemaVersion,
-    modelId: config.adapterKind === 'openai' ? config.openaiModel : 'fake-adapter',
+    modelId,
   };
 }
