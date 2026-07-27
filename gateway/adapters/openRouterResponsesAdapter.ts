@@ -243,6 +243,20 @@ export class OpenRouterResponsesDecisionAdapter implements ModelDecisionAdapter 
       throw new AdapterFailure('upstream-refusal', 'model refused the request', refusal, meta);
     }
 
+    const responseStatus = payload.status;
+    if (typeof responseStatus === 'string' && responseStatus !== 'completed') {
+      const incompleteDetails = asRecord(payload.incomplete_details);
+      const reason =
+        typeof incompleteDetails?.reason === 'string' ? `: ${incompleteDetails.reason}` : '';
+      const failureCode = responseStatus === 'failed' ? 'upstream-error' : 'invalid-model-output';
+      throw new AdapterFailure(
+        failureCode,
+        `OpenRouter response status ${responseStatus}${reason}`,
+        failureCode === 'invalid-model-output' ? raw : undefined,
+        meta,
+      );
+    }
+
     const text = extractOutputText(payload);
     if (text === null) {
       throw new AdapterFailure('invalid-model-output', 'empty structured output', raw, meta);
