@@ -13,18 +13,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm ci --silent
-      - id: tests
+      - name: Migrate provider fixtures
         shell: bash
         run: |
-          set +e
-          npm run test:run > test.log 2>&1
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('tests/gateway/gateway.test.ts')
+          s = p.read_text()
+          s = s.replace(
+              "import {\n  MODEL_CONDITION_ID,\n  MODEL_EXPERIMENT_ID,\n  MODEL_EXPERIMENT_VERSION,\n} from '../../src/shared/modelExperiment';",
+              "import {\n  EXTERNAL_MARA_PROVIDER_ID,\n  MODEL_CONDITION_ID,\n  MODEL_EXPERIMENT_ID,\n  MODEL_EXPERIMENT_VERSION,\n} from '../../src/shared/modelExperiment';",
+          )
+          s = s.replace("'openai-mara-action-v1'", 'EXTERNAL_MARA_PROVIDER_ID')
+          p.write_text(s)
+
+          p = Path('tests/unit/model-gateway-client.test.ts')
+          s = p.read_text()
+          anchor = "} from '../../src/shared/decisionContracts';\n"
+          addition = """} from '../../src/shared/decisionContracts';
+          import {
+            EXTERNAL_MARA_PROVIDER_ID,
+            MODEL_CONDITION_ID,
+            MODEL_EXPERIMENT_ID,
+            MODEL_EXPERIMENT_VERSION,
+            MODEL_PROMPT_VERSION,
+          } from '../../src/shared/modelExperiment';
+          """
+          if "from '../../src/shared/modelExperiment'" not in s:
+              s = s.replace(anchor, addition, 1)
+          s = s.replace("experimentId: 'model-backed-npc-001',", 'experimentId: MODEL_EXPERIMENT_ID,')
+          s = s.replace("experimentVersion: '1.0.0',", 'experimentVersion: MODEL_EXPERIMENT_VERSION,')
+          s = s.replace("conditionId: 'mara-model-per-decision-v1',", 'conditionId: MODEL_CONDITION_ID,')
+          s = s.replace("providerId: 'openai-mara-action-v1',", 'providerId: EXTERNAL_MARA_PROVIDER_ID,')
+          s = s.replace("promptVersion: 'mara-action-selection-1.0.0',", 'promptVersion: MODEL_PROMPT_VERSION,')
+          p.write_text(s)
+
+          p = Path('tests/unit/provider-plan.test.ts')
+          s = p.read_text().replace("'openai-mara-action-v1'", 'EXTERNAL_MARA_PROVIDER_ID')
+          p.write_text(s)
+
+          p = Path('tests/unit/run-bundle.test.ts')
+          s = p.read_text()
+          s = s.replace("experimentId: 'model-backed-npc-001',", 'experimentId: MODEL_EXPERIMENT_ID,')
+          s = s.replace("experimentVersion: '1.0.0',", 'experimentVersion: MODEL_EXPERIMENT_VERSION,')
+          s = s.replace("conditionId: 'mara-model-per-decision-v1',", 'conditionId: MODEL_CONDITION_ID,')
+          s = s.replace("providerId: 'openai-mara-action-v1',", 'providerId: EXTERNAL_MARA_PROVIDER_ID,')
+          s = s.replace("promptVersion: 'mara-action-selection-1.0.0',", 'promptVersion: MODEL_PROMPT_VERSION,')
+          p.write_text(s)
+          PY
+          npx prettier --write \
+            tests/gateway/gateway.test.ts \
+            tests/unit/model-gateway-client.test.ts \
+            tests/unit/provider-plan.test.ts \
+            tests/unit/run-bundle.test.ts
       - uses: actions/upload-artifact@v4
         with:
-          name: test-diagnostic
-          path: test.log
+          name: migrated-test-fixtures
+          path: |
+            tests/gateway/gateway.test.ts
+            tests/unit/model-gateway-client.test.ts
+            tests/unit/provider-plan.test.ts
+            tests/unit/run-bundle.test.ts
           if-no-files-found: error
-      - if: steps.tests.outputs.exit_code != '0'
-        run: exit 1
