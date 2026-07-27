@@ -3,7 +3,7 @@
 **Implements:** [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md), as amended by the ten recorded amendments A1–A10 in section 4 of this report.
 **Base commit:** `5c1f755` (`main`, release 1.4.0) — the brief was cherry-picked onto the working branch at `55afa2b`.
 **Branch:** `agent/model-artifact-integrity-1.5.0`
-**Final implementation commit:** `<<TO BE FILLED BY ORCHESTRATOR>>`
+**Final implementation commit:** `4e903538e39a7474118029cef4c396e4decee346` (tagged `v1.5.0`)
 **Merge commit on `main`:** `<<TO BE FILLED BY ORCHESTRATOR>>`
 **Package version:** 1.4.0 → **1.5.0**
 **Frozen identifiers (all unchanged):** experiment `Vertical Slice 001 — v1.0`, configuration version `vs001-1.0.0`, model experiment `model-backed-npc-001` v `1.0.0`, condition `mara-model-per-decision-v1`, external provider `openai-mara-action-v1`, prompt version `mara-action-selection-1.0.0`, `SCHEMA_VERSION` 2, ledger format 2, `PROTOCOL_VERSION` 3.
@@ -621,10 +621,10 @@ job name is the check-run name and must not change.
 
 | Item | Value |
 | --- | --- |
-| PR number | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| PR head SHA | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| PR workflow run ID / URL | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| PR workflow conclusion | `<<TO BE FILLED BY ORCHESTRATOR>>` |
+| PR number | [#5](https://github.com/186F/thelastmeal/pull/5) |
+| PR head SHA | `4e903538e39a7474118029cef4c396e4decee346` |
+| PR workflow run ID / URL | `30299183668` — https://github.com/186F/thelastmeal/actions/runs/30299183668 (event: `pull_request`) |
+| PR workflow conclusion | **success** — all 20 steps, 6m10s; `Formal model-bundle tests` 35s and `Keyless formal model-run rehearsal` 5s both executed |
 | Merged-`main` workflow run ID / URL | `<<TO BE FILLED BY ORCHESTRATOR>>` |
 | Merged-`main` workflow conclusion | `<<TO BE FILLED BY ORCHESTRATOR>>` |
 | `model-rehearsal-report` artifact present on both runs | `<<TO BE FILLED BY ORCHESTRATOR>>` |
