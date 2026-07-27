@@ -2,6 +2,7 @@ name: Lint diagnostic
 
 on:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
