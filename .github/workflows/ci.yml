@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   checks:
@@ -20,8 +20,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent/openrouter-integration
 
       - uses: actions/setup-node@v4
         with:
@@ -30,19 +28,6 @@ jobs:
 
       - name: Install dependencies (clean)
         run: npm ci
-
-      - name: Apply OpenRouter documentation migration
-        shell: bash
-        run: |
-          python scripts/migrateOpenRouterDocs.py
-          npx prettier --write README.md documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add README.md documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md
-            git commit -m "Document pinned OpenRouter live integration"
-            git push origin HEAD:agent/openrouter-integration
-          fi
 
       - name: Typecheck
         run: npm run typecheck
@@ -83,6 +68,8 @@ jobs:
       - name: Deterministic batch (full gate, 100 runs/scenario)
         run: npm run batch
 
+      # After the batch (A10): a failure in the newest step must never
+      # pre-empt the frozen 100-run determinism gate.
       - name: Keyless formal model-run rehearsal
         run: npm run model:rehearse -- --ci
 
@@ -97,6 +84,8 @@ jobs:
             artifacts/model-rehearsal/**/run-manifest.final.json
             artifacts/model-rehearsal/**/bundle-manifest.json
             artifacts/model-rehearsal/**/model-summary.json
+          # Evidence artifact: a path drift must fail loudly, never upload
+          # zero bytes behind a green step (A10 — never `ignore` here).
           if-no-files-found: error
 
       - name: Upload batch report
