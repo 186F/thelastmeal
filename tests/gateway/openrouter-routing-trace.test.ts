@@ -22,7 +22,7 @@ class RoutedAdapter implements ModelDecisionAdapter {
   async decide(input: AdapterInput): Promise<AdapterResult> {
     return {
       choice: {
-        selectedAffordanceId: input.offeredAffordanceIds[0],
+        selectedAffordanceId: input.offeredAffordanceIds[0]!,
         reasonCode: 'routine',
         confidenceBp: 6_000,
         rationale: 'Use the first offered action.',
@@ -112,7 +112,9 @@ describe('OpenRouter routing trace persistence', () => {
         body: JSON.stringify(envelope),
       });
       expect(response.status).toBe(200);
-      expect((await response.json()) as { outcome: string }).toMatchObject({ outcome: 'response' });
+      expect((await response.json()) as { outcome: string }).toMatchObject({
+        outcome: 'response',
+      });
     } finally {
       await gateway.stop();
     }
