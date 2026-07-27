@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computeInfraMetrics } from '../../gateway/metrics/runMetrics';
 import type { ModelTraceEntry } from '../../gateway/tracing/modelTraceWriter';
+import { EXTERNAL_MARA_PROVIDER_ID } from '../../src/shared/modelExperiment';
 import type { LedgerFile } from '../../src/shared/ledgerFile';
 import {
   buildMaraPersistenceStats,
@@ -82,19 +83,31 @@ export interface JoinedOutcome {
   engineRejectionReason: string | null;
 }
 
-/** Joins each trace entry to the engine verdict recorded in the ledger. */
+/** The gateway-minted response ID for a trace row: v2 rows carry it
+ * explicitly; older rows fall back to the documented `gw-<requestId>`
+ * convention (re-audit remediation S2 — prefer the recorded id). */
+export function traceRowResponseId(entry: ModelTraceEntry): string {
+  const v2 = (entry as { responseId?: string | null }).responseId;
+  return v2 ?? `gw-${entry.requestId}`;
+}
+
+/** Joins each trace entry to the engine verdict recorded in the ledger.
+ * Acceptance is matched on the model RESPONSE id (the same gw- filter
+ * engineLifecycle uses), never on the bare requestId, so a non-model
+ * acceptance for the same requestId can never mark a model call accepted
+ * (re-audit remediation S2). */
 export function joinEngineOutcomes(
   file: LedgerFile | null,
   trace: readonly ModelTraceEntry[],
 ): JoinedOutcome[] {
   if (!file) return [];
-  const acceptedByRequest = new Set<string>();
+  const acceptedResponseIds = new Set<string>();
   const rejectedByResponse = new Map<string, string>();
   const expiredByRequest = new Map<string, string>();
   for (const event of file.events) {
     const payload = event.payload as Record<string, unknown>;
     if (event.type === 'DecisionResponseAccepted') {
-      acceptedByRequest.add(String(payload.requestId));
+      acceptedResponseIds.add(String(payload.responseId));
     } else if (event.type === 'DecisionResponseRejected') {
       rejectedByResponse.set(String(payload.responseId), String(payload.rejectionReason));
     } else if (event.type === 'DecisionRequestExpired') {
@@ -102,9 +115,9 @@ export function joinEngineOutcomes(
     }
   }
   return trace.map((entry) => {
-    const responseId = `gw-${entry.requestId}`;
+    const responseId = traceRowResponseId(entry);
     const rejection = rejectedByResponse.get(responseId) ?? null;
-    const engineOutcome = acceptedByRequest.has(entry.requestId)
+    const engineOutcome = acceptedResponseIds.has(responseId)
       ? 'accepted'
       : rejection !== null
         ? 'rejected'
@@ -118,14 +131,38 @@ export function joinEngineOutcomes(
   });
 }
 
-export function summarizeRunDirectory(dir: string, runId: string): { traceEntries: number } {
+/** Distinct non-null model IDs actually reported by the trace rows — the
+ * seed manifest's single modelId is what was REQUESTED, not proof of what
+ * answered (re-audit remediation S2). */
+export function returnedModelIds(trace: readonly ModelTraceEntry[]): string[] {
+  return [...new Set(trace.map((e) => e.modelId).filter((m): m is string => m !== null))].sort();
+}
+
+/** Aggregate bundle hash: sha256 over the sorted `<fileName>:<sha256>`
+ * lines, one per covered file (re-audit remediation S2). */
+export function aggregateSha256(files: ReadonlyArray<{ name: string; sha256: string }>): string {
+  const lines = files.map((f) => `${f.name}:${f.sha256}`).sort();
+  return createHash('sha256').update(lines.join('\n')).digest('hex');
+}
+
+export function sha256OfFile(path: string): string | null {
+  return existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
+}
+
+export function loadTraceEntries(dir: string): ModelTraceEntry[] {
   const tracePath = join(dir, 'model-trace.jsonl');
-  const entries: ModelTraceEntry[] = existsSync(tracePath)
+  return existsSync(tracePath)
     ? readFileSync(tracePath, 'utf8')
         .split('\n')
         .filter((line) => line.trim() !== '')
         .map((line) => JSON.parse(line) as ModelTraceEntry)
     : [];
+}
+
+/** Builds the model-summary object without writing it (shared with the
+ * formal finalizer, which augments it before writing). */
+export function buildModelSummary(dir: string, runId: string): Record<string, unknown> {
+  const entries = loadTraceEntries(dir);
 
   const ledgerFileName = readdirSync(dir).find(
     (f) => f.startsWith('ledger-') && f.endsWith('.json'),
@@ -139,9 +176,12 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
   const infra = computeInfraMetrics(entries);
   const manifestPath = join(dir, 'run-manifest.json');
   const manifest = existsSync(manifestPath)
-    ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as { externalProviderId?: string })
+    ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        externalProviderId?: string;
+        modelId?: string | null;
+      })
     : null;
-  const externalProviderId = manifest?.externalProviderId ?? 'openai-mara-action-v1';
+  const externalProviderId = manifest?.externalProviderId ?? EXTERNAL_MARA_PROVIDER_ID;
   const maraOpportunities = ledger
     ? ledger.events.filter(
         (e) =>
@@ -164,6 +204,8 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
 
   const summary: Record<string, unknown> = {
     runId,
+    requestedModelId: manifest?.modelId ?? null,
+    returnedModelIds: returnedModelIds(entries),
     infra,
     derived,
     engine: ledger ? engineLifecycle(ledger) : null,
@@ -179,20 +221,56 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
       : null,
     outcomes: joinEngineOutcomes(ledger, entries),
   };
+  return summary;
+}
+
+export function summarizeRunDirectory(dir: string, runId: string): { traceEntries: number } {
+  // Re-audit F4/F7/F16: after model:finalize, model-summary.json and
+  // bundle-manifest.json are the formal, hash-bound evidence binding for the
+  // whole directory — the informal summarizer must never clobber them (same
+  // rule as deviation D1: never overwrite delivered evidence with a
+  // narrower derived file).
+  if (existsSync(join(dir, 'run-manifest.final.json'))) {
+    throw new Error(
+      `model-summarize: ${dir} is already finalized (run-manifest.final.json present); ` +
+        'model-summary.json and bundle-manifest.json are owned by model:finalize — ' +
+        're-run `npm run model:finalize` instead',
+    );
+  }
+  const entries = loadTraceEntries(dir);
+  const summary = buildModelSummary(dir, runId);
   writeFileSync(join(dir, 'model-summary.json'), JSON.stringify(summary, null, 2), 'utf8');
 
-  const sha256 = (path: string): string | null =>
-    existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
-  const bundle = {
-    runId,
-    files: {
-      ledger: ledgerFileName
-        ? { name: ledgerFileName, sha256: sha256(join(dir, ledgerFileName)) }
-        : null,
-      modelTrace: { name: 'model-trace.jsonl', sha256: sha256(tracePath) },
-      runManifest: { name: 'run-manifest.json', sha256: sha256(join(dir, 'run-manifest.json')) },
-      modelSummary: { name: 'model-summary.json', sha256: sha256(join(dir, 'model-summary.json')) },
+  const ledgerFileName = readdirSync(dir).find(
+    (f) => f.startsWith('ledger-') && f.endsWith('.json'),
+  );
+  const files = {
+    ledger: ledgerFileName
+      ? { name: ledgerFileName, sha256: sha256OfFile(join(dir, ledgerFileName))! }
+      : null,
+    modelTrace: { name: 'model-trace.jsonl', sha256: sha256OfFile(join(dir, 'model-trace.jsonl')) },
+    runManifest: {
+      name: 'run-manifest.json',
+      sha256: sha256OfFile(join(dir, 'run-manifest.json')),
     },
+    modelSummary: {
+      name: 'model-summary.json',
+      sha256: sha256OfFile(join(dir, 'model-summary.json')),
+    },
+  };
+  const bundle = {
+    // Producer discriminator (F4/F7/F16): the informal 4-file manifest and
+    // the finalizer's whole-directory manifest share a filename; the
+    // discriminator makes the coverage universe self-describing.
+    bundleManifestSchemaVersion: 1,
+    producer: 'model:summarize',
+    runId,
+    files,
+    aggregateSha256: aggregateSha256(
+      Object.values(files).filter(
+        (f): f is { name: string; sha256: string } => f !== null && f.sha256 !== null,
+      ),
+    ),
   };
   writeFileSync(join(dir, 'bundle-manifest.json'), JSON.stringify(bundle, null, 2), 'utf8');
   return { traceEntries: entries.length };
@@ -216,8 +294,13 @@ if (invokedDirectly) {
     console.error(`model-summarize: run directory not found: ${dir}`);
     process.exit(1);
   }
-  const { traceEntries } = summarizeRunDirectory(dir, runId);
-  console.log(
-    `model-summarize: wrote model-summary.json and bundle-manifest.json for ${runId} (${traceEntries} trace entries)`,
-  );
+  try {
+    const { traceEntries } = summarizeRunDirectory(dir, runId);
+    console.log(
+      `model-summarize: wrote model-summary.json and bundle-manifest.json for ${runId} (${traceEntries} trace entries)`,
+    );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

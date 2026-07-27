@@ -11,8 +11,11 @@ import type { DecisionProvider, ProviderDecision } from './provider';
  * wall-clock time — the actual model call happens in the server-side gateway,
  * and the answer re-enters through `submit-decision-response` like any other
  * external response.
+ *
+ * The provider-id literal lives in src/shared/modelExperiment.ts (single
+ * source of truth); this module re-exports it for existing importers.
  */
-export const EXTERNAL_MARA_PROVIDER_ID = 'openai-mara-action-v1';
+export { EXTERNAL_MARA_PROVIDER_ID } from '../../shared/modelExperiment';
 
 export class ExternalDeferredProvider implements DecisionProvider {
   constructor(readonly id: string) {}

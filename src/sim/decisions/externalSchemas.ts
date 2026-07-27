@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import { NPC_IDS, SCENARIO_IDS } from '../../shared/ids';
+import type { DecisionRequest } from '../../shared/decisionContracts';
 import { decisionResponseSchema, externalDecisionFailureSchema } from '../../shared/workerProtocol';
+import {
+  BASELINE_CONDITION_ID,
+  MODEL_CONDITION_ID,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+} from '../../shared/modelExperiment';
 import { SCENARIO_END_TICK } from '../config';
 import { offeredAffordanceSchema } from '../events/eventSchemas';
-import { CONDITION_IDS, MODEL_EXPERIMENT_ID, MODEL_EXPERIMENT_VERSION } from './conditions';
 import { EXTERNAL_CONTEXT_LIMITS } from './externalContext';
 
 /**
@@ -248,7 +254,7 @@ export const externalDecisionRequestEnvelopeSchema = z
     schemaVersion: z.literal(EXTERNAL_REQUEST_SCHEMA_VERSION),
     experimentId: z.literal(MODEL_EXPERIMENT_ID),
     experimentVersion: z.literal(MODEL_EXPERIMENT_VERSION),
-    conditionId: z.enum(CONDITION_IDS),
+    conditionId: z.enum([BASELINE_CONDITION_ID, MODEL_CONDITION_ID]),
     runId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
     providerId: shortCode,
     promptVersion: z.string().min(1).max(100),
@@ -295,3 +301,38 @@ export const gatewayDecisionResultSchema = z.discriminatedUnion('outcome', [
 ]);
 
 export type GatewayDecisionResult = z.infer<typeof gatewayDecisionResultSchema>;
+
+/**
+ * Result reconciliation (re-audit remediation F3): a schema-valid gateway
+ * result must additionally answer THE request the client dispatched. The
+ * engine's acceptance gate checks a response against its CURRENT pending
+ * request only — it cannot know which request the transport actually sent —
+ * so a result carrying a sibling request's identity (or an affordance the
+ * dispatched request never offered) must be rejected client-side and never
+ * forwarded to the worker. Pure function: no I/O, no counters.
+ *
+ * Deliberately does NOT validate responseId/failureId FORMAT — gw-/gwf-
+ * prefixes are one gateway's convention, not part of the contract.
+ */
+export function validateGatewayResultForRequest(
+  result: GatewayDecisionResult,
+  request: DecisionRequest,
+): string | null {
+  if (result.outcome === 'response') {
+    const response = result.response;
+    if (response.requestId !== request.requestId) return 'response-request-id-mismatch';
+    if (response.npcId !== request.npcId) return 'response-npc-mismatch';
+    if (response.scenarioId !== request.scenarioId) return 'response-scenario-mismatch';
+    if (response.providerId !== request.providerId) return 'response-provider-mismatch';
+    if (!request.offeredAffordanceIds.includes(response.selectedAffordanceId)) {
+      return 'response-unoffered-affordance';
+    }
+    return null;
+  }
+  const failure = result.failure;
+  if (failure.requestId !== request.requestId) return 'failure-request-id-mismatch';
+  if (failure.npcId !== request.npcId) return 'failure-npc-mismatch';
+  if (failure.scenarioId !== request.scenarioId) return 'failure-scenario-mismatch';
+  if (failure.providerId !== request.providerId) return 'failure-provider-mismatch';
+  return null;
+}

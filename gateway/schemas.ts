@@ -18,8 +18,13 @@ export {
   gatewayDecisionResultSchema,
 };
 export { externalContextHash } from '../src/sim/decisions/externalContext';
-export { MODEL_EXPERIMENT_ID, MODEL_EXPERIMENT_VERSION } from '../src/sim/decisions/conditions';
-export { EXTERNAL_MARA_PROVIDER_ID } from '../src/sim/decisions/externalDeferredProvider';
+export {
+  EXTERNAL_MARA_PROVIDER_ID,
+  MODEL_CONDITION_ID,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+  MODEL_TARGET_NPC_ID,
+} from '../src/shared/modelExperiment';
 
 export type ExternalDecisionRequestEnvelope = z.infer<typeof externalDecisionRequestEnvelopeSchema>;
 export type GatewayDecisionResult = z.infer<typeof gatewayDecisionResultSchema>;

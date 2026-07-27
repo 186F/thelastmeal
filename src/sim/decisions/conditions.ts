@@ -1,8 +1,16 @@
-import type { NpcId, ScenarioId } from '../../shared/ids';
+import type { NpcId } from '../../shared/ids';
+import type { ExternalDecisionRequest } from '../../shared/decisionContracts';
+import {
+  BASELINE_CONDITION_ID,
+  EXTERNAL_MARA_PROVIDER_ID,
+  MODEL_CONDITION_ID,
+  MODEL_CONDITION_SCENARIOS,
+  MODEL_TARGET_NPC_ID,
+} from '../../shared/modelExperiment';
 import type { ScenarioDefinition } from '../scenarios/definitions';
 import { DeterministicProvider } from './deterministicProvider';
 import { ScriptedFailureProvider } from './failingProvider';
-import { ExternalDeferredProvider, EXTERNAL_MARA_PROVIDER_ID } from './externalDeferredProvider';
+import { ExternalDeferredProvider } from './externalDeferredProvider';
 import { perNpcPlan, singleProviderPlan, type ProviderPlan } from './providerPlan';
 import type { DecisionProvider } from './provider';
 
@@ -12,21 +20,39 @@ import type { DecisionProvider } from './provider';
  * never submit an arbitrary provider, provider ID, prompt, or model
  * configuration — the engine alone resolves a condition into its provider
  * plan.
+ *
+ * The experiment literals live in src/shared/modelExperiment.ts (re-audit
+ * remediation 1.4.0); this module re-exports its historical names so
+ * existing importers keep working.
  */
 
-export const MODEL_EXPERIMENT_ID = 'model-backed-npc-001';
-export const MODEL_EXPERIMENT_VERSION = '1.0.0';
+export {
+  MODEL_CONDITION_SCENARIOS,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+} from '../../shared/modelExperiment';
 
-export const CONDITION_IDS = ['deterministic-baseline-v1', 'mara-model-per-decision-v1'] as const;
+export const CONDITION_IDS = [BASELINE_CONDITION_ID, MODEL_CONDITION_ID] as const;
 export type ConditionId = (typeof CONDITION_IDS)[number];
-
-/** Scenarios supported by the model condition. Scenario F stays part of the
- * frozen deterministic experiment: model failure is exercised through the
- * real external failure lifecycle, never by rewiring F's scripted failure. */
-export const MODEL_CONDITION_SCENARIOS: readonly ScenarioId[] = ['A', 'B1', 'B2', 'C', 'D', 'E'];
 
 export function isConditionId(value: string): value is ConditionId {
   return (CONDITION_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Condition-carried request validator for the model condition (re-audit
+ * remediation, deviation D4): the only external requests this condition may
+ * ever emit are Mara's, from the registered external provider, in a
+ * model-supported scenario. Carried as DATA on the provider plan so the
+ * engine stays experiment-agnostic.
+ */
+function validateModelConditionRequest(external: ExternalDecisionRequest): string | null {
+  if (external.request.npcId !== MODEL_TARGET_NPC_ID) return 'npc-not-in-condition';
+  if (external.request.providerId !== EXTERNAL_MARA_PROVIDER_ID) return 'provider-not-in-condition';
+  if (!MODEL_CONDITION_SCENARIOS.includes(external.request.scenarioId)) {
+    return 'scenario-not-in-condition';
+  }
+  return null;
 }
 
 /**
@@ -45,7 +71,7 @@ export function planForCondition(
   scenario: ScenarioDefinition,
   defaultProvider: () => DecisionProvider,
 ): ProviderPlan {
-  if (conditionId === 'deterministic-baseline-v1') {
+  if (conditionId === BASELINE_CONDITION_ID) {
     const provider = defaultProvider();
     return singleProviderPlan(() => provider);
   }
@@ -59,7 +85,12 @@ export function planForCondition(
     jonas: deterministic,
     rin: deterministic,
   };
-  return perNpcPlan('mara-model-per-decision-v1', providers, [EXTERNAL_MARA_PROVIDER_ID]);
+  return perNpcPlan(
+    MODEL_CONDITION_ID,
+    providers,
+    [EXTERNAL_MARA_PROVIDER_ID],
+    validateModelConditionRequest,
+  );
 }
 
 /** Default (no condition selected) provider wiring — extracted so the

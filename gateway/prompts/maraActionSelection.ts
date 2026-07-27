@@ -1,4 +1,5 @@
 import type { ExternalDecisionRequestEnvelope } from '../schemas';
+import { MODEL_PROMPT_VERSION } from '../../src/shared/modelExperiment';
 import { MODEL_RATIONALE_MAX_CHARS, MODEL_REASON_CODES } from '../adapters/modelDecisionAdapter';
 
 /**
@@ -9,7 +10,10 @@ import { MODEL_RATIONALE_MAX_CHARS, MODEL_REASON_CODES } from '../adapters/model
  * system role, never able to add tools, roles, or instructions.
  */
 
-export const PROMPT_VERSION = 'mara-action-selection-1.0.0';
+/** The pinned prompt version (single source: src/shared/modelExperiment.ts).
+ * The version and the prompt text below change TOGETHER: any change to the
+ * system instruction or user-content framing requires a new version. */
+export const PROMPT_VERSION = MODEL_PROMPT_VERSION;
 
 export const SYSTEM_INSTRUCTION = [
   'You are the high-level decision layer for Mara, one non-player character in a',

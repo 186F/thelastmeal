@@ -50,7 +50,11 @@ export class FakeDecisionAdapter implements ModelDecisionAdapter {
       });
     }
     if (behavior === 'refusal') {
-      throw new AdapterFailure('upstream-refusal', 'fake adapter scripted refusal');
+      throw new AdapterFailure(
+        'upstream-refusal',
+        'fake adapter scripted refusal',
+        'scripted refusal: the fake model declines this request',
+      );
     }
 
     const meta = {
@@ -72,7 +76,8 @@ export class FakeDecisionAdapter implements ModelDecisionAdapter {
       };
     }
     if (behavior === 'invalid-output') {
-      return { choice: { not: 'a-model-choice' }, meta };
+      const choice = { not: 'a-model-choice' };
+      return { choice, meta, rawOutput: JSON.stringify(choice) };
     }
 
     const ids = input.offeredAffordanceIds;

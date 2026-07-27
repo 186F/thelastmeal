@@ -7,7 +7,11 @@ import {
   EXTERNAL_REQUEST_SCHEMA_VERSION,
   gatewayDecisionResultSchema,
 } from '../../src/sim/decisions/externalSchemas';
-import { MODEL_EXPERIMENT_ID, MODEL_EXPERIMENT_VERSION } from '../../src/sim/decisions/conditions';
+import {
+  MODEL_CONDITION_ID,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+} from '../../src/shared/modelExperiment';
 import { createRun, stepTick } from '../../src/sim/runtime/engine';
 
 /**
@@ -39,7 +43,7 @@ const gateway = createGateway(
   new ModelTraceWriter(config.traceDir),
 );
 
-const run = createRun('A', { conditionId: 'mara-model-per-decision-v1' });
+const run = createRun('A', { conditionId: MODEL_CONDITION_ID });
 while (run.externalRequests.length === 0 && run.state.tick < 200) stepTick(run);
 const external = run.externalRequests[0];
 if (!external) {
@@ -51,7 +55,7 @@ const envelope = {
   schemaVersion: EXTERNAL_REQUEST_SCHEMA_VERSION,
   experimentId: MODEL_EXPERIMENT_ID,
   experimentVersion: MODEL_EXPERIMENT_VERSION,
-  conditionId: 'mara-model-per-decision-v1',
+  conditionId: MODEL_CONDITION_ID,
   runId: `live-smoke-${process.pid}-${Date.now()}`,
   providerId: external.request.providerId,
   promptVersion: PROMPT_VERSION,

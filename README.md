@@ -11,13 +11,31 @@ The authoritative specification is
 [`documentation/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/VERTICAL_SLICE_001_CODING_BRIEF.md)
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
-version `vs001-1.0.0`, at implementation **remediation release 1.1.0** per
-[`documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md`](documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md)
-(what changed and why: [`documentation/AUDIT_REMEDIATION_REPORT.md`](documentation/AUDIT_REMEDIATION_REPORT.md)).
+version `vs001-1.0.0` — those frozen experiment identifiers never change with the
+package. The implementation itself is at **release 1.4.0**, reached through this
+lineage:
+
+- **1.1.0** — audit remediation, per
+  [`documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md`](documentation/THE_LAST_MEAL_AUDIT_REMEDIATION_BRIEF.md)
+  (what changed and why:
+  [`documentation/AUDIT_REMEDIATION_REPORT.md`](documentation/AUDIT_REMEDIATION_REPORT.md))
+- **1.2.0** — re-audit remediation, per
+  [`documentation/REAUDIT_REMEDIATION_NOTES.md`](documentation/REAUDIT_REMEDIATION_NOTES.md)
+- **1.3.0** — model integration milestone 001, per
+  [`documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md)
+  (report:
+  [`documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_REPORT.md))
+- **1.4.0** — model-integration re-audit remediation, per
+  [`documentation/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_BRIEF.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_BRIEF.md)
+  (report:
+  [`documentation/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_REPORT.md))
+
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged; the remediation
-hardened the decision lifecycle, constraint enforcement, schemas, hashing,
-determinism proofs, memory generalization, and evaluation blinding.
+timelines, weights, the ten action categories — is unchanged across all four
+releases; the remediations hardened the decision lifecycle, constraint
+enforcement, schemas, hashing, determinism proofs, memory generalization,
+evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,
+artifact, and audit layer.
 
 **Compatibility break:** ledger exports are now format version 2
 (`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).
@@ -76,29 +94,31 @@ No API key, cloud service, backend, database, paid asset, or model account is ne
 
 ## npm commands
 
-| Command                      | What it does                                                                                                                                                                                                                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`                | Start the Vite dev server (open the URL it prints; the port is not fixed)                                                                                                                                                                                                                                                            |
-| `npm run build`              | Typecheck, then produce the production bundle in `dist/`                                                                                                                                                                                                                                                                             |
-| `npm run preview`            | Serve the production bundle locally                                                                                                                                                                                                                                                                                                  |
-| `npm run typecheck`          | TypeScript strict checking, no emit                                                                                                                                                                                                                                                                                                  |
-| `npm run lint`               | ESLint (incl. sim-purity rules) + Prettier check                                                                                                                                                                                                                                                                                     |
-| `npm run test`               | Vitest in watch mode                                                                                                                                                                                                                                                                                                                 |
-| `npm run test:run`           | All Vitest unit + integration tests, once                                                                                                                                                                                                                                                                                            |
-| `npm run test:coverage`      | Vitest with V8 coverage over `src/sim` and `src/shared`                                                                                                                                                                                                                                                                              |
-| `npm run test:e2e`           | Playwright browser suite (starts its own Vite server via `webServer`)                                                                                                                                                                                                                                                                |
-| `npm run test:e2e:install`   | Install Playwright Chromium                                                                                                                                                                                                                                                                                                          |
-| `npm run validate`           | Experiment-data validation + architecture checks (sim-purity import scan, required npm scripts); exits nonzero on failure                                                                                                                                                                                                            |
-| `npm run batch`              | Headless deterministic batch: every scenario, 100 repeat runs each, replay verification, invariant checks, and **complete canonical event-stream equality** across repeats; writes `artifacts/` (ledgers, context-rich traces, report.json, report.md); exits nonzero on any violation. Use `-- --runs=N` to change the repeat count |
-| `npm run eval:individuality` | Role-counterbalanced individuality evaluation (separate from v1.0 results): all six identity-role rotations per scenario, blinded behavior-only reviewer packages in `artifacts/individuality-eval/reviewer/`. `-- --answer-key` also writes the separate answer key; `-- --scenarios=A,C` restricts scenarios                       |
-| `npm run typecheck:gateway`  | TypeScript strict checking for the Node model gateway                                                                                                                                                                                                                                                                                |
-| `npm run test:gateway`       | Gateway test suite (fake adapter; no network beyond localhost, no secrets)                                                                                                                                                                                                                                                           |
-| `npm run gateway:dev:fake`   | Start the local model gateway with the deterministic fake adapter (no key)                                                                                                                                                                                                                                                           |
-| `npm run gateway:dev`        | Start the LIVE model gateway (requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`)                                                                                                                                                                                                                                            |
-| `npm run build:gateway`      | Bundle the gateway into `dist-gateway/`                                                                                                                                                                                                                                                                                              |
-| `npm run check:dist`         | Post-build secret scan over `dist/` (key paths, SDK, canary)                                                                                                                                                                                                                                                                         |
-| `npm run model:summarize`    | Build `model-summary.json` + `bundle-manifest.json` for a model run (`-- --run-id <id>`)                                                                                                                                                                                                                                             |
-| `npm run test:model:live`    | Opt-in live smoke call (`RUN_LIVE_MODEL_TESTS=1`; skipped by default, never in CI)                                                                                                                                                                                                                                                   |
+| Command                      | What it does                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                | Start the Vite dev server (open the URL it prints; the port is not fixed)                                                                                                                                                                                                                                                                                                               |
+| `npm run build`              | Typecheck, then produce the production bundle in `dist/`                                                                                                                                                                                                                                                                                                                                |
+| `npm run preview`            | Serve the production bundle locally                                                                                                                                                                                                                                                                                                                                                     |
+| `npm run typecheck`          | TypeScript strict checking, no emit                                                                                                                                                                                                                                                                                                                                                     |
+| `npm run lint`               | ESLint (incl. sim-purity rules) + Prettier check                                                                                                                                                                                                                                                                                                                                        |
+| `npm run test`               | Vitest in watch mode                                                                                                                                                                                                                                                                                                                                                                    |
+| `npm run test:run`           | All Vitest unit + integration tests, once                                                                                                                                                                                                                                                                                                                                               |
+| `npm run test:coverage`      | Vitest with V8 coverage over `src/sim` and `src/shared`                                                                                                                                                                                                                                                                                                                                 |
+| `npm run test:e2e`           | Playwright browser suite (starts its own Vite server via `webServer`)                                                                                                                                                                                                                                                                                                                   |
+| `npm run test:e2e:install`   | Install Playwright Chromium                                                                                                                                                                                                                                                                                                                                                             |
+| `npm run validate`           | Experiment-data validation + architecture checks (sim-purity import scan, required npm scripts); exits nonzero on failure                                                                                                                                                                                                                                                               |
+| `npm run batch`              | Headless deterministic batch: every scenario, 100 repeat runs each, replay verification, invariant checks, and **complete canonical event-stream equality** across repeats; writes `artifacts/` (ledgers, context-rich traces, report.json, report.md); exits nonzero on any violation. Use `-- --runs=N` to change the repeat count                                                    |
+| `npm run eval:individuality` | Role-counterbalanced individuality evaluation (separate from v1.0 results): all six identity-role rotations per scenario, blinded behavior-only reviewer packages in `artifacts/individuality-eval/reviewer/`. `-- --answer-key` also writes the separate answer key; `-- --scenarios=A,C` restricts scenarios                                                                          |
+| `npm run typecheck:gateway`  | TypeScript strict checking for the Node model gateway                                                                                                                                                                                                                                                                                                                                   |
+| `npm run test:gateway`       | Gateway test suite (fake adapter; no network beyond localhost, no secrets)                                                                                                                                                                                                                                                                                                              |
+| `npm run gateway:dev:fake`   | Start the local model gateway with the deterministic fake adapter (no key)                                                                                                                                                                                                                                                                                                              |
+| `npm run gateway:dev`        | Start the LIVE model gateway (requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`)                                                                                                                                                                                                                                                                                               |
+| `npm run build:gateway`      | Bundle the gateway into `dist-gateway/`                                                                                                                                                                                                                                                                                                                                                 |
+| `npm run check:dist`         | Post-build secret scan over `dist/` (key paths, SDK, canary)                                                                                                                                                                                                                                                                                                                            |
+| `npm run model:summarize`    | Informal summary: build `model-summary.json` + `bundle-manifest.json` for a model run (`-- --run-id <id>`)                                                                                                                                                                                                                                                                              |
+| `npm run model:prepare-run`  | Copy the operator-exported ledger and browser run bundle into `artifacts/model-runs/<runId>/` (`-- --run-id <id> --ledger <path> [--bundle <path>]`); with `--bundle` it validates that ledger and bundle describe the same run and any mismatch exits nonzero with no partial copy — without it the ledger is only schema-parsed, checked for the `ledger-*.json` filename, and copied |
+| `npm run model:finalize`     | Formal finalizer (`-- --run-id <id>`): strict-validates every artifact in the run directory, joins client trace + gateway trace + engine lifecycle per request, and writes `finalized-trace.jsonl`, `run-manifest.final.json`, `model-summary.json`, and `bundle-manifest.json`; exits nonzero on any contradiction                                                                     |
+| `npm run test:model:live`    | Opt-in live smoke call (`RUN_LIVE_MODEL_TESTS=1`; skipped by default, never in CI)                                                                                                                                                                                                                                                                                                      |
 
 ## Running the browser application
 
@@ -341,8 +361,61 @@ model-backed ledger replays to the same `worldStateHash` without the model.
 - **Gateway** (`gateway/`): exact envelope validation, context-hash
   recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),
   JSON-Schema structured output over a dynamic offered-ID enum, typed failure
-  codes, per-run budget (80 calls) and single-flight concurrency, noncanonical
-  JSONL traces + run manifests under `artifacts/model-runs/<runId>/`.
+  codes, per-run budget (80 calls) and single-flight concurrency, plus a
+  process-wide spend cap across ALL runs (`MODEL_MAX_TOTAL_CALLS`, default
+  400 — at the cap every call fails as a typed `budget-exhausted` before the
+  adapter). **Origin + Host policy:** a present `Origin` header must be
+  equivalent to the single configured browser origin
+  (`ALLOWED_BROWSER_ORIGIN`; localhost/127.0.0.1/[::1] are interchangeable)
+  and a present `Host` header must name a loopback host — anything else is a
+  403 before any dispatch; an absent Origin stays allowed for loopback CLI
+  clients and tests. **Idempotent replays:** a repeated POST for an
+  already-seen `runId`+`requestId` with the same context hash replays the
+  first terminal result (one adapter call, one trace row, one budget unit;
+  the replay carries an `x-idempotent-replay` header), while the same
+  request ID with different content is rejected as an `idempotency-conflict`.
+  Artifacts per run under `artifacts/model-runs/<runId>/`: the raw JSONL
+  gateway trace `model-trace.jsonl` (schema v2: explicit response/failure
+  IDs, offered-affordance IDs, bounded raw model text on invalid-output and
+  refusal outcomes), a write-once `run-manifest.json` seed, and the exact
+  validated request envelope persisted as `requests/<requestId>.json` per
+  dispatched request.
+- **Handshake pinning:** the browser client accepts a gateway only when
+  `/v1/provider-config` advertises exactly the pinned experiment, condition,
+  provider, prompt, and request-schema identifiers
+  (`src/shared/modelExperiment.ts` is the single source of these literals).
+  A gateway that answers with a different contract shows as `incompatible`
+  (distinct from `unavailable`), latches for the run, and every request fails
+  fast with a typed `invalid-gateway-response`. The client also reconciles
+  every gateway result against the exact request it dispatched (identity
+  fields + offered-affordance membership) before anything reaches the worker,
+  and keeps a slim per-request client trace — identity, timing, and outcome
+  for every external request it ever sees, including ones that never
+  dispatched.
+- **Run bundle export + finalization:** when a model-condition run reaches
+  terminal state, the model panel's _Export run bundle_ button downloads
+  `model-run-bundle-<runId>.json` — terminal handoff facts (run/condition/
+  scenario/provider/prompt identifiers, terminal hashes, call counters) plus
+  the slim client trace. `npm run model:prepare-run` validates and copies the
+  exported ledger and bundle into the gateway's run directory, and
+  `npm run model:finalize` strict-validates every artifact, joins the three
+  sources per request, and writes `finalized-trace.jsonl`,
+  `run-manifest.final.json`, `model-summary.json`, and a hash-linked
+  `bundle-manifest.json` with an aggregate bundle hash — exiting nonzero on
+  any contradiction. Contradictions between present sources always fail. A
+  missing client bundle degrades the recorded completeness AND removes the
+  only cross-check that binds the copied ledger to this run — ledgers carry
+  no runId, so with no handoff the finalized manifest's ledger-sourced facts
+  (hashes, seed, scenarioVersion, engine outcomes) rest on the operator
+  having picked the right ledger file. Exports for the same scenario share a
+  filename, so keep the bundle whenever possible; the finalizer records the
+  gap as advisory completeness notes (ledger-to-run binding is
+  operator-asserted, plus a warning when the gateway trace and the staged
+  ledger share zero requestIds).
+- **Raw run artifacts are git-ignored:** everything under `artifacts/`
+  (including `artifacts/model-runs/`) is regenerated output and never
+  committed; formal evidence lives in finalized, hash-linked bundles you
+  archive yourself.
 - **Failure lifecycle:** known gateway/model failures are reported through
   `submit-decision-failure` and recorded as `DecisionProviderFailed` plus an
   `external-failure` request expiry; the NPC continues on the provisional
@@ -351,6 +424,13 @@ model-backed ledger replays to the same `worldStateHash` without the model.
 - **Frozen baselines are untouched:** all fourteen golden hashes and the
   complete deterministic streams are byte-identical; the 100-run batch never
   starts a gateway; CI uses only the fake adapter and no secret.
+
+**The live milestone is NOT complete.** No live model-backed run has been
+executed; the milestone remains open until
+[`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)
+records actual live runs with their evidence (it is currently a PENDING
+template). Fake-adapter results are infrastructure evidence only and are
+never reported as live results.
 
 ### Manual setup (live model runs)
 
@@ -362,8 +442,18 @@ npm ci
 cp .env.gateway.example .env.gateway   # fill in OPENAI_API_KEY and OPENAI_MODEL
 npm run gateway:dev:fake               # keyless deterministic gateway, or:
 npm run gateway:dev                    # live gateway (fails fast without key/model)
-npm run dev                            # browser app on http://localhost:5173
+npm run dev                            # browser app; Vite prints the URL
 ```
+
+The gateway rejects any browser `Origin` that is not equivalent to
+`ALLOWED_BROWSER_ORIGIN` (default `http://localhost:5173`; localhost /
+127.0.0.1 / [::1] are interchangeable, but the **port** must match) with a
+403 that carries no CORS headers, so the model panel simply reads
+`unavailable` — the same word it uses for a gateway that is not running. If
+Vite prints a different port (5173 already in use), either free 5173 or set
+`ALLOWED_BROWSER_ORIGIN` in `.env.gateway` to the origin Vite actually
+printed and restart the gateway. Confirm the panel shows the gateway
+connected before starting a paid live run.
 
 The gateway URL is nonsecret configuration (`VITE_MODEL_GATEWAY_URL`, default
 `http://localhost:8787`). **No secret may ever use a `VITE_` prefix**, and the
@@ -373,17 +463,31 @@ post-build dist scan (`npm run check:dist`) enforce both.
 Walkthrough: in the _Model integration_ panel select
 `mara-model-per-decision-v1` (this reloads the scenario under the condition),
 run Scenario A at 1×, and watch the panel's call/acceptance/failure counters
-and latency. Export the ledger when the run completes, replay it (`Replay
-live/imported`) to verify the hash match, then drop the exported
-`ledger-*.json` into `artifacts/model-runs/<runId>/` and run
-`npm run model:summarize -- --run-id <runId>` to produce
-`model-summary.json` (infrastructure, engine lifecycle, and behavioral
-metrics) plus a hash-linked `bundle-manifest.json`. Follow the run discipline
-in the implementation brief (1× speed first; never pause awaiting the model;
-never edit the prompt between a paired B1/B2 comparison; a fresh `runId`
-every run). An opt-in live smoke test exists as
-`RUN_LIVE_MODEL_TESTS=1 npm run test:model:live` — it is skipped by default
-and never runs in CI.
+and latency. When the run completes, export the ledger, replay it (_Replay
+latest_) to verify the hash match, and press _Export run bundle_ to
+download `model-run-bundle-<runId>.json`. Then:
+
+```bash
+npm run model:prepare-run -- --run-id <runId> --ledger <ledger-path> --bundle <bundle-path>
+npm run model:finalize -- --run-id <runId>
+```
+
+`model:prepare-run` validates the pair against each other before copying them
+into `artifacts/model-runs/<runId>/`; `model:finalize` joins client trace,
+gateway trace, and engine lifecycle into `finalized-trace.jsonl` +
+`run-manifest.final.json` and binds every file into `bundle-manifest.json`
+(`npm run model:summarize` is the informal, non-gating summary for
+pre-finalization inspection; it refuses to run on an already-finalized
+directory — re-run `npm run model:finalize` instead, which regenerates
+`model-summary.json` and `bundle-manifest.json`). Follow the run discipline
+in the
+[implementation brief](documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md)
+and the
+[re-audit remediation brief](documentation/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_BRIEF.md)
+(1× speed first; never pause awaiting the model; never edit the prompt
+between a paired B1/B2 comparison; a fresh `runId` every run). An opt-in live
+smoke test exists as `RUN_LIVE_MODEL_TESTS=1 npm run test:model:live` — it is
+skipped by default and never runs in CI.
 
 ## Deployment
 

@@ -5,7 +5,11 @@ import type {
   ExternalDecisionRequest,
 } from '../shared/decisionContracts';
 import { externalDecisionRequestSchema } from '../sim/decisions/externalSchemas';
-import { MODEL_CONDITION_SCENARIOS } from '../sim/decisions/conditions';
+import {
+  BASELINE_CONDITION_ID,
+  MODEL_CONDITION_ID,
+  MODEL_CONDITION_SCENARIOS,
+} from '../shared/modelExperiment';
 import type { ScenarioId } from '../shared/ids';
 import {
   workerEventsResponseSchema,
@@ -84,17 +88,17 @@ export class WorkerClient {
     // frozen deterministic experiment) silently degrades the SELECTION to the
     // baseline so the UI and the worker can never desynchronize on a
     // rejected load.
-    if (conditionId === 'mara-model-per-decision-v1' && !MODEL_CONDITION_SCENARIOS.includes(id)) {
-      conditionId = 'deterministic-baseline-v1';
+    if (conditionId === MODEL_CONDITION_ID && !MODEL_CONDITION_SCENARIOS.includes(id)) {
+      conditionId = BASELINE_CONDITION_ID;
       this.store.update((s) => {
-        s.selectedConditionId = 'deterministic-baseline-v1';
-        s.lastError = `condition-not-supported-for-scenario: reverted to deterministic-baseline-v1 for ${id}`;
+        s.selectedConditionId = BASELINE_CONDITION_ID;
+        s.lastError = `condition-not-supported-for-scenario: reverted to ${BASELINE_CONDITION_ID} for ${id}`;
       });
     }
     // The baseline condition is the default wiring: omit it so the command
     // stream (and worker behavior) stays byte-identical to pre-milestone
     // builds unless a non-default condition is actually selected.
-    if (conditionId === 'deterministic-baseline-v1') {
+    if (conditionId === BASELINE_CONDITION_ID) {
       this.send({ type: 'load-scenario', scenarioId: id });
     } else {
       this.send({ type: 'load-scenario', scenarioId: id, conditionId });

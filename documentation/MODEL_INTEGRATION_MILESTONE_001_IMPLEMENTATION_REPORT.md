@@ -1,5 +1,7 @@
 # Model Integration Milestone 001 — Implementation Report
 
+**Implementation commit:** `3f5aa06c84af226927928edcaa29ea5adb51d3f9` (tagged `v1.3.0`)
+
 **Implements:** `documentation/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md` (PR #2)
 **Base commit:** `90d39c9cc6b27db455b767daa9444d178759cbd3` (remediation release 1.2.0)
 **Final commit:** recorded in the merge/commit metadata of this change-set
@@ -199,6 +201,17 @@ deployment would require authenticated transport and request integrity.
   streamed back to the gateway.
 - The fake adapter's policy is intentionally simple; it validates
   infrastructure, not behavior.
+- _(Recorded post-release by the 1.4.0 re-audit.)_ The 1.3.0 model-run
+  artifact layer was not self-contained: the trace did not persist the exact
+  validated request envelope or model context, the offered-affordance IDs,
+  or explicit response/failure IDs; no logical submitted-tick was recorded;
+  and the run manifest was seeded but never finalized (no scenario version,
+  seed, completion time, terminal hashes, or final totals). Where this
+  report's trace/manifest descriptions read as a complete audit trail, they
+  overstated the 1.3.0 artifacts. Remediated in release 1.4.0 — see
+  [`MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_REPORT.md)
+  (trace schema v2 with envelope sidecars and explicit IDs, a slim client
+  trace, a finalized joined trace, and a finalized manifest).
 
 ## Recommended next experiment
 

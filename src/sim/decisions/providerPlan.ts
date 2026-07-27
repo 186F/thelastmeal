@@ -1,4 +1,5 @@
 import type { NpcId } from '../../shared/ids';
+import type { ExternalDecisionRequest } from '../../shared/decisionContracts';
 import {
   isScheduledResponseSource,
   type DecisionProvider,
@@ -32,6 +33,15 @@ export interface ProviderPlan {
   providerFor(npcId: NpcId): DecisionProvider;
   scheduledResponseSources(): ScheduledResponseSource[];
   externalProviderIds(): readonly string[];
+  /**
+   * Optional condition-carried validator for outbound external requests
+   * (re-audit remediation, deviation D4). Returns null for a valid request
+   * or a short error code; the engine throws
+   * `external-request-condition-violation` on any non-null return, AFTER the
+   * generic schema validation. Carried as data on the plan so the engine
+   * itself stays experiment-agnostic.
+   */
+  validateExternalRequest?(request: ExternalDecisionRequest): string | null;
 }
 
 /**
@@ -65,6 +75,7 @@ export function perNpcPlan(
   id: string,
   providers: Record<NpcId, DecisionProvider>,
   externalProviderIds: readonly string[],
+  validateExternalRequest?: (request: ExternalDecisionRequest) => string | null,
 ): ProviderPlan {
   const unique = new Map<string, DecisionProvider>();
   for (const provider of Object.values(providers)) {
@@ -73,10 +84,14 @@ export function perNpcPlan(
   const scheduled = [...unique.values()]
     .filter(isScheduledResponseSource)
     .sort((a, b) => (a.id < b.id ? -1 : 1));
-  return {
+  const plan: ProviderPlan = {
     id,
     providerFor: (npcId) => providers[npcId],
     scheduledResponseSources: () => scheduled,
     externalProviderIds: () => externalProviderIds,
   };
+  if (validateExternalRequest) {
+    plan.validateExternalRequest = validateExternalRequest;
+  }
+  return plan;
 }

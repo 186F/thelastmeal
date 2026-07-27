@@ -1,4 +1,5 @@
 import type { ExternalDecisionRequest } from '../shared/decisionContracts';
+import { BASELINE_CONDITION_ID } from '../shared/modelExperiment';
 import type { ConditionId } from '../sim/decisions/conditions';
 import type { ModelGatewayStatus } from './modelGatewayClient';
 import type { EventEnvelope } from '../shared/events';
@@ -87,7 +88,7 @@ export class ViewStore {
     finalWorldHash: null,
     finalLedgerHash: null,
     externalDecisionRequests: [],
-    selectedConditionId: 'deterministic-baseline-v1',
+    selectedConditionId: BASELINE_CONDITION_ID,
     model: {
       gateway: null,
       acceptedModelResponses: 0,

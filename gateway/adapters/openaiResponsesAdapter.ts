@@ -79,7 +79,13 @@ export class OpenAIResponsesDecisionAdapter implements ModelDecisionAdapter {
       if (item.type === 'message') {
         for (const content of item.content ?? []) {
           if (content.type === 'refusal') {
-            throw new AdapterFailure('upstream-refusal', 'model refused the request');
+            // The refusal text is captured for the trace's bounded
+            // rawModelOutput (v2); it never reaches the engine.
+            throw new AdapterFailure(
+              'upstream-refusal',
+              'model refused the request',
+              content.refusal,
+            );
           }
         }
       }
@@ -93,10 +99,13 @@ export class OpenAIResponsesDecisionAdapter implements ModelDecisionAdapter {
     try {
       choice = JSON.parse(text);
     } catch {
-      throw new AdapterFailure('invalid-model-output', 'structured output is not valid JSON');
+      throw new AdapterFailure('invalid-model-output', 'structured output is not valid JSON', text);
     }
     return {
       choice,
+      // Raw text rides along so a gateway-side schema rejection can still
+      // persist what the model actually said (bounded, invalid outcomes only).
+      rawOutput: text,
       meta: {
         modelId: response.model ?? this.model,
         upstreamResponseId: response.id ?? null,

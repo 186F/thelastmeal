@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, runToCompletion, stepTick } from '../../src/sim/runtime/engine';
 import { serializeCanonicalEventStream } from '../../src/sim/replay/ledgerHash';
-import { perNpcPlan } from '../../src/sim/decisions/providerPlan';
+import { perNpcPlan, singleProviderPlan } from '../../src/sim/decisions/providerPlan';
 import { SimulatedAsyncProvider } from '../../src/sim/decisions/simulatedAsyncProvider';
 import { DeterministicProvider } from '../../src/sim/decisions/deterministicProvider';
+import { defaultScenarioProvider, planForCondition } from '../../src/sim/decisions/conditions';
+import {
+  ExternalDeferredProvider,
+  EXTERNAL_MARA_PROVIDER_ID,
+} from '../../src/sim/decisions/externalDeferredProvider';
+import { getScenario } from '../../src/sim/scenarios/definitions';
 import { buildLedgerFile } from '../../src/sim/runtime/ledgerFileBuilder';
 import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
 import { eventsOfType } from '../helpers';
 import type { DecisionProvider } from '../../src/sim/decisions/provider';
+import type { ExternalDecisionRequest } from '../../src/shared/decisionContracts';
 import type { NpcId } from '../../src/shared/ids';
 
 /** Milestone 001, section 23.1: provider-plan correctness. */
@@ -98,5 +105,70 @@ describe('provider plans', () => {
     expect(
       plan.scheduledResponseSources().map((s) => (s as unknown as DecisionProvider).id),
     ).toEqual(['a-scheduled', 'z-scheduled']);
+  });
+});
+
+/** Re-audit remediation F1 (deviation D4): condition-specific request
+ * validation is carried as DATA on the provider plan; the engine stays
+ * experiment-agnostic and throws a single generic error code. */
+describe('plan-carried external-request validator', () => {
+  let cachedExternal: ExternalDecisionRequest | null = null;
+  function genuineExternalRequest(): ExternalDecisionRequest {
+    if (!cachedExternal) {
+      const run = createRun('A', { conditionId: 'mara-model-per-decision-v1' });
+      while (run.externalRequests.length === 0 && run.state.tick < 200) stepTick(run);
+      cachedExternal = run.externalRequests[0]!;
+    }
+    return JSON.parse(JSON.stringify(cachedExternal)) as ExternalDecisionRequest;
+  }
+
+  it('the model-condition plan accepts a genuine Mara request and rejects npc/provider/scenario violations', () => {
+    const scenario = getScenario('A');
+    const plan = planForCondition('mara-model-per-decision-v1', scenario, () =>
+      defaultScenarioProvider(scenario),
+    );
+    expect(plan.validateExternalRequest).toBeTypeOf('function');
+    expect(plan.validateExternalRequest!(genuineExternalRequest())).toBeNull();
+
+    const wrongNpc = genuineExternalRequest();
+    wrongNpc.request.npcId = 'jonas';
+    expect(plan.validateExternalRequest!(wrongNpc)).not.toBeNull();
+
+    const wrongProvider = genuineExternalRequest();
+    wrongProvider.request.providerId = 'rogue-provider-v1';
+    expect(plan.validateExternalRequest!(wrongProvider)).not.toBeNull();
+
+    const wrongScenario = genuineExternalRequest();
+    wrongScenario.request.scenarioId = 'F';
+    expect(plan.validateExternalRequest!(wrongScenario)).not.toBeNull();
+  });
+
+  it('the baseline condition and singleProviderPlan carry no validator', () => {
+    const scenario = getScenario('A');
+    const baseline = planForCondition('deterministic-baseline-v1', scenario, () =>
+      defaultScenarioProvider(scenario),
+    );
+    expect(baseline.validateExternalRequest).toBeUndefined();
+    const single = singleProviderPlan(() => new DeterministicProvider());
+    expect(single.validateExternalRequest).toBeUndefined();
+  });
+
+  it('the engine throws external-request-condition-violation when the plan validator rejects a deferral', () => {
+    const deterministic = new DeterministicProvider();
+    const providers: Record<NpcId, DecisionProvider> = {
+      mara: new ExternalDeferredProvider(EXTERNAL_MARA_PROVIDER_ID),
+      jonas: deterministic,
+      rin: deterministic,
+    };
+    const plan = perNpcPlan(
+      'always-rejecting-plan',
+      providers,
+      [EXTERNAL_MARA_PROVIDER_ID],
+      () => 'always-wrong',
+    );
+    const run = createRun('A', { plan });
+    expect(() => {
+      for (let i = 0; i < 200 && !run.state.terminal; i += 1) stepTick(run);
+    }).toThrowError(/external-request-condition-violation/);
   });
 });

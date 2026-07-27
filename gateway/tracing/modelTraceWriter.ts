@@ -1,63 +1,26 @@
 import { appendFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ExternalFailureCode } from '../../src/shared/decisionContracts';
+import type { ModelTraceEntry, RunManifestSeed } from '../../src/shared/modelArtifacts';
 
 /**
- * Noncanonical model-run trace (milestone 001, section 17). One JSONL entry
- * per gateway request under `<traceDir>/<runId>/model-trace.jsonl`, plus a
- * run manifest seeded at first sight of a run. Wall-clock timestamps are
- * diagnostic only and never enter canonical state.
+ * Noncanonical model-run trace (milestone 001, section 17; trace schema v2 in
+ * re-audit remediation G1). One JSONL entry per gateway request under
+ * `<traceDir>/<runId>/model-trace.jsonl`, a run manifest seeded at first
+ * sight of a run, and — after full validation, for every non-duplicate
+ * dispatch — the exact validated envelope as
+ * `<traceDir>/<runId>/requests/<requestId>.json` (G2, deviation D3).
+ * Wall-clock timestamps are diagnostic only and never enter canonical state.
+ *
+ * Entry/seed types and their exact schemas live in
+ * src/shared/modelArtifacts.ts (shared with the finalizer); this module keeps
+ * only the writer classes.
  *
  * NEVER recorded: API keys, authorization headers, process environment,
  * cookies, or hidden model reasoning — entries are built exclusively from
  * the validated envelope, the validated model choice, and adapter metadata.
  */
 
-export interface ModelTraceEntry {
-  runId: string;
-  requestId: string;
-  npcId: string;
-  scenarioId: string;
-  logicalRequestedTick: number;
-  providerId: string;
-  promptVersion: string;
-  modelId: string | null;
-  contextHash: string;
-  truncationCounts: Record<string, number>;
-  upstreamResponseId: string | null;
-  selectedAffordanceId: string | null;
-  reasonCode: string | null;
-  confidenceBp: number | null;
-  rationale: string | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  totalTokens: number | null;
-  latencyMs: number;
-  /** In-flight upstream calls at dispatch time, INCLUDING this one (0 for
-   * failures that never reached the adapter). Source for the §21 maximum
-   * concurrent-calls metric. */
-  concurrentInFlight: number;
-  gatewayOutcome: 'response' | ExternalFailureCode;
-  /** Joined later from the exported canonical ledger by the summarizer;
-   * the gateway cannot know the engine verdict. */
-  engineOutcome: null;
-  engineRejectionReason: null;
-}
-
-export interface RunManifestSeed {
-  traceSchemaVersion: number;
-  experimentId: string;
-  experimentVersion: string;
-  conditionId: string;
-  runId: string;
-  scenarioId: string;
-  providerPlanId: string;
-  externalProviderId: string;
-  promptVersion: string;
-  modelId: string | null;
-  modelSettings: Record<string, unknown>;
-  startedAtUtc: string;
-}
+export type { ModelTraceEntry, RunManifestSeed };
 
 export class ModelTraceWriter {
   private readonly seededRuns = new Set<string>();
@@ -84,12 +47,25 @@ export class ModelTraceWriter {
     mkdirSync(dir, { recursive: true });
     appendFileSync(join(dir, 'model-trace.jsonl'), `${JSON.stringify(entry)}\n`, 'utf8');
   }
+
+  /** Persists the exact validated envelope as a pretty-printed sidecar
+   * (`requests/<requestId>.json`). Called by the gateway ONLY after full
+   * validation and only for a non-duplicate dispatch — never on idempotent
+   * replays, never on pre-validation rejects. `requestId` is schema-checked
+   * (`dec-\d{4,}`) before any call, so the file name is always safe. */
+  writeRequest(runId: string, requestId: string, envelope: unknown): void {
+    const dir = join(this.runDir(runId), 'requests');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${requestId}.json`), JSON.stringify(envelope, null, 2), 'utf8');
+  }
 }
 
 /** In-memory writer for tests: identical interface, no filesystem. */
 export class MemoryTraceWriter extends ModelTraceWriter {
   readonly entries: ModelTraceEntry[] = [];
   readonly manifests: RunManifestSeed[] = [];
+  /** Envelope sidecars keyed `<runId>:<requestId>`. */
+  readonly requests = new Map<string, unknown>();
 
   constructor() {
     super('unused');
@@ -101,5 +77,9 @@ export class MemoryTraceWriter extends ModelTraceWriter {
 
   override append(entry: ModelTraceEntry): void {
     this.entries.push(entry);
+  }
+
+  override writeRequest(runId: string, requestId: string, envelope: unknown): void {
+    this.requests.set(`${runId}:${requestId}`, envelope);
   }
 }

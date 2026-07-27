@@ -951,6 +951,14 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
         `external-request-contract-violation: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
       );
     }
+    // Plan-carried condition validation (re-audit remediation, deviation
+    // D4), AFTER the generic schema check: condition-specific constraints
+    // ride on the plan as data, so the engine stays experiment-agnostic.
+    // Unreachable in deterministic scenarios — hash-neutral by construction.
+    const conditionViolation = run.plan.validateExternalRequest?.(external) ?? null;
+    if (conditionViolation !== null) {
+      throw new Error('external-request-condition-violation');
+    }
     run.externalRequests.push(external);
     if (!npc.currentAction) {
       // Idle NPCs act on the deterministic fallback immediately, without

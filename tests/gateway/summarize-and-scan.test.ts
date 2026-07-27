@@ -1,11 +1,20 @@
-import { mkdtempSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+} from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { summarizeRunDirectory } from '../../scripts/model/summarize';
+import { joinEngineOutcomes, summarizeRunDirectory } from '../../scripts/model/summarize';
 import { CANARY_TEST_KEY, scanDist } from '../../scripts/security/scanDist';
 import type { ModelTraceEntry } from '../../gateway/tracing/modelTraceWriter';
 import { buildLedgerFile } from '../../src/sim/runtime/ledgerFileBuilder';
+import type { LedgerFile } from '../../src/shared/ledgerFile';
 import { createRun, runToCompletion } from '../../src/sim/runtime/engine';
 import { perNpcPlan } from '../../src/sim/decisions/providerPlan';
 import { DeterministicProvider } from '../../src/sim/decisions/deterministicProvider';
@@ -16,15 +25,23 @@ import {
 } from '../../src/sim/decisions/fixtureResponseProvider';
 import type { NpcId } from '../../src/shared/ids';
 import type { DecisionProvider } from '../../src/sim/decisions/provider';
+import { MODEL_CONDITION_ID, MODEL_PROMPT_VERSION } from '../../src/shared/modelExperiment';
 
 /** Adversarial-review regressions: the trace↔ledger join, the §21/§26
  * derived metrics, the bundle-hash sensitivity, and the dist scanner's
  * ability to detect its own canary. */
 
-function traceEntry(
-  requestId: string,
-  outcome: ModelTraceEntry['gatewayOutcome'],
-): ModelTraceEntry {
+/** Trace schema v2 (re-audit remediation G1): explicit response/failure ids,
+ * the offered ids from the validated envelope, and the bounded raw model
+ * output on invalid-output/refusal outcomes. */
+type TraceEntryV2 = ModelTraceEntry & {
+  responseId: string | null;
+  failureId: string | null;
+  offeredAffordanceIds: string[];
+  rawModelOutput: string | null;
+};
+
+function traceEntry(requestId: string, outcome: ModelTraceEntry['gatewayOutcome']): TraceEntryV2 {
   return {
     runId: 'run-sum-0001',
     requestId,
@@ -32,11 +49,15 @@ function traceEntry(
     scenarioId: 'A',
     logicalRequestedTick: 60,
     providerId: EXTERNAL_MARA_PROVIDER_ID,
-    promptVersion: 'mara-action-selection-1.0.0',
+    promptVersion: MODEL_PROMPT_VERSION,
     modelId: 'fake-adapter',
     contextHash: '0'.repeat(16),
     truncationCounts: {},
     upstreamResponseId: null,
+    responseId: outcome === 'response' ? `gw-${requestId}` : null,
+    failureId: outcome === 'response' ? null : `gwf-${requestId}`,
+    offeredAffordanceIds: ['aff:mara:60:work'],
+    rawModelOutput: null,
     selectedAffordanceId: outcome === 'response' ? 'aff:mara:60:work' : null,
     reasonCode: outcome === 'response' ? 'routine' : null,
     confidenceBp: outcome === 'response' ? 5_000 : null,
@@ -49,6 +70,34 @@ function traceEntry(
     gatewayOutcome: outcome,
     engineOutcome: null,
     engineRejectionReason: null,
+  };
+}
+
+/** Minimal ledger-shaped fixture for join unit tests. */
+function ledgerWithEvents(events: Record<string, unknown>[]): LedgerFile {
+  return { events } as unknown as LedgerFile;
+}
+
+function acceptanceEvent(requestId: string, responseId: string): Record<string, unknown> {
+  return {
+    id: 'evt-000001',
+    seq: 1,
+    type: 'DecisionResponseAccepted',
+    tick: 80,
+    schemaVersion: 3,
+    actorId: 'mara',
+    targetId: null,
+    causationId: null,
+    correlationId: null,
+    payload: {
+      npcId: 'mara',
+      requestId,
+      responseId,
+      selectedAffordanceId: 'aff:mara:80:work',
+      confidenceBp: 5_000,
+      reasonCode: 'routine',
+      usedFallback: false,
+    },
   };
 }
 
@@ -68,7 +117,7 @@ describe('model-run summarizer and bundle hashing', () => {
       rin: deterministic,
     };
     const run = createRun('A', {
-      plan: perNpcPlan('mara-model-per-decision-v1', providers, [EXTERNAL_MARA_PROVIDER_ID]),
+      plan: perNpcPlan(MODEL_CONDITION_ID, providers, [EXTERNAL_MARA_PROVIDER_ID]),
     });
     runToCompletion(run);
     const ledger = buildLedgerFile(run);
@@ -85,7 +134,11 @@ describe('model-run summarizer and bundle hashing', () => {
     writeFileSync(join(dir, 'ledger-A-test.json'), JSON.stringify(ledger), 'utf8');
     writeFileSync(
       join(dir, 'run-manifest.json'),
-      JSON.stringify({ runId: 'run-sum-0001', externalProviderId: EXTERNAL_MARA_PROVIDER_ID }),
+      JSON.stringify({
+        runId: 'run-sum-0001',
+        externalProviderId: EXTERNAL_MARA_PROVIDER_ID,
+        modelId: 'gpt-fixture',
+      }),
       'utf8',
     );
     const entries = [
@@ -100,6 +153,8 @@ describe('model-run summarizer and bundle hashing', () => {
 
     summarizeRunDirectory(dir, 'run-sum-0001');
     const summary = JSON.parse(readFileSync(join(dir, 'model-summary.json'), 'utf8')) as {
+      requestedModelId: string | null;
+      returnedModelIds: string[];
       infra: { externalRequests: number; maxConcurrentCalls: number };
       derived: {
         maraDecisionOpportunities: number;
@@ -109,6 +164,9 @@ describe('model-run summarizer and bundle hashing', () => {
       engine: { acceptedModelResponses: number };
       outcomes: { requestId: string; engineOutcome: string }[];
     };
+    // S2: what was REQUESTED (seed manifest) vs what actually ANSWERED (trace).
+    expect(summary.requestedModelId).toBe('gpt-fixture');
+    expect(summary.returnedModelIds).toEqual(['fake-adapter']);
     expect(summary.infra.externalRequests).toBe(2);
     expect(summary.infra.maxConcurrentCalls).toBe(1);
     expect(summary.engine.acceptedModelResponses).toBeGreaterThan(0);
@@ -119,19 +177,94 @@ describe('model-run summarizer and bundle hashing', () => {
     expect(joined[acceptedRequestId]).toBe('accepted');
     expect(joined['dec-9999']).toBe('unresolved');
 
-    const firstBundle = JSON.parse(readFileSync(join(dir, 'bundle-manifest.json'), 'utf8')) as {
-      files: { modelTrace: { sha256: string }; ledger: { sha256: string } };
-    };
+    interface BundleManifest {
+      bundleManifestSchemaVersion: number;
+      producer: string;
+      files: {
+        modelTrace: { name: string; sha256: string };
+        ledger: { name: string; sha256: string };
+        runManifest: { name: string; sha256: string };
+        modelSummary: { name: string; sha256: string };
+      };
+      aggregateSha256: string;
+    }
+    const firstBundle = JSON.parse(
+      readFileSync(join(dir, 'bundle-manifest.json'), 'utf8'),
+    ) as BundleManifest;
+    // Producer discriminator (F4/F7/F16): the informal manifest names its
+    // writer so it can never be mistaken for model:finalize's whole-directory
+    // evidence binding, which shares the filename.
+    expect(firstBundle.bundleManifestSchemaVersion).toBe(1);
+    expect(firstBundle.producer).toBe('model:summarize');
+    // S2: the aggregate is sha256 over the sorted `<fileName>:<sha256>` lines.
+    const expectedAggregate = createHash('sha256')
+      .update(
+        Object.values(firstBundle.files)
+          .map((f) => `${f.name}:${f.sha256}`)
+          .sort()
+          .join('\n'),
+      )
+      .digest('hex');
+    expect(firstBundle.aggregateSha256).toBe(expectedAggregate);
     appendFileSync(
       join(dir, 'model-trace.jsonl'),
       `${JSON.stringify(traceEntry('dec-0042', 'response'))}\n`,
     );
     summarizeRunDirectory(dir, 'run-sum-0001');
-    const secondBundle = JSON.parse(readFileSync(join(dir, 'bundle-manifest.json'), 'utf8')) as {
-      files: { modelTrace: { sha256: string }; ledger: { sha256: string } };
-    };
+    const secondBundle = JSON.parse(
+      readFileSync(join(dir, 'bundle-manifest.json'), 'utf8'),
+    ) as BundleManifest;
     expect(secondBundle.files.modelTrace.sha256).not.toBe(firstBundle.files.modelTrace.sha256);
     expect(secondBundle.files.ledger.sha256).toBe(firstBundle.files.ledger.sha256);
+    expect(secondBundle.aggregateSha256).not.toBe(firstBundle.aggregateSha256);
+  });
+
+  it('refuses to summarize a finalized run directory (F4/F7/F16: finalizer artifacts are never clobbered)', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'model-run-finalized-')), 'run-sum-0002');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'model-trace.jsonl'),
+      `${JSON.stringify(traceEntry('dec-0001', 'response'))}\n`,
+      'utf8',
+    );
+    // run-manifest.final.json marks the directory as finalized: its
+    // model-summary.json and bundle-manifest.json belong to model:finalize.
+    writeFileSync(
+      join(dir, 'run-manifest.final.json'),
+      JSON.stringify({ status: 'completed' }),
+      'utf8',
+    );
+    expect(() => summarizeRunDirectory(dir, 'run-sum-0002')).toThrow(/owned by model:finalize/);
+    // The refusal fires before ANY write: no informal artifact appears.
+    expect(existsSync(join(dir, 'model-summary.json'))).toBe(false);
+    expect(existsSync(join(dir, 'bundle-manifest.json'))).toBe(false);
+  });
+
+  it('never marks a model call accepted from a non-gw acceptance for the same requestId (S2 regression)', () => {
+    // The engine accepted a DETERMINISTIC response (engine-minted responseId)
+    // for the same requestId the gateway later timed out on. The old join
+    // keyed acceptance on the bare requestId and called the model call
+    // 'accepted'; the fixed join matches the model RESPONSE id.
+    const nonGw = ledgerWithEvents([acceptanceEvent('dec-0007', 'resp-mara-000123')]);
+    const joined = joinEngineOutcomes(nonGw, [traceEntry('dec-0007', 'upstream-timeout')]);
+    expect(joined).toHaveLength(1);
+    expect(joined[0]!.engineOutcome).toBe('unresolved');
+
+    // A genuine gateway acceptance still joins as accepted, matched on the
+    // v2 responseId recorded in the trace row.
+    const gw = ledgerWithEvents([acceptanceEvent('dec-0008', 'gw-dec-0008')]);
+    const accepted = joinEngineOutcomes(gw, [traceEntry('dec-0008', 'response')]);
+    expect(accepted[0]!.engineOutcome).toBe('accepted');
+
+    // A v2 row whose recorded responseId differs from the reconstructed
+    // gw-<requestId> convention must be matched on the RECORDED id.
+    const custom = traceEntry('dec-0009', 'response');
+    custom.responseId = 'gw-run7-dec-0009';
+    const customJoin = joinEngineOutcomes(
+      ledgerWithEvents([acceptanceEvent('dec-0009', 'gw-run7-dec-0009')]),
+      [custom],
+    );
+    expect(customJoin[0]!.engineOutcome).toBe('accepted');
   });
 });
 

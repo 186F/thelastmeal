@@ -54,6 +54,10 @@ export interface AdapterInput {
 export interface AdapterResult {
   choice: unknown;
   meta: ModelChoiceMeta;
+  /** Raw model output text when the adapter has it. Persisted to the trace
+   * (bounded) ONLY on invalid-model-output / upstream-refusal outcomes —
+   * never on success (trace schema v2). */
+  rawOutput?: string;
 }
 
 /** Typed adapter failure: maps 1:1 onto the bounded external failure codes. */
@@ -61,6 +65,9 @@ export class AdapterFailure extends Error {
   constructor(
     readonly failureCode: ExternalFailureCode,
     message: string,
+    /** Raw upstream model text (refusal text / non-JSON output) for the
+     * trace's bounded rawModelOutput field (trace schema v2). */
+    readonly rawOutput?: string,
   ) {
     super(message);
   }

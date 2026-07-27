@@ -5,6 +5,7 @@ import { mountGlobalPanel } from '../ui/globalPanel';
 import { mountInspector } from '../ui/inspector';
 import { mountModelPanel } from '../ui/modelPanel';
 import { downloadTextFile } from '../ui/fileIO';
+import { MODEL_CONDITION_ID } from '../shared/modelExperiment';
 import { ViewStore } from './store';
 import { WorkerClient } from './workerClient';
 import { ModelGatewayClient } from './modelGatewayClient';
@@ -34,12 +35,12 @@ const gateway = new ModelGatewayClient({
 });
 client.onRunReset = () => {
   gateway.newRun();
-  if (store.state.selectedConditionId === 'mara-model-per-decision-v1') void gateway.connect();
+  if (store.state.selectedConditionId === MODEL_CONDITION_ID) void gateway.connect();
 };
 client.onDecisionRequest = (request) => {
   // Baseline conditions never call the gateway; the client additionally
   // filters to Mara's registered external provider.
-  if (store.state.selectedConditionId === 'mara-model-per-decision-v1') {
+  if (store.state.selectedConditionId === MODEL_CONDITION_ID) {
     gateway.handleDecisionRequest(request);
   }
 };
