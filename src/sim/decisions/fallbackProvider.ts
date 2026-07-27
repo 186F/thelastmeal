@@ -16,8 +16,12 @@ import type { DecisionContext, DecisionProvider, DecisionResult } from './provid
  * never empty for a non-empty offer (constraint safety fall-through plus the
  * engine's unconditional `wait` affordance), so the fallback always answers.
  */
+/** Engine-owned fallback identity, shared with provider binding at the gate
+ * and with the import validator's fallback carve-out (re-audit findings 1/2). */
+export const FALLBACK_PROVIDER_ID = 'fallback-continue-or-wait-v2';
+
 export class FallbackProvider implements DecisionProvider {
-  readonly id = 'fallback-continue-or-wait-v2';
+  readonly id = FALLBACK_PROVIDER_ID;
 
   decide(ctx: DecisionContext): DecisionResult {
     const evaluation = evaluateConstraints(ctx, ctx.affordances);

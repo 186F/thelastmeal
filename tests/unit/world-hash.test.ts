@@ -5,7 +5,7 @@ import type {
   DecisionProvider,
   ProviderDecision,
 } from '../../src/sim/decisions/provider';
-import { createRun, runToCompletion } from '../../src/sim/runtime/engine';
+import { createRun, runToCompletion, stepTick } from '../../src/sim/runtime/engine';
 import { worldStateHash } from '../../src/sim/replay/worldHash';
 import { canonicalLedgerHash } from '../../src/sim/replay/ledgerHash';
 import { completedRun } from '../helpers';
@@ -102,6 +102,26 @@ describe('provider diagnostics never reach the world-state hash', () => {
     const cadence = structuredClone(run.state);
     cadence.npcs.mara.lastDecisionTick += 1; // behaviorally load-bearing
     expect(worldStateHash(cadence)).not.toBe(base);
+  });
+
+  it('worldStateHash is terminal-only: hashing a live state throws (re-audit finding 3)', () => {
+    // A live mid-run state — including one holding a pending decision — has
+    // no defined semantic hash: the projection deliberately omits live
+    // decision-transport data (authorized provider, responseIdsSeen, stored
+    // dependency fingerprint), so the hash contract is terminal-only.
+    const live = createRun('A');
+    for (let i = 0; i < 61 && !live.state.terminal; i += 1) {
+      stepTick(live);
+    }
+    expect(live.state.terminal).toBe(false);
+    expect(() => worldStateHash(live.state)).toThrowError(
+      'world-state-hash-requires-terminal-state',
+    );
+
+    // The terminal path (used by endScenario on its provisional clone and by
+    // replay after a complete fold) still hashes.
+    const done = completedRun('A');
+    expect(worldStateHash(done.state)).toBe(done.worldStateHash);
   });
 
   it('the canonical ledger hash ignores operator markers and raw seq but covers payloads', () => {

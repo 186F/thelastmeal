@@ -26,11 +26,14 @@ function cmd(type: WorkerCommand['type'], extra: Record<string, unknown> = {}): 
 }
 
 function deferAllRun(): EngineRun {
-  const run = createRun('A');
-  run.provider = new SimulatedAsyncProvider(new DeterministicProvider(), () => ({
-    delayTicks: null,
-  }));
-  return run;
+  // Provider chosen through the createRun seam so ScenarioStarted records it:
+  // this run's ledger is exported below, and import validation reconciles
+  // file metadata against the ScenarioStarted payload (re-audit finding 2.1).
+  return createRun('A', {
+    provider: new SimulatedAsyncProvider(new DeterministicProvider(), () => ({
+      delayTicks: null,
+    })),
+  });
 }
 
 function stepTo(run: EngineRun, tick: number): void {
@@ -130,7 +133,7 @@ describe('actions interrupted mid-transit produce importable ledgers (review: li
           requestId: pending.requestId,
           npcId: 'mara',
           scenarioId: 'A',
-          providerId: 'external-test',
+          providerId: pending.providerId,
           selectedAffordanceId: routine.id,
           confidenceBp: 5_000,
           reasonCode: 'external-test',
@@ -201,7 +204,7 @@ describe('provisional bridge actions stay preemptible (review: non-interruptible
       requestId: pendingNow!.requestId,
       npcId: 'rin',
       scenarioId: 'A',
-      providerId: 'external-test',
+      providerId: pendingNow!.providerId,
       selectedAffordanceId: selected!.id,
       confidenceBp: 9_000,
       reasonCode: 'external-test',

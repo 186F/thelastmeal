@@ -144,8 +144,11 @@ Main thread: Three.js renderer + DOM inspectors (read-only)
 - The browser worker (`src/worker/simWorker.ts`) and the Node runner both drive the
   same `SimulationHost` through the same command semantics
   (`src/worker/commandProcessor.ts`), which is covered by an explicit command-parity
-  test. Scenarios, providers, event definitions, the reducer, replay, and hashing are
-  literally the same modules in both hosts.
+  test over **all seven scenarios** (world hash, ledger hash, complete canonical
+  stream, final summary, with real pause/resume markers mirrored on both paths)
+  plus a deferred-provider parity case (re-audit finding 4). Scenarios, providers,
+  event definitions, the reducer, replay, and hashing are literally the same
+  modules in both hosts.
 - Canonical state mutates in exactly one place: the event reducer
   (`src/sim/events/reduce.ts`). The engine emits typed events; replay folds the same
   reducer over the recorded ledger, which is why replay is exact.
@@ -170,21 +173,34 @@ Main thread: Three.js renderer + DOM inspectors (read-only)
   (memories by content + appraisal, transfer requests by parties, actions by
   mode/target/timing). Two decision sources producing the same consequential
   world get the same `worldStateHash` even if their diagnostics or emitted
-  event counts differ. `canonicalLedgerHash` covers the complete canonical
+  event counts differ. `worldStateHash` is **terminal-only by contract**
+  (re-audit finding 3): hashing a nonterminal state throws, because live
+  pending-decision transport (authorized provider, response-deduplication
+  history, the stored dependency fingerprint) is deliberately outside the
+  projection; a live decision-state fingerprint will be built when a consumer
+  exists. `canonicalLedgerHash` covers the complete canonical
   event stream (IDs, types, ticks, actors, targets, causation, correlation,
   exact payloads) with pause/resume markers and raw `seq` excluded — canonical
   event IDs come from a marker-independent counter, so they are the
   pause-invariant ordering witness. Diagnostics DO affect the ledger hash
   (they are audit history); they never affect the world hash.
-- **Import is all-or-nothing** (remediation 3): exact per-event payload
-  schemas (`src/sim/events/eventSchemas.ts`), ordering/reference integrity
-  (causation, correlation, action and decision lifecycle references), a full
-  isolated replay, structural invariants, and recomputation of both hashes and
-  every summary field — all before a file is accepted. Scenario expectation
-  codes are reported as warnings, not rejections (a genuine ledger from a
-  different provider may legitimately differ behaviorally). This proves
-  internal consistency, not authorship: a party who recomputes every unsigned
-  field produces an acceptable file; cryptographic signing is out of scope.
+- **Import is all-or-nothing** (remediation 3; semantic cross-checks added by
+  re-audit finding 2): exact per-event payload schemas
+  (`src/sim/events/eventSchemas.ts`), ordering/reference integrity (causation,
+  correlation, action and decision lifecycle references), semantic
+  cross-checks (file metadata reconciled with the ScenarioStarted payload;
+  per-type envelope actor/target reconciled with payload identities; the full
+  decision lifecycle joined accepted/rejected → received → requested with
+  offered-set membership and provider authorization incl. the fallback
+  carve-out; accepted proposals must launch exactly the offered descriptor;
+  `MODE_TO_CATEGORY` agreement), a full isolated replay, structural
+  invariants, and recomputation of both hashes and every summary field — all
+  before a file is accepted. Scenario expectation codes are reported as
+  warnings, not rejections (a genuine ledger from a different provider may
+  legitimately differ behaviorally). A forger must now produce a fully
+  lifecycle-coherent file, not merely recompute two hashes — though this still
+  proves internal consistency, not authorship; cryptographic signing is out of
+  scope.
 - A seeded RNG (`src/sim/rng`) is the core's only permitted randomness source. This
   slice's deterministic provider consumes none; any future draw must record its
   outcome as an event to keep replay reducer-only.
@@ -232,7 +248,11 @@ Response arrives (same tick, later tick via the tick-scheduled test
   outcomes are independent of operator tick-batch sizes)
         ↓
 THE acceptance gate (single path for every response):
-  duplicate? unknown/superseded request? expired? unoffered affordance?
+  unknown/superseded/already-expired request? wrong NPC/scenario?
+  UNAUTHORIZED PROVIDER? (response.providerId must be the provider the
+    request named; the engine-owned fallback is the one explicit,
+    non-spoofable exception — re-audit finding 1)
+  duplicate? expired? unoffered affordance?
   hard dependency fingerprint changed? provider-independent constraints?
   actor busy/non-interruptible/in transit? action still valid?
         ↓
@@ -258,7 +278,12 @@ DecisionResponseAccepted (may preempt only an interruptible action)
 - A new decision opportunity **supersedes** an outstanding request; unanswered
   requests **expire** after 60 ticks (`DECISION_REQUEST_TTL_TICKS`) or at
   scenario end. Every transition is a typed event, so pending-request state is
-  fully replayable.
+  fully replayable. An engine-owned **resolved-request registry** (re-audit
+  finding 5) keeps requestId → accepted/expired/superseded, so a late response
+  to ANY past request is rejected with its true reason (`superseded-request`,
+  `response-expired`) instead of collapsing to `unknown-request`; the registry
+  is a pure projection of the event stream (`rebuildResolvedRequests`), never
+  canonical state.
 - Run `npx vitest run tests/integration/async-lifecycle.test.ts` for the
   simulated asynchronous suite (responses after 1/5/30 ticks, never, duplicated,
   out of order, unoffered, across world changes — all scheduled by logical

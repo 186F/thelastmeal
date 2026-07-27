@@ -93,10 +93,13 @@ export interface DecisionResponse {
   scores: DecisionResponseScoreRecord[];
 }
 
-/** Structured response-rejection reasons (remediation 1, section 5.6). */
+/** Structured response-rejection reasons (remediation 1, section 5.6;
+ * `provider-mismatch` added by re-audit finding 1: a response must come from
+ * the decision authority named by its request). */
 export const DECISION_REJECTION_REASONS = [
   'duplicate-response',
   'unknown-request',
+  'provider-mismatch',
   'superseded-request',
   'response-expired',
   'unoffered-affordance',

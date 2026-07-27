@@ -1,6 +1,9 @@
 import { ledgerFileSchema, type LedgerFile } from '../../shared/ledgerFile';
+import type { EventEnvelope } from '../../shared/events';
+import { MODE_TO_CATEGORY, type ActionCategory, type ActionMode } from '../../shared/ids';
 import type { ValidationIssue } from '../../shared/validation';
 import { CONFIG_VERSION, EXPERIMENT_ID, SCHEMA_VERSION } from '../../shared/versions';
+import { FALLBACK_PROVIDER_ID } from '../decisions/fallbackProvider';
 import { validateEventExact } from '../events/eventSchemas';
 import { checkScenarioExpectations, checkStructuralInvariants } from '../invariants';
 import { buildFinalSummary } from '../reporting';
@@ -18,21 +21,30 @@ import { replayLedger } from './replay';
  *   4. ordering and reference integrity (sequence, ID counters, ticks,
  *      start/end framing, causation/correlation, action and decision
  *      lifecycle references)
- *   5. isolated reducer replay into a fresh state (a reducer throw is an
+ *   5. semantic cross-checks (re-audit finding 2): file metadata reconciled
+ *      with the ScenarioStarted payload; per-type envelope actor/target
+ *      reconciled with payload identities; the full decision lifecycle
+ *      joined (accepted/rejected -> received -> requested: existence,
+ *      field agreement, offered-set membership, provider authorization with
+ *      the engine-owned fallback carve-out); accepted -> ActionProposed
+ *      descriptor equality with the original offer; MODE_TO_CATEGORY
+ *      agreement everywhere a mode/category pair appears
+ *   6. isolated reducer replay into a fresh state (a reducer throw is an
  *      import error here, never a later replay surprise)
- *   6. structural invariants on the replayed result (scenario EXPECTATION
+ *   7. structural invariants on the replayed result (scenario EXPECTATION
  *      codes are reported as warnings — a genuine ledger from a different
  *      provider may legitimately differ behaviorally without being corrupt)
- *   7. recomputed semantic world-state hash vs file + ScenarioEnded payload
- *   8. recomputed canonical ledger hash vs file
- *   9. final summary rebuilt from the replayed state vs file, field by field
+ *   8. recomputed semantic world-state hash vs file + ScenarioEnded payload
+ *   9. recomputed canonical ledger hash vs file
+ *  10. final summary rebuilt from the replayed state vs file, field by field
  *
  * Failures carry forensic detail (event ID, computed vs expected values,
  * reducer message) so a rejected import localizes its own divergence.
  *
  * Tamper-model limitation (documented): this proves INTERNAL CONSISTENCY,
  * not authorship. A party who recomputes every unsigned field produces a
- * file this validator accepts; cryptographic signing is outside this task.
+ * file this validator accepts ONLY if the file is fully lifecycle-coherent;
+ * cryptographic signing is outside this task.
  */
 
 export interface LedgerValidation {
@@ -123,7 +135,11 @@ export function validateLedgerFile(text: string): LedgerValidation {
   validateOrderingAndReferences(file, err);
   if (failed()) return { ok: false, issues, file: null };
 
-  // 5. Isolated replay. The replay builds its own fresh initial state from
+  // 5. Semantic cross-checks (re-audit finding 2).
+  validateSemanticConsistency(file, err);
+  if (failed()) return { ok: false, issues, file: null };
+
+  // 6. Isolated replay. The replay builds its own fresh initial state from
   // the local scenario definition; nothing here can touch a live run.
   let replayed: ReturnType<typeof replayLedger>;
   try {
@@ -136,7 +152,7 @@ export function validateLedgerFile(text: string): LedgerValidation {
     return { ok: false, issues, file: null };
   }
 
-  // 6. Invariants on the replayed result: structural codes are errors,
+  // 7. Invariants on the replayed result: structural codes are errors,
   // scenario expectation codes are warnings.
   for (const violation of checkStructuralInvariants(file.events, replayed.state)) {
     err('structural-invariant-violated', violation);
@@ -147,7 +163,7 @@ export function validateLedgerFile(text: string): LedgerValidation {
     }
   }
 
-  // 7. Semantic world-state hash: recomputed from the replayed state, and
+  // 8. Semantic world-state hash: recomputed from the replayed state, and
   // cross-checked against both the file metadata and the ScenarioEnded
   // payload.
   if (replayed.worldStateHash !== file.worldStateHash) {
@@ -166,7 +182,7 @@ export function validateLedgerFile(text: string): LedgerValidation {
     );
   }
 
-  // 8. Canonical ledger hash recomputed from the events themselves.
+  // 9. Canonical ledger hash recomputed from the events themselves.
   const recomputedLedgerHash = canonicalLedgerHash(file.events);
   if (recomputedLedgerHash !== file.canonicalLedgerHash) {
     err(
@@ -175,7 +191,7 @@ export function validateLedgerFile(text: string): LedgerValidation {
     );
   }
 
-  // 9. Final summary rebuilt from the replayed state, field by field.
+  // 10. Final summary rebuilt from the replayed state, field by field.
   try {
     const rebuilt = buildFinalSummary(replayed.state, file.events);
     const recorded = file.finalSummary as unknown as Record<string, unknown>;
@@ -409,5 +425,476 @@ function validateOrderingAndReferences(
       'event-count-mismatch',
       `finalSummary.eventCount ${file.finalSummary.eventCount} != events.length ${file.events.length}`,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 5: semantic cross-checks (re-audit finding 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-type envelope expectations: which payload field the engine copies into
+ * actorId/targetId at emit time. `actorId === null` is tolerated everywhere —
+ * scripted/world-originated events (injury, scripted removal and release)
+ * legitimately carry a null actor — and a null targetId is likewise
+ * tolerated, so the checks catch SWAPPED or fabricated identities without
+ * ever rejecting genuine engine output. Events whose payload carries `npcId`
+ * are already covered by the generic actor==npcId rule in step 4; this table
+ * covers exactly the families that carry no `npcId`.
+ */
+const ENVELOPE_EXPECTATIONS: Record<
+  string,
+  (p: Record<string, unknown>) => { actor?: unknown; target?: unknown }
+> = {
+  TreatmentStarted: (p) => ({ actor: p.healerId, target: p.patientId }),
+  TreatmentCompleted: (p) => ({ actor: p.healerId, target: p.patientId }),
+  ResourceReserved: (p) => ({ actor: p.holderNpcId, target: p.resourceId }),
+  ReservationReleased: (p) => ({ actor: p.previousHolderNpcId, target: p.resourceId }),
+  ResourceRemoved: (p) => ({ target: p.resourceId }),
+  MealConsumed: (p) => ({ actor: p.npcId, target: p.resourceId }),
+  OwnershipViolated: (p) => ({ actor: p.actorId, target: p.ownerNpcId }),
+  ReservationTransferRequested: (p) => ({ actor: p.requesterNpcId, target: p.ownerNpcId }),
+  ReservationTransferred: (p) => ({ actor: p.fromNpcId, target: p.toNpcId }),
+  ReservationTransferRefused: (p) => ({ actor: p.ownerNpcId, target: p.requesterNpcId }),
+  CommitmentCreated: (p) => ({ actor: p.debtorId, target: p.creditorId }),
+  CommitmentRenegotiationProposed: (p) => ({ actor: p.proposedByNpcId, target: p.commitmentId }),
+  CommitmentRenegotiationAccepted: (p) => ({ actor: p.acceptedByNpcId, target: p.commitmentId }),
+  CommitmentRenegotiationRejected: (p) => ({ actor: p.rejectedByNpcId, target: p.commitmentId }),
+  // CommitmentFulfilled/Broken carry no NPC payload field (the actor is the
+  // debtor from state), so only the commitment target is checkable.
+  CommitmentFulfilled: (p) => ({ target: p.commitmentId }),
+  CommitmentBroken: (p) => ({ target: p.commitmentId }),
+  RelationshipChanged: (p) => ({ actor: p.fromNpcId, target: p.toNpcId }),
+  HelpRequested: (p) => ({ actor: p.fromNpcId, target: p.toNpcId }),
+  // ReliefRequested is emitted with a null envelope target by design.
+  ReliefRequested: (p) => ({ actor: p.fromNpcId }),
+  TaskCompleted: (p) => ({ target: p.taskId }),
+  TaskDeadlineMissed: (p) => ({ target: p.taskId }),
+  PerceptionRecorded: (p) => ({ actor: p.npcId, target: p.sourceEventId }),
+};
+
+interface RequestRecord {
+  npcId: unknown;
+  providerId: unknown;
+  offeredIds: Set<string>;
+  offeredById: Map<string, Record<string, unknown>>;
+}
+
+interface ReceivedRecord {
+  responseId: unknown;
+  requestId: unknown;
+  npcId: unknown;
+  providerId: unknown;
+  selectedAffordanceId: unknown;
+  confidenceBp: unknown;
+  reasonCode: unknown;
+}
+
+/** Offer field -> ActionProposed descriptor field, for the exact-descriptor
+ * join (the descriptor renames three fields and drops the transient ones). */
+const OFFER_TO_DESCRIPTOR: ReadonlyArray<[string, string]> = [
+  ['id', 'affordanceId'],
+  ['actorId', 'npcId'],
+  ['category', 'category'],
+  ['mode', 'mode'],
+  ['targetNpcId', 'targetNpcId'],
+  ['targetResourceId', 'targetResourceId'],
+  ['requiredLocationId', 'locationId'],
+  ['durationTicks', 'durationTicks'],
+  ['stateVersion', 'stateVersion'],
+  ['interruptible', 'interruptible'],
+  ['violation', 'violation'],
+  ['commitmentId', 'commitmentId'],
+  ['proposalId', 'proposalId'],
+  ['requestId', 'requestId'],
+];
+
+function termsEqual(a: unknown, b: unknown): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  const ta = a as Record<string, unknown>;
+  const tb = b as Record<string, unknown>;
+  return (
+    ta.startTick === tb.startTick &&
+    ta.graceTick === tb.graceTick &&
+    ta.minDurationTicks === tb.minDurationTicks
+  );
+}
+
+function checkModeCategory(
+  event: EventEnvelope,
+  mode: unknown,
+  category: unknown,
+  err: (code: string, message: string, where?: string | null) => void,
+): void {
+  if (typeof mode !== 'string' || typeof category !== 'string') return;
+  if (MODE_TO_CATEGORY[mode as ActionMode] !== (category as ActionCategory)) {
+    err(
+      'mode-category-mismatch',
+      `${event.type} ${event.id} pairs mode ${mode} with category ${category}, expected ${String(
+        MODE_TO_CATEGORY[mode as ActionMode],
+      )}`,
+    );
+  }
+}
+
+function validateSemanticConsistency(
+  file: LedgerFile,
+  err: (code: string, message: string, where?: string | null) => void,
+): void {
+  // 5a. File metadata must agree with the ScenarioStarted payload: the file
+  // envelope and the first event independently record scenario identity,
+  // version, seed, config version, and provider — a coherent file cannot
+  // claim one thing in its envelope and another in its opening event.
+  const started = file.events[0];
+  if (started && started.type === 'ScenarioStarted') {
+    const p = started.payload as Record<string, unknown>;
+    const checks: ReadonlyArray<[string, unknown, unknown]> = [
+      ['scenarioId', p.scenarioId, file.scenario.id],
+      ['scenarioVersion', p.scenarioVersion, file.scenario.version],
+      ['seed', p.seed, file.scenario.seed],
+      ['configVersion', p.configVersion, file.scenario.configVersion],
+      ['providerId', p.providerId, file.providerId],
+    ];
+    for (const [field, inEvent, inFile] of checks) {
+      if (inEvent !== inFile) {
+        err(
+          'scenario-started-metadata-mismatch',
+          `ScenarioStarted.${field} ${String(inEvent)} != file metadata ${String(inFile)}`,
+          started.id,
+        );
+      }
+    }
+  }
+
+  const requestsById = new Map<string, RequestRecord>();
+  const receivedByEventId = new Map<string, ReceivedRecord>();
+  const acceptedByEventId = new Map<string, { requestId: string; selectedAffordanceId: string }>();
+  const fallbackUsedByEventId = new Map<
+    string,
+    { npcId: unknown; requestId: string; affordanceId: unknown; reasonCode: string }
+  >();
+  const fallbackLicensedRequestIds = new Set<string>();
+  const proposalsByActionId = new Map<string, Record<string, unknown>>();
+
+  for (const event of file.events) {
+    const payload = event.payload as Record<string, unknown>;
+
+    // 5b. Envelope actor/target vs payload identities, per event type.
+    const expectation = ENVELOPE_EXPECTATIONS[event.type];
+    if (expectation) {
+      const expected = expectation(payload);
+      if (
+        expected.actor !== undefined &&
+        event.actorId !== null &&
+        event.actorId !== expected.actor
+      ) {
+        err(
+          'actor-payload-mismatch',
+          `${event.type} ${event.id} actorId ${event.actorId} != payload identity ${String(expected.actor)}`,
+        );
+      }
+      if (
+        expected.target !== undefined &&
+        event.targetId !== null &&
+        event.targetId !== expected.target
+      ) {
+        err(
+          'target-payload-mismatch',
+          `${event.type} ${event.id} targetId ${event.targetId} != payload identity ${String(expected.target)}`,
+        );
+      }
+    }
+
+    // 5c. Decision lifecycle join.
+    switch (event.type) {
+      case 'DecisionRequested': {
+        const offered = (payload.offeredAffordances as Record<string, unknown>[]) ?? [];
+        const declaredIds = (payload.affordanceIds as string[]) ?? [];
+        const offeredIds = offered.map((a) => a.id as string);
+        if (
+          declaredIds.length !== offeredIds.length ||
+          declaredIds.some((id, i) => id !== offeredIds[i])
+        ) {
+          err(
+            'request-offer-id-divergence',
+            `DecisionRequested ${event.id} affordanceIds do not match offeredAffordances[].id`,
+          );
+        }
+        for (const offer of offered) {
+          checkModeCategory(event, offer.mode, offer.category, err);
+        }
+        requestsById.set(payload.requestId as string, {
+          npcId: payload.npcId,
+          providerId: payload.providerId,
+          offeredIds: new Set(offeredIds),
+          offeredById: new Map(offered.map((a) => [a.id as string, a])),
+        });
+        break;
+      }
+      case 'DecisionResponseReceived': {
+        receivedByEventId.set(event.id, {
+          responseId: payload.responseId,
+          requestId: payload.requestId,
+          npcId: payload.npcId,
+          providerId: payload.providerId,
+          selectedAffordanceId: payload.selectedAffordanceId,
+          confidenceBp: payload.confidenceBp,
+          reasonCode: payload.reasonCode,
+        });
+        break;
+      }
+      case 'DecisionResponseAccepted': {
+        const received = event.causationId ? receivedByEventId.get(event.causationId) : undefined;
+        if (!received) {
+          err(
+            'accepted-without-received',
+            `DecisionResponseAccepted ${event.id} is not caused by a DecisionResponseReceived event`,
+          );
+          break;
+        }
+        if (
+          received.responseId !== payload.responseId ||
+          received.requestId !== payload.requestId ||
+          received.npcId !== payload.npcId ||
+          received.selectedAffordanceId !== payload.selectedAffordanceId ||
+          received.confidenceBp !== payload.confidenceBp ||
+          received.reasonCode !== payload.reasonCode
+        ) {
+          err(
+            'accepted-received-divergence',
+            `DecisionResponseAccepted ${event.id} disagrees with its DecisionResponseReceived record`,
+          );
+        }
+        // A fallback acceptance must be licensed by an earlier
+        // FallbackDecisionUsed for the same request: the engine always emits
+        // that event before routing the fallback response through the gate,
+        // so a forged usedFallback flag (even paired with a forged fallback
+        // providerId on the Received record) cannot launder provenance.
+        if (
+          (payload.usedFallback as boolean) &&
+          !fallbackLicensedRequestIds.has(payload.requestId as string)
+        ) {
+          err(
+            'fallback-acceptance-unlicensed',
+            `DecisionResponseAccepted ${event.id} claims usedFallback but no FallbackDecisionUsed precedes it for request ${String(payload.requestId)}`,
+          );
+        }
+        const request = requestsById.get(payload.requestId as string);
+        if (request) {
+          if (request.npcId !== payload.npcId) {
+            err(
+              'accepted-received-divergence',
+              `DecisionResponseAccepted ${event.id} npcId ${String(payload.npcId)} != request npcId ${String(request.npcId)}`,
+            );
+          }
+          if (!request.offeredIds.has(payload.selectedAffordanceId as string)) {
+            err(
+              'accepted-unoffered-affordance',
+              `DecisionResponseAccepted ${event.id} selects ${String(payload.selectedAffordanceId)}, which its request never offered`,
+            );
+          }
+          // Provider authorization, mirroring the runtime gate (re-audit
+          // finding 1): a normal acceptance must come from the provider the
+          // request named; a fallback acceptance must come from the
+          // engine-owned fallback. Rejected responses are exempt — recording
+          // an unauthorized response and rejecting it is exactly what the
+          // gate does at runtime.
+          const authorized = (payload.usedFallback as boolean)
+            ? received.providerId === FALLBACK_PROVIDER_ID
+            : received.providerId === request.providerId;
+          if (!authorized) {
+            err(
+              'accepted-provider-mismatch',
+              `DecisionResponseAccepted ${event.id} accepted a response from ${String(received.providerId)}; request named ${String(request.providerId)}${(payload.usedFallback as boolean) ? ` (fallback must be ${FALLBACK_PROVIDER_ID})` : ''}`,
+            );
+          }
+        }
+        acceptedByEventId.set(event.id, {
+          requestId: payload.requestId as string,
+          selectedAffordanceId: payload.selectedAffordanceId as string,
+        });
+        break;
+      }
+      case 'DecisionResponseRejected': {
+        const received = event.causationId ? receivedByEventId.get(event.causationId) : undefined;
+        if (!received) {
+          err(
+            'rejected-without-received',
+            `DecisionResponseRejected ${event.id} is not caused by a DecisionResponseReceived event`,
+          );
+          break;
+        }
+        if (
+          received.responseId !== payload.responseId ||
+          received.requestId !== payload.requestId ||
+          received.npcId !== payload.npcId
+        ) {
+          err(
+            'rejected-received-divergence',
+            `DecisionResponseRejected ${event.id} disagrees with its DecisionResponseReceived record`,
+          );
+        }
+        break;
+      }
+      case 'FallbackDecisionUsed': {
+        fallbackUsedByEventId.set(event.id, {
+          npcId: payload.npcId,
+          requestId: payload.requestId as string,
+          affordanceId: payload.affordanceId,
+          reasonCode: payload.reasonCode as string,
+        });
+        fallbackLicensedRequestIds.add(payload.requestId as string);
+        break;
+      }
+      case 'ActionProposed': {
+        checkModeCategory(event, payload.mode, payload.category, err);
+        // Every genuine proposal is caused by exactly one of two events, and
+        // BOTH arms are authenticated (a forger cannot disable the descriptor
+        // join by re-pointing causationId):
+        //  - a DecisionResponseAccepted: the proposal must launch EXACTLY the
+        //    offered descriptor the acceptance selected;
+        //  - a provisional FallbackDecisionUsed (reasonCode 'provisional:*'):
+        //    the proposal must launch the fallback-selected offer verbatim
+        //    EXCEPT interruptible, which the engine forces to true so the
+        //    bridged request stays honourable.
+        const accepted = event.causationId ? acceptedByEventId.get(event.causationId) : undefined;
+        const fallbackUsed = event.causationId
+          ? fallbackUsedByEventId.get(event.causationId)
+          : undefined;
+        if (accepted) {
+          if (payload.affordanceId !== accepted.selectedAffordanceId) {
+            err(
+              'proposal-descriptor-divergence',
+              `ActionProposed ${event.id} launches ${String(payload.affordanceId)} but its acceptance selected ${accepted.selectedAffordanceId}`,
+            );
+            break;
+          }
+          const offer = requestsById
+            .get(accepted.requestId)
+            ?.offeredById.get(accepted.selectedAffordanceId);
+          if (offer) {
+            for (const [offerField, descriptorField] of OFFER_TO_DESCRIPTOR) {
+              if (offer[offerField] !== payload[descriptorField]) {
+                err(
+                  'proposal-descriptor-divergence',
+                  `ActionProposed ${event.id} ${descriptorField} ${String(payload[descriptorField])} != offered ${String(offer[offerField])}`,
+                );
+              }
+            }
+            if (!termsEqual(offer.proposedTerms ?? null, payload.proposedTerms ?? null)) {
+              err(
+                'proposal-descriptor-divergence',
+                `ActionProposed ${event.id} proposedTerms differ from the offered descriptor`,
+              );
+            }
+          }
+        } else if (fallbackUsed) {
+          if (
+            !fallbackUsed.reasonCode.startsWith('provisional:') ||
+            fallbackUsed.npcId !== payload.npcId
+          ) {
+            err(
+              'proposal-cause-invalid',
+              `ActionProposed ${event.id} is caused by a non-provisional or foreign FallbackDecisionUsed`,
+            );
+            break;
+          }
+          if (payload.affordanceId !== fallbackUsed.affordanceId) {
+            err(
+              'proposal-descriptor-divergence',
+              `ActionProposed ${event.id} launches ${String(payload.affordanceId)} but the provisional fallback selected ${String(fallbackUsed.affordanceId)}`,
+            );
+            break;
+          }
+          const offer = requestsById
+            .get(fallbackUsed.requestId)
+            ?.offeredById.get(fallbackUsed.affordanceId as string);
+          if (offer) {
+            for (const [offerField, descriptorField] of OFFER_TO_DESCRIPTOR) {
+              if (descriptorField === 'interruptible') continue;
+              if (offer[offerField] !== payload[descriptorField]) {
+                err(
+                  'proposal-descriptor-divergence',
+                  `ActionProposed ${event.id} ${descriptorField} ${String(payload[descriptorField])} != provisionally offered ${String(offer[offerField])}`,
+                );
+              }
+            }
+            if (payload.interruptible !== true) {
+              err(
+                'proposal-descriptor-divergence',
+                `ActionProposed ${event.id} provisional bridge must be interruptible`,
+              );
+            }
+            if (!termsEqual(offer.proposedTerms ?? null, payload.proposedTerms ?? null)) {
+              err(
+                'proposal-descriptor-divergence',
+                `ActionProposed ${event.id} proposedTerms differ from the provisionally offered descriptor`,
+              );
+            }
+          }
+        } else {
+          err(
+            'proposal-cause-invalid',
+            `ActionProposed ${event.id} is caused by neither a DecisionResponseAccepted nor a FallbackDecisionUsed`,
+          );
+        }
+        proposalsByActionId.set(payload.actionId as string, payload);
+        break;
+      }
+      case 'ActionStarted': {
+        checkModeCategory(event, payload.mode, payload.category, err);
+        // The reducer installs currentAction from the ActionStarted payload,
+        // not from the earlier proposal — so the start must repeat the
+        // proposed descriptor byte-for-byte (completesAtTick is derived and
+        // excluded). Scripted tick-0 starts have no proposal by design;
+        // non-scripted starts without one are already errors in step 4.
+        const proposal = proposalsByActionId.get(payload.actionId as string);
+        if (proposal) {
+          for (const [, descriptorField] of OFFER_TO_DESCRIPTOR) {
+            if (descriptorField === 'affordanceId') continue;
+            if (proposal[descriptorField] !== payload[descriptorField]) {
+              err(
+                'start-descriptor-divergence',
+                `ActionStarted ${event.id} ${descriptorField} ${String(payload[descriptorField])} != proposed ${String(proposal[descriptorField])}`,
+              );
+            }
+          }
+          if (proposal.affordanceId !== payload.affordanceId) {
+            err(
+              'start-descriptor-divergence',
+              `ActionStarted ${event.id} affordanceId ${String(payload.affordanceId)} != proposed ${String(proposal.affordanceId)}`,
+            );
+          }
+          if (!termsEqual(proposal.proposedTerms ?? null, payload.proposedTerms ?? null)) {
+            err(
+              'start-descriptor-divergence',
+              `ActionStarted ${event.id} proposedTerms differ from the proposal`,
+            );
+          }
+        }
+        break;
+      }
+      case 'ActionCompleted':
+      case 'ActionRejected':
+      case 'ActionInterrupted': {
+        checkModeCategory(event, payload.mode, payload.category, err);
+        break;
+      }
+      case 'ScenarioEnded': {
+        // The recorded outcome must agree with the file's summary (the
+        // summary itself is later rebuilt field-by-field from the replayed
+        // state, so this transitively pins payload == replay == summary).
+        if (payload.taskOutcome !== file.finalSummary.taskOutcome) {
+          err(
+            'scenario-ended-outcome-mismatch',
+            `ScenarioEnded.taskOutcome ${String(payload.taskOutcome)} != finalSummary.taskOutcome ${file.finalSummary.taskOutcome}`,
+          );
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
 }

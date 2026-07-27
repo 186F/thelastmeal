@@ -202,6 +202,25 @@ function projectActionCore(action: PendingActionState): Record<string, unknown> 
   };
 }
 
+/**
+ * TERMINAL-ONLY CONTRACT (re-audit finding 3): `worldStateHash` is defined
+ * for completed runs only. Live states with a pending decision hold
+ * behaviorally relevant data the projection deliberately omits (authorized
+ * provider, response-deduplication history, the stored hard-dependency
+ * fingerprint), so hashing a nonterminal state could equate two states that
+ * react differently to the same future response. Every production caller
+ * hashes a terminal state (endScenario hashes a provisional terminal clone
+ * AFTER force-expiring all pending requests; replay folds a complete ledger
+ * whose ScenarioEnded sets the flag), so the guard costs nothing and makes
+ * the contract explicit. A live decision-state fingerprint is deliberately
+ * NOT built until a consumer (policy cache, shadow sim, mid-run snapshot
+ * equivalence) exists; it would have to cover providerId, responseIdsSeen,
+ * and hardDependencyFingerprint. `buildWorldStateHashProjection` stays
+ * unguarded for diagnostics.
+ */
 export function worldStateHash(state: CanonicalState): string {
+  if (!state.terminal) {
+    throw new Error('world-state-hash-requires-terminal-state');
+  }
   return fnv1a64Hex(canonicalSerialize(buildWorldStateHashProjection(state)));
 }

@@ -45,7 +45,9 @@ function inject(
     requestId: overrides.requestId ?? pending?.requestId ?? 'dec-0000',
     npcId,
     scenarioId: run.state.scenarioId,
-    providerId: 'external-test-gateway',
+    // Provider binding (re-audit finding 1): injected responses must carry
+    // the authorized provider's ID or the gate rejects them up front.
+    providerId: pending?.providerId ?? 'external-test-gateway',
     selectedAffordanceId:
       overrides.selectedAffordanceId ??
       fallbackAffordance?.id ??
@@ -155,11 +157,12 @@ describe('the single acceptance gate (injected responses)', () => {
     );
     expect(expired).toHaveLength(1);
     expect((expired[0]!.payload as { reasonCode: string }).reasonCode).toBe('ttl-expired');
-    // A late response to the dead request is rejected as unknown.
+    // A late response to the dead request reports its true reason via the
+    // resolved-request registry (re-audit finding 5).
     const response = inject(run, 'mara', { requestId, responseId: 'late-1' });
     stepTick(run);
     expect(response.responseId).toBe('late-1');
-    expect(rejectionsFor(run, 'late-1')).toEqual(['unknown-request']);
+    expect(rejectionsFor(run, 'late-1')).toEqual(['response-expired']);
   });
 
   it('rejects a response to a superseded request as superseded-request', () => {

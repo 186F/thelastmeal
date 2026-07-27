@@ -33,7 +33,10 @@ function inject(run: EngineRun, npcId: NpcId, selectedAffordanceId: string, id: 
     requestId: pending.requestId,
     npcId,
     scenarioId: run.state.scenarioId,
-    providerId: 'hostile-provider',
+    // The hostile SELECTION is what these tests exercise; the provider label
+    // must be the authorized one or provider binding rejects it first
+    // (re-audit finding 1 — that path has its own tests).
+    providerId: pending.providerId,
     selectedAffordanceId,
     confidenceBp: 10_000,
     reasonCode: 'hostile',

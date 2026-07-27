@@ -140,8 +140,10 @@ export interface NpcState {
   needsReevaluation: boolean;
   /** The currently pending decision request, if any (remediation 1). */
   pendingDecision: PendingDecisionState | null;
-  /** Most recently superseded request ID, kept so a late response to it can
-   * be rejected as 'superseded-request' rather than 'unknown-request'. */
+  /** Most recently superseded request ID. Replayable diagnostic only: the
+   * acceptance gate classifies late responses through the engine-owned
+   * resolved-request registry (re-audit finding 5), which covers ALL
+   * superseded/expired requests, not just the most recent. */
   lastSupersededRequestId: string | null;
   /** After a refused meal-transfer request, suppress re-requests until this tick. */
   requestCooldownUntilTick: number;

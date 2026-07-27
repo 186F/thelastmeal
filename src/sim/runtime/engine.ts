@@ -102,10 +102,88 @@ export interface EngineRun {
    * network; the worker exposes them as diagnostics-only messages.
    */
   externalRequests: DecisionRequest[];
+  /**
+   * Engine-owned resolved-request registry (re-audit finding 5): requestId ->
+   * how and when the request was resolved, so a late response to ANY
+   * superseded or expired request is rejected with its true reason instead of
+   * collapsing to `unknown-request`. Deliberately NOT canonical state: replay
+   * never runs the acceptance gate (rejection reasons are already baked into
+   * recorded DecisionResponseRejected events), and the map is a pure
+   * projection of the event stream — see rebuildResolvedRequests.
+   */
+  resolvedRequests: Map<string, ResolvedRequestRecord>;
 }
 
-export function createRun(scenarioId: ScenarioId): EngineRun {
-  return createRunWithRoles(getScenario(scenarioId), V1_ROLES);
+export type DecisionRequestResolution = 'accepted' | 'expired' | 'superseded';
+
+export interface ResolvedRequestRecord {
+  resolution: DecisionRequestResolution;
+  tick: number;
+}
+
+/**
+ * Retention bound for the resolved-request registry: far above any frozen
+ * run's total request count (~150), so it exists only as a safety valve for
+ * long-lived future runs. Pruning is oldest-first in insertion order, which
+ * follows event order — deterministic by construction.
+ */
+const RESOLVED_REQUEST_RETENTION = 512;
+
+function recordResolvedRequest(
+  run: EngineRun,
+  requestId: string,
+  resolution: DecisionRequestResolution,
+  tick: number,
+): void {
+  run.resolvedRequests.set(requestId, { resolution, tick });
+  for (const key of run.resolvedRequests.keys()) {
+    if (run.resolvedRequests.size <= RESOLVED_REQUEST_RETENTION) break;
+    run.resolvedRequests.delete(key);
+  }
+}
+
+/**
+ * Rebuilds the resolved-request registry from the event stream — the proof
+ * that the registry is a replayable projection, and the hook a future
+ * resume-from-ledger path must use to restore it.
+ */
+export function rebuildResolvedRequests(
+  events: readonly SimEvent[],
+): Map<string, ResolvedRequestRecord> {
+  const map = new Map<string, ResolvedRequestRecord>();
+  const record = (requestId: string, resolution: DecisionRequestResolution, tick: number): void => {
+    map.set(requestId, { resolution, tick });
+    for (const key of map.keys()) {
+      if (map.size <= RESOLVED_REQUEST_RETENTION) break;
+      map.delete(key);
+    }
+  };
+  for (const event of events) {
+    if (event.type === 'DecisionResponseAccepted') {
+      record(event.payload.requestId, 'accepted', event.tick);
+    } else if (event.type === 'DecisionRequestExpired') {
+      record(event.payload.requestId, 'expired', event.tick);
+    } else if (event.type === 'DecisionRequestSuperseded') {
+      record(event.payload.requestId, 'superseded', event.tick);
+    }
+  }
+  return map;
+}
+
+export interface CreateRunOptions {
+  /**
+   * Explicit decision provider, recorded in ScenarioStarted and every
+   * DecisionRequested payload. Test/eval seam: choosing the provider BEFORE
+   * the first event keeps exported ledgers internally consistent (file
+   * metadata == ScenarioStarted payload; re-audit finding 2.1). When given it
+   * replaces the scenario's default wiring including the scripted-failure
+   * wrapper.
+   */
+  provider?: DecisionProvider;
+}
+
+export function createRun(scenarioId: ScenarioId, options?: CreateRunOptions): EngineRun {
+  return createRunWithRoles(getScenario(scenarioId), V1_ROLES, options);
 }
 
 /**
@@ -113,14 +191,19 @@ export function createRun(scenarioId: ScenarioId): EngineRun {
  * (remediation 7). Every v1.0 path calls createRun, which fixes V1_ROLES;
  * with the default assignment this function reproduces v1.0 byte-exactly.
  */
-export function createRunWithRoles(scenario: ScenarioDefinition, roles: RoleAssignment): EngineRun {
+export function createRunWithRoles(
+  scenario: ScenarioDefinition,
+  roles: RoleAssignment,
+  options?: CreateRunOptions,
+): EngineRun {
   assertValidRoles(roles);
   const state = buildInitialState(scenario, roles);
   const base = new DeterministicProvider();
   const provider =
-    scenario.providerFailureFromTick !== null
+    options?.provider ??
+    (scenario.providerFailureFromTick !== null
       ? new ScriptedFailureProvider(base, scenario.providerFailureFromTick)
-      : base;
+      : base);
   const run: EngineRun = {
     scenario,
     roles,
@@ -134,6 +217,7 @@ export function createRunWithRoles(scenario: ScenarioDefinition, roles: RoleAssi
     canonicalLedgerHash: null,
     responseInbox: [],
     externalRequests: [],
+    resolvedRequests: new Map(),
   };
   emitScenarioStart(run);
   return run;
@@ -638,13 +722,15 @@ function endScenario(run: EngineRun, tick: number): void {
   for (const npcId of NPC_IDS) {
     const npc = run.state.npcs[npcId];
     if (npc.pendingDecision) {
+      const expiredRequestId = npc.pendingDecision.requestId;
       emit(run, {
         type: 'DecisionRequestExpired',
         tick,
         actorId: npcId,
         targetId: null,
-        payload: { npcId, requestId: npc.pendingDecision.requestId, reasonCode: 'scenario-ended' },
+        payload: { npcId, requestId: expiredRequestId, reasonCode: 'scenario-ended' },
       });
+      recordResolvedRequest(run, expiredRequestId, 'expired', tick);
     }
   }
   for (const npcId of NPC_IDS) {
@@ -730,6 +816,7 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
 
   // A new decision opportunity supersedes any outstanding request for this NPC.
   if (npc.pendingDecision) {
+    const supersededRequestId = npc.pendingDecision.requestId;
     emit(run, {
       type: 'DecisionRequestSuperseded',
       tick,
@@ -737,10 +824,11 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
       targetId: null,
       payload: {
         npcId: npc.id,
-        requestId: npc.pendingDecision.requestId,
+        requestId: supersededRequestId,
         supersededByRequestId: requestId,
       },
     });
+    recordResolvedRequest(run, supersededRequestId, 'superseded', tick);
   }
 
   const fingerprint = hardDependencyFingerprint(run.state, npc.id);
@@ -929,13 +1017,15 @@ function expireDecisionRequests(run: EngineRun, tick: number): void {
     const npc = run.state.npcs[npcId];
     const pending = npc.pendingDecision;
     if (pending && tick > pending.expiresAtTick) {
+      const expiredRequestId = pending.requestId;
       emit(run, {
         type: 'DecisionRequestExpired',
         tick,
         actorId: npcId,
         targetId: null,
-        payload: { npcId, requestId: pending.requestId, reasonCode: 'ttl-expired' },
+        payload: { npcId, requestId: expiredRequestId, reasonCode: 'ttl-expired' },
       });
+      recordResolvedRequest(run, expiredRequestId, 'expired', tick);
     }
   }
 }
@@ -997,12 +1087,32 @@ function processDecisionResponse(
   };
 
   if (!isCurrentRequest) {
-    return reject(
-      npc.lastSupersededRequestId === response.requestId ? 'superseded-request' : 'unknown-request',
-    );
+    // Resolved-request registry (re-audit finding 5): late responses to ANY
+    // superseded or expired request report their true reason. Requests
+    // resolved by acceptance still report unknown-request (the request no
+    // longer exists to answer).
+    const resolved = run.resolvedRequests.get(response.requestId);
+    if (resolved?.resolution === 'superseded') {
+      return reject('superseded-request');
+    }
+    if (resolved?.resolution === 'expired') {
+      return reject('response-expired');
+    }
+    return reject('unknown-request');
   }
   if (response.scenarioId !== run.state.scenarioId || response.npcId !== npc.id) {
     return reject('unknown-request');
+  }
+  // Provider binding (re-audit finding 1): a response must come from the
+  // decision authority the request named. The engine-owned fallback is the
+  // single explicit exception — `usedFallback` is an engine-side argument
+  // that no external payload can set, so the exception is not spoofable, and
+  // a normal response merely labeled with the fallback's ID fails here.
+  const providerAuthorized = usedFallback
+    ? response.providerId === run.fallback.id
+    : response.providerId === pending.providerId;
+  if (!providerAuthorized) {
+    return reject('provider-mismatch');
   }
   if (seenBefore) {
     return reject('duplicate-response');
@@ -1092,6 +1202,7 @@ function processDecisionResponse(
       usedFallback,
     },
   });
+  recordResolvedRequest(run, response.requestId, 'accepted', tick);
 
   if (affordance.continuesActionId !== null) {
     return { accepted: true };
