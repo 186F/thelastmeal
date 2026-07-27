@@ -80,7 +80,12 @@ function selectedProvider(metadata: Record<string, unknown> | null): string | nu
     for (let index = attempts.length - 1; index >= 0; index -= 1) {
       const record = asRecord(attempts[index]);
       const status = nullableInteger(record?.status);
-      if (status !== null && status >= 200 && status < 300 && typeof record?.provider === 'string') {
+      if (
+        status !== null &&
+        status >= 200 &&
+        status < 300 &&
+        typeof record?.provider === 'string'
+      ) {
         return record.provider;
       }
     }
@@ -247,7 +252,12 @@ export class OpenRouterResponsesDecisionAdapter implements ModelDecisionAdapter 
     try {
       choice = JSON.parse(text);
     } catch {
-      throw new AdapterFailure('invalid-model-output', 'structured output is not valid JSON', text, meta);
+      throw new AdapterFailure(
+        'invalid-model-output',
+        'structured output is not valid JSON',
+        text,
+        meta,
+      );
     }
 
     return {
