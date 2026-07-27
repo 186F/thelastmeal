@@ -16,6 +16,11 @@ file.
 
 The release 1.5.0 artifact-integrity work and its CI gates passed — see
 [`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
+The registered live route was subsequently migrated in release 1.6.0 to
+OpenRouter Responses under model experiment version 1.1.0. Formal runs must use
+one exact `OPENROUTER_MODEL`, one exact `OPENROUTER_PROVIDER`, fallbacks disabled,
+and router metadata enabled; see
+[`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
 That release makes version-2 run bundles preserve every exact client request,
 runs the complete ledger validator in both model CLIs, makes `model:finalize`
 strict by default, and adds the keyless three-case rehearsal to the required
@@ -41,13 +46,15 @@ verdict remains PENDING.
 | Operator | PENDING |
 | Repository commit (exact SHA, fixed for the whole sequence) | PENDING |
 | Package version | PENDING |
-| Experiment | `model-backed-npc-001` v `1.0.0` |
+| Experiment | `model-backed-npc-001` v `1.1.0` |
 | Condition | `mara-model-per-decision-v1` |
-| External provider | `openai-mara-action-v1` |
+| External provider | `openrouter-mara-action-v1` |
 | Prompt version | `mara-action-selection-1.0.0` |
-| Requested model (`OPENAI_MODEL`) | PENDING |
+| Requested model (`OPENROUTER_MODEL`) | PENDING |
+| Pinned OpenRouter provider (`OPENROUTER_PROVIDER`) | PENDING |
 | Returned model identifier(s) (from finalized manifests) | PENDING |
 | Gateway settings (timeout / concurrency / per-run budget / total cap) | PENDING |
+| OpenRouter routing (`require_parameters`, fallbacks, provider allowlist) | PENDING |
 | Prompt, model configuration, limits, or code changed mid-sequence? | PENDING (must be "no") |
 
 ---
