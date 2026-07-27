@@ -4,7 +4,7 @@
 **Base commit:** `5c1f755` (`main`, release 1.4.0) — the brief was cherry-picked onto the working branch at `55afa2b`.
 **Branch:** `agent/model-artifact-integrity-1.5.0`
 **Final implementation commit:** `4e903538e39a7474118029cef4c396e4decee346` (tagged `v1.5.0`)
-**Merge commit on `main`:** `<<TO BE FILLED BY ORCHESTRATOR>>`
+**Merge commit on `main`:** `ea89bc32ddccfd8e71892dbc1a26a9c90422492e` (PR #5 merge; the PR head was `8137acebf443d40e7d5a060a443c7df69201803c`, whose parent `4e903538e39a7474118029cef4c396e4decee346` carries all code changes)
 **Package version:** 1.4.0 → **1.5.0**
 **Frozen identifiers (all unchanged):** experiment `Vertical Slice 001 — v1.0`, configuration version `vs001-1.0.0`, model experiment `model-backed-npc-001` v `1.0.0`, condition `mara-model-per-decision-v1`, external provider `openai-mara-action-v1`, prompt version `mara-action-selection-1.0.0`, `SCHEMA_VERSION` 2, ledger format 2, `PROTOCOL_VERSION` 3.
 
@@ -625,9 +625,9 @@ job name is the check-run name and must not change.
 | PR head SHA | `4e903538e39a7474118029cef4c396e4decee346` |
 | PR workflow run ID / URL | `30299183668` — https://github.com/186F/thelastmeal/actions/runs/30299183668 (event: `pull_request`) |
 | PR workflow conclusion | **success** — all 20 steps, 6m10s; `Formal model-bundle tests` 35s and `Keyless formal model-run rehearsal` 5s both executed |
-| Merged-`main` workflow run ID / URL | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| Merged-`main` workflow conclusion | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| `model-rehearsal-report` artifact present on both runs | `<<TO BE FILLED BY ORCHESTRATOR>>` |
+| Merged-`main` workflow run ID / URL | `30300221764` — https://github.com/186F/thelastmeal/actions/runs/30300221764 (event: `push`, head `ea89bc32ddccfd8e71892dbc1a26a9c90422492e`) |
+| Merged-`main` workflow conclusion | **success** — verified on the exact merged SHA, not inferred from local runs |
+| `model-rehearsal-report` artifact present on both runs | **yes** — 15,430 bytes on the PR-head run and present on the merged-`main` run. The upload uses `if-no-files-found: error`, so a path drift would have failed the step rather than uploading an empty artifact (A10) |
 
 ### Branch protection — NOT applied
 
