@@ -4,6 +4,10 @@ import { join } from 'node:path';
 import { computeInfraMetrics } from '../../gateway/metrics/runMetrics';
 import type { ModelTraceEntry } from '../../gateway/tracing/modelTraceWriter';
 import { EXTERNAL_MARA_PROVIDER_ID } from '../../src/shared/modelExperiment';
+import {
+  BUNDLE_MANIFEST_SCHEMA_VERSION,
+  bundleManifestSchema,
+} from '../../src/shared/modelArtifacts';
 import type { LedgerFile } from '../../src/shared/ledgerFile';
 import {
   buildMaraPersistenceStats,
@@ -76,11 +80,90 @@ export function engineLifecycle(file: LedgerFile): EngineLifecycle {
   return lifecycle;
 }
 
+/** The CLOSED engine-resolution vocabulary shared by the two hash-bound
+ * artifacts of a finalized run — finalized-trace.jsonl and model-summary.json.
+ * 'superseded' is a canonical request resolution (A1); 'rejected' is a
+ * per-RESPONSE verdict. A raw ledger reasonCode ('scenario-ended',
+ * 'external-failure') is NEVER a member: it is the reason an expiry happened,
+ * not the engine's verdict. */
+export type EngineOutcome = 'accepted' | 'rejected' | 'expired' | 'superseded';
+
+/** The minimal ledger view the resolution ladder needs. scripts/model/
+ * finalize.ts's richer LedgerIndex satisfies it structurally, so BOTH
+ * producers run the identical ladder over their own single ledger parse. */
+export interface EngineResolutionIndex {
+  acceptedResponseIds: ReadonlySet<string>;
+  rejectedByResponseId: ReadonlyMap<string, string>;
+  expiredRequestIds: ReadonlySet<string>;
+  supersededRequestIds: ReadonlySet<string>;
+}
+
+export interface LedgerResolutionIndex extends EngineResolutionIndex {
+  acceptedResponseIds: Set<string>;
+  rejectedByResponseId: Map<string, string>;
+  expiredRequestIds: Set<string>;
+  supersededRequestIds: Set<string>;
+  /** DecisionRequestExpired reasonCode per request — diagnostics only, kept
+   * strictly OUT of engineOutcome. */
+  expiryReasonByRequest: Map<string, string>;
+}
+
+export function indexEngineResolutions(file: LedgerFile): LedgerResolutionIndex {
+  const index: LedgerResolutionIndex = {
+    acceptedResponseIds: new Set(),
+    rejectedByResponseId: new Map(),
+    expiredRequestIds: new Set(),
+    supersededRequestIds: new Set(),
+    expiryReasonByRequest: new Map(),
+  };
+  for (const event of file.events) {
+    const payload = event.payload as Record<string, unknown>;
+    if (event.type === 'DecisionResponseAccepted') {
+      index.acceptedResponseIds.add(String(payload.responseId));
+    } else if (event.type === 'DecisionResponseRejected') {
+      index.rejectedByResponseId.set(String(payload.responseId), String(payload.rejectionReason));
+    } else if (event.type === 'DecisionRequestExpired') {
+      index.expiredRequestIds.add(String(payload.requestId));
+      index.expiryReasonByRequest.set(String(payload.requestId), String(payload.reasonCode));
+    } else if (event.type === 'DecisionRequestSuperseded') {
+      index.supersededRequestIds.add(String(payload.requestId));
+    }
+  }
+  return index;
+}
+
+/** The ONE resolution ladder (V5's "one shared helper" rule applied to
+ * outcomes): response-level verdicts first (a late answer to a superseded
+ * request joins as 'rejected' with reason 'superseded-request'), then the
+ * canonical request resolutions. null means the ledger holds no resolution
+ * for this request at all. */
+export function resolveEngineOutcome(
+  index: EngineResolutionIndex,
+  requestId: string,
+  responseId: string,
+): { engineOutcome: EngineOutcome | null; engineRejectionReason: string | null } {
+  const engineRejectionReason = index.rejectedByResponseId.get(responseId) ?? null;
+  const engineOutcome: EngineOutcome | null = index.acceptedResponseIds.has(responseId)
+    ? 'accepted'
+    : engineRejectionReason !== null
+      ? 'rejected'
+      : index.expiredRequestIds.has(requestId)
+        ? 'expired'
+        : index.supersededRequestIds.has(requestId)
+          ? 'superseded'
+          : null;
+  return { engineOutcome, engineRejectionReason };
+}
+
 export interface JoinedOutcome {
   requestId: string;
   gatewayOutcome: string;
-  engineOutcome: string;
+  /** Closed vocabulary + 'unresolved' for "no ledger resolution at all" —
+   * the summary's spelling of the finalized row's null. */
+  engineOutcome: EngineOutcome | 'unresolved';
   engineRejectionReason: string | null;
+  /** Expiry reasonCode when the request expired, else null (diagnostic). */
+  engineExpiryReason: string | null;
 }
 
 /** The gateway-minted response ID for a trace row: v2 rows carry it
@@ -95,38 +178,32 @@ export function traceRowResponseId(entry: ModelTraceEntry): string {
  * Acceptance is matched on the model RESPONSE id (the same gw- filter
  * engineLifecycle uses), never on the bare requestId, so a non-model
  * acceptance for the same requestId can never mark a model call accepted
- * (re-audit remediation S2). */
+ * (re-audit remediation S2).
+ *
+ * The verdict comes from the SHARED ladder (resolveEngineOutcome), which
+ * model:finalize also uses for finalized-trace.jsonl: model-summary.json and
+ * finalized-trace.jsonl are hash-bound into the same bundle manifest and must
+ * never disagree per requestId. Before 1.5.0 this join had its own ladder,
+ * which knew nothing of A1's 'superseded' (reported as 'unresolved') and put
+ * the raw expiry reasonCode in engineOutcome. */
 export function joinEngineOutcomes(
   file: LedgerFile | null,
   trace: readonly ModelTraceEntry[],
 ): JoinedOutcome[] {
   if (!file) return [];
-  const acceptedResponseIds = new Set<string>();
-  const rejectedByResponse = new Map<string, string>();
-  const expiredByRequest = new Map<string, string>();
-  for (const event of file.events) {
-    const payload = event.payload as Record<string, unknown>;
-    if (event.type === 'DecisionResponseAccepted') {
-      acceptedResponseIds.add(String(payload.responseId));
-    } else if (event.type === 'DecisionResponseRejected') {
-      rejectedByResponse.set(String(payload.responseId), String(payload.rejectionReason));
-    } else if (event.type === 'DecisionRequestExpired') {
-      expiredByRequest.set(String(payload.requestId), String(payload.reasonCode));
-    }
-  }
+  const index = indexEngineResolutions(file);
   return trace.map((entry) => {
-    const responseId = traceRowResponseId(entry);
-    const rejection = rejectedByResponse.get(responseId) ?? null;
-    const engineOutcome = acceptedResponseIds.has(responseId)
-      ? 'accepted'
-      : rejection !== null
-        ? 'rejected'
-        : (expiredByRequest.get(entry.requestId) ?? 'unresolved');
+    const { engineOutcome, engineRejectionReason } = resolveEngineOutcome(
+      index,
+      entry.requestId,
+      traceRowResponseId(entry),
+    );
     return {
       requestId: entry.requestId,
       gatewayOutcome: entry.gatewayOutcome,
-      engineOutcome,
-      engineRejectionReason: rejection,
+      engineOutcome: engineOutcome ?? 'unresolved',
+      engineRejectionReason,
+      engineExpiryReason: index.expiryReasonByRequest.get(entry.requestId) ?? null,
     };
   });
 }
@@ -159,17 +236,44 @@ export function loadTraceEntries(dir: string): ModelTraceEntry[] {
     : [];
 }
 
+/** Ledger selection shared by BOTH CLIs (1.5.0 V1): the UNIQUE ledger-*.json
+ * in the directory, or null when none exists. Two or more candidates is a
+ * hard error — NEVER first-match (the old `readdirSync(...).find(...)` could
+ * silently bind to a different ledger than the one that was validated). */
+export function selectLedgerName(dir: string): string | null {
+  const candidates = readdirSync(dir).filter((f) => f.startsWith('ledger-') && f.endsWith('.json'));
+  if (candidates.length > 1) {
+    throw new Error(
+      `${candidates.length} ledger files found (${candidates.join(', ')}) — ambiguous; remove the extra ledger-*.json from the run directory`,
+    );
+  }
+  return candidates[0] ?? null;
+}
+
 /** Builds the model-summary object without writing it (shared with the
- * formal finalizer, which augments it before writing). */
-export function buildModelSummary(dir: string, runId: string): Record<string, unknown> {
+ * formal finalizer, which augments it before writing).
+ *
+ * 1.5.0 V1: callers that already hold a parsed (and, for the finalizer,
+ * fully VALIDATED) ledger pass it as `ledgerFile` — the summary must never
+ * re-read the ledger from disk behind a validated caller's back. When the
+ * parameter is omitted (standalone use) the ledger is selected with the same
+ * unique-match rule, never first-match. */
+export function buildModelSummary(
+  dir: string,
+  runId: string,
+  ledgerFile?: LedgerFile | null,
+): Record<string, unknown> {
   const entries = loadTraceEntries(dir);
 
-  const ledgerFileName = readdirSync(dir).find(
-    (f) => f.startsWith('ledger-') && f.endsWith('.json'),
-  );
-  const ledger: LedgerFile | null = ledgerFileName
-    ? (JSON.parse(readFileSync(join(dir, ledgerFileName), 'utf8')) as LedgerFile)
-    : null;
+  let ledger: LedgerFile | null;
+  if (ledgerFile !== undefined) {
+    ledger = ledgerFile;
+  } else {
+    const ledgerFileName = selectLedgerName(dir);
+    ledger = ledgerFileName
+      ? (JSON.parse(readFileSync(join(dir, ledgerFileName), 'utf8')) as LedgerFile)
+      : null;
+  }
 
   // §21/§26 derived rates: model calls per genuine Mara decision opportunity
   // and per simulated NPC-hour (one model-backed NPC; 1 tick == 1 second).
@@ -238,12 +342,15 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
     );
   }
   const entries = loadTraceEntries(dir);
-  const summary = buildModelSummary(dir, runId);
+  // One selection, one parse (1.5.0 V1): the summary and the file-hash block
+  // below must describe the SAME ledger file — never two independent reads.
+  const ledgerFileName = selectLedgerName(dir);
+  const ledger: LedgerFile | null = ledgerFileName
+    ? (JSON.parse(readFileSync(join(dir, ledgerFileName), 'utf8')) as LedgerFile)
+    : null;
+  const summary = buildModelSummary(dir, runId, ledger);
   writeFileSync(join(dir, 'model-summary.json'), JSON.stringify(summary, null, 2), 'utf8');
 
-  const ledgerFileName = readdirSync(dir).find(
-    (f) => f.startsWith('ledger-') && f.endsWith('.json'),
-  );
   const files = {
     ledger: ledgerFileName
       ? { name: ledgerFileName, sha256: sha256OfFile(join(dir, ledgerFileName))! }
@@ -258,11 +365,11 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
       sha256: sha256OfFile(join(dir, 'model-summary.json')),
     },
   };
-  const bundle = {
+  const bundle = bundleManifestSchema.parse({
     // Producer discriminator (F4/F7/F16): the informal 4-file manifest and
     // the finalizer's whole-directory manifest share a filename; the
     // discriminator makes the coverage universe self-describing.
-    bundleManifestSchemaVersion: 1,
+    bundleManifestSchemaVersion: BUNDLE_MANIFEST_SCHEMA_VERSION,
     producer: 'model:summarize',
     runId,
     files,
@@ -271,7 +378,11 @@ export function summarizeRunDirectory(dir: string, runId: string): { traceEntrie
         (f): f is { name: string; sha256: string } => f !== null && f.sha256 !== null,
       ),
     ),
-  };
+    // v2 `status` mirrors the FINAL manifest's verdict and is owned by
+    // model:finalize; the informal summarizer (which refuses to run on a
+    // finalized directory) always writes null.
+    status: null,
+  });
   writeFileSync(join(dir, 'bundle-manifest.json'), JSON.stringify(bundle, null, 2), 'utf8');
   return { traceEntries: entries.length };
 }

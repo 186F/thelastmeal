@@ -12,6 +12,27 @@ results. Failed or surprising live runs are recorded, not discarded.
 Never record an API key, `.env.gateway` contents, or any other secret in this
 file.
 
+## Prerequisite: 1.5.0 artifact-integrity and CI gates
+
+The release 1.5.0 artifact-integrity work and its CI gates passed — see
+[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
+That release makes version-2 run bundles preserve every exact client request,
+runs the complete ledger validator in both model CLIs, makes `model:finalize`
+strict by default, and adds the keyless three-case rehearsal to the required
+CI job. Two consequences bind this sequence:
+
+- Only a finalized run whose `run-manifest.final.json` carries
+  `status: "completed"` may be recorded below as evidence. A run finalized
+  with `--allow-degraded` (`status: "degraded"`, non-empty `failedCriteria`)
+  is archival only and is **not** acceptable as live acceptance evidence.
+- The rehearsal is keyless and driven by the fake adapter. It is
+  infrastructure evidence about the pipeline only, and none of its numbers,
+  hashes, or verdicts may ever be transcribed into the fields below.
+
+**This prerequisite does not advance the live milestone.** No live model call
+has been made; every evidence field below remains `PENDING` and the overall
+verdict remains PENDING.
+
 ## Provenance
 
 | Field | Value |

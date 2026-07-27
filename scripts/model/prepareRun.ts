@@ -1,11 +1,12 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { z } from 'zod';
-import { ledgerFileSchema } from '../../src/shared/ledgerFile';
+import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
 import { runBundleSchema } from '../../src/shared/modelArtifacts';
 
 /**
- * Formal run-directory helper (re-audit remediation S1).
+ * Formal run-directory helper (re-audit remediation S1; full ledger
+ * validation in 1.5.0 V1).
  *
  *   npm run model:prepare-run -- --run-id <id> --ledger <path> [--bundle <path>]
  *
@@ -16,10 +17,20 @@ import { runBundleSchema } from '../../src/shared/modelArtifacts';
  *
  * EVERYTHING is validated before ANY copy — a mismatch exits nonzero and
  * leaves the run directory untouched (no partial copy):
- *   - the ledger parses against the strict ledger-file schema;
+ *   - the ledger passes the COMPLETE validateLedgerFile sequence (exact
+ *     per-event payload schemas, ordering/causation integrity, decision and
+ *     action lifecycle joins, isolated reducer replay, structural
+ *     invariants, recomputed worldStateHash + canonicalLedgerHash, rebuilt
+ *     final summary) — schema parsing alone is NOT sufficient evidence.
+ *     Warnings are permitted; ANY validation error rejects the staging.
+ *     Ledger integrity is non-negotiable at staging time: the finalizer's
+ *     degraded mode covers missing OPTIONAL sources (a lost client bundle),
+ *     never a corrupt or truncated ledger (resolves brief §5.2 vs §6.4);
  *   - the ledger filename matches `ledger-*.json` (the only pattern the
  *     finalizer's ledger selection can find);
- *   - the bundle (when given) parses against the strict run-bundle schema;
+ *   - the bundle (when given) parses against the strict run-bundle v2
+ *     schema; a v1 bundle is hard-rejected with a migration message (A8 —
+ *     zero v1 bundles exist, so there is no legacy import path);
  *   - bundle.handoff.runId equals --run-id;
  *   - the ledger scenario equals the handoff scenario;
  *   - the ledger hashes equal the handoff hashes (when the handoff recorded
@@ -43,14 +54,38 @@ export function prepareRunDirectory(args: PrepareRunArgs): { dir: string; copied
   if (!existsSync(args.ledgerPath)) {
     throw new Error(`prepare-run: ledger file not found: ${args.ledgerPath}`);
   }
-  const ledger = ledgerFileSchema.parse(JSON.parse(readFileSync(args.ledgerPath, 'utf8')));
+  // Full ledger validation (V1): replay + hashes + lifecycle joins, not just
+  // the envelope schema. ok === true with a non-null file is required;
+  // warnings are tolerated, every error is fatal and precedes ANY write.
+  const validation = validateLedgerFile(readFileSync(args.ledgerPath, 'utf8'));
+  if (!validation.ok || validation.file === null) {
+    const errors = validation.issues.filter((i) => i.severity === 'error');
+    const shown = errors
+      .slice(0, 5)
+      .map((i) => `${i.code}${i.where ? ` @ ${i.where}` : ''}`)
+      .join('; ');
+    throw new Error(
+      `prepare-run: ledger failed full validation with ${errors.length} error(s): ${shown}${
+        errors.length > 5 ? '; …' : ''
+      } — a corrupt or truncated ledger can never be staged (degraded mode covers missing optional sources only)`,
+    );
+  }
+  const ledger = validation.file;
 
   let bundle: RunBundle | null = null;
   if (args.bundlePath !== null) {
     if (!existsSync(args.bundlePath)) {
       throw new Error(`prepare-run: bundle file not found: ${args.bundlePath}`);
     }
-    bundle = runBundleSchema.parse(JSON.parse(readFileSync(args.bundlePath, 'utf8')));
+    const rawBundle: unknown = JSON.parse(readFileSync(args.bundlePath, 'utf8'));
+    // A8: no legacy import path — v1 bundles do not exist anywhere, so the
+    // only correct handling is an explicit hard reject, never a silent parse.
+    if ((rawBundle as { bundleSchemaVersion?: unknown } | null)?.bundleSchemaVersion === 1) {
+      throw new Error(
+        'prepare-run: run-bundle schema version 1 is not supported — re-export the run bundle under release 1.5.0',
+      );
+    }
+    bundle = runBundleSchema.parse(rawBundle);
     const handoff = bundle.handoff;
     if (handoff.runId !== args.runId) {
       throw new Error(

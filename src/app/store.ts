@@ -30,6 +30,11 @@ export interface ViewState {
   lastDecisionScores: Partial<Record<NpcId, AffordanceScoreRecord[]>>;
   finalWorldHash: string | null;
   finalLedgerHash: string | null;
+  /** Wall-clock at which the browser received the worker's authoritative
+   * run-complete message (1.5.0 A4). Named runCompletedAtUtc — never
+   * `completedAtUtc`, which is a PER-REQUEST client-trace field. Noncanonical
+   * diagnostics; gates run-bundle export. */
+  runCompletedAtUtc: string | null;
   /** Diagnostics log of external-gateway decision requests (capped). */
   externalDecisionRequests: ExternalDecisionRequest[];
   /** Registered experimental condition selected for the next load. */
@@ -87,6 +92,7 @@ export class ViewStore {
     lastDecisionScores: {},
     finalWorldHash: null,
     finalLedgerHash: null,
+    runCompletedAtUtc: null,
     externalDecisionRequests: [],
     selectedConditionId: BASELINE_CONDITION_ID,
     model: {
@@ -163,6 +169,7 @@ export class ViewStore {
       s.lastDecisionScores = {};
       s.finalWorldHash = null;
       s.finalLedgerHash = null;
+      s.runCompletedAtUtc = null;
       s.externalDecisionRequests = [];
       s.model.acceptedModelResponses = 0;
       s.model.engineRejections = {};
