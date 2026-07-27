@@ -4,8 +4,8 @@ import type { ExternalFailureCode } from '../../src/shared/decisionContracts';
 /**
  * Provider-agnostic model adapter interface (milestone 001, section 11). The
  * gateway's route code depends on THIS, never on a vendor SDK: the fake
- * adapter is the CI default (no network, no secret) and the OpenAI Responses
- * adapter is instantiated only inside the live server-side gateway.
+ * adapter is the CI default (no network, no secret), while live vendor
+ * adapters are instantiated only inside the server-side gateway.
  */
 
 export const MODEL_REASON_CODES = [
@@ -39,6 +39,12 @@ export interface ModelChoiceMeta {
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
+  /** Selected upstream endpoint/provider when a router reports one. This is
+   * noncanonical research metadata and never affects engine acceptance. */
+  upstreamProviderId?: string | null;
+  /** Opaque, JSON-safe router metadata. Consumers must ignore unknown fields;
+   * router schemas are additive. Never contains secrets or request content. */
+  routerMetadata?: Record<string, unknown> | null;
 }
 
 export interface AdapterInput {
@@ -56,7 +62,7 @@ export interface AdapterResult {
   meta: ModelChoiceMeta;
   /** Raw model output text when the adapter has it. Persisted to the trace
    * (bounded) ONLY on invalid-model-output / upstream-refusal outcomes —
-   * never on success (trace schema v2). */
+   * never on success. */
   rawOutput?: string;
 }
 
@@ -66,8 +72,10 @@ export class AdapterFailure extends Error {
     readonly failureCode: ExternalFailureCode,
     message: string,
     /** Raw upstream model text (refusal text / non-JSON output) for the
-     * trace's bounded rawModelOutput field (trace schema v2). */
+     * trace's bounded rawModelOutput field. */
     readonly rawOutput?: string,
+    /** Optional upstream/router metadata available on a failed request. */
+    readonly meta?: ModelChoiceMeta,
   ) {
     super(message);
   }
