@@ -33,11 +33,11 @@ import type {
 
 const PROVIDER_CONFIG = JSON.stringify({
   status: 'ok',
-  experimentId: 'model-backed-npc-001',
-  experimentVersion: '1.0.0',
-  conditionId: 'mara-model-per-decision-v1',
-  providerId: 'openai-mara-action-v1',
-  promptVersion: 'mara-action-selection-1.0.0',
+  experimentId: MODEL_EXPERIMENT_ID,
+  experimentVersion: MODEL_EXPERIMENT_VERSION,
+  conditionId: MODEL_CONDITION_ID,
+  providerId: EXTERNAL_MARA_PROVIDER_ID,
+  promptVersion: MODEL_PROMPT_VERSION,
   requestSchemaVersion: 1,
   modelId: 'fake-adapter',
 });

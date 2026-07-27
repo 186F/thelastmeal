@@ -28,6 +28,7 @@ import {
   gatewayDecisionResultSchema,
 } from '../../src/sim/decisions/externalSchemas';
 import {
+  EXTERNAL_MARA_PROVIDER_ID,
   MODEL_CONDITION_ID,
   MODEL_EXPERIMENT_ID,
   MODEL_EXPERIMENT_VERSION,
@@ -225,7 +226,7 @@ describe('gateway endpoints and validation (fake adapter)', () => {
       expect(body.experimentId).toBe(MODEL_EXPERIMENT_ID);
       expect(body.experimentVersion).toBe(MODEL_EXPERIMENT_VERSION);
       expect(body.conditionId).toBe(MODEL_CONDITION_ID);
-      expect(body.providerId).toBe('openai-mara-action-v1');
+      expect(body.providerId).toBe(EXTERNAL_MARA_PROVIDER_ID);
       expect(body.promptVersion).toBe(PROMPT_VERSION);
       expect(body.requestSchemaVersion).toBe(EXTERNAL_REQUEST_SCHEMA_VERSION);
       // Exactly the shape the browser client's strict schema pins — no more.
@@ -254,7 +255,7 @@ describe('gateway endpoints and validation (fake adapter)', () => {
       expect(result.response.requestId).toBe(genuine.request.requestId);
       expect(result.response.npcId).toBe('mara');
       expect(result.response.scenarioId).toBe(genuine.request.scenarioId);
-      expect(result.response.providerId).toBe('openai-mara-action-v1');
+      expect(result.response.providerId).toBe(EXTERNAL_MARA_PROVIDER_ID);
       expect(genuine.request.offeredAffordanceIds).toContain(result.response.selectedAffordanceId);
       expect(result.response.scores).toEqual([]);
     }
@@ -752,7 +753,7 @@ describe('metrics', () => {
       npcId: 'mara',
       scenarioId: 'A',
       logicalRequestedTick: 60,
-      providerId: 'openai-mara-action-v1',
+      providerId: EXTERNAL_MARA_PROVIDER_ID,
       promptVersion: PROMPT_VERSION,
       modelId: 'fake',
       contextHash: '0'.repeat(16),

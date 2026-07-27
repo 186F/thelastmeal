@@ -8,6 +8,13 @@ import type {
   ExternalDecisionFailure,
   ExternalDecisionRequest,
 } from '../../src/shared/decisionContracts';
+import {
+  EXTERNAL_MARA_PROVIDER_ID,
+  MODEL_CONDITION_ID,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+  MODEL_PROMPT_VERSION,
+} from '../../src/shared/modelExperiment';
 
 /**
  * Adversarial-review regressions for the main-thread gateway client:
@@ -26,11 +33,11 @@ import type {
 
 const PROVIDER_CONFIG_SHAPE = {
   status: 'ok',
-  experimentId: 'model-backed-npc-001',
-  experimentVersion: '1.0.0',
-  conditionId: 'mara-model-per-decision-v1',
-  providerId: 'openai-mara-action-v1',
-  promptVersion: 'mara-action-selection-1.0.0',
+  experimentId: MODEL_EXPERIMENT_ID,
+  experimentVersion: MODEL_EXPERIMENT_VERSION,
+  conditionId: MODEL_CONDITION_ID,
+  providerId: EXTERNAL_MARA_PROVIDER_ID,
+  promptVersion: MODEL_PROMPT_VERSION,
   requestSchemaVersion: 1,
   modelId: 'fake-adapter',
 };
