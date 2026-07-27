@@ -50,13 +50,14 @@ finalization run the complete ledger validator, finalization is strict by
 default with an explicit archival-only degraded mode, and a keyless
 three-case rehearsal runs in CI on every push and pull request, with the
 GitHub Actions `Required checks (clean checkout)` job as the authoritative
-merge gate. Nothing frozen moved: configuration version `vs001-1.0.0`, the
-model experiment `model-backed-npc-001` v `1.1.0`, the condition
-`mara-model-per-decision-v1`, the external provider `openrouter-mara-action-v1`,
-and the prompt version `mara-action-selection-1.0.0` are all unchanged, as
-are all fourteen golden hashes. **The live milestone remains pending after
-this release** — 1.5.0 hardens the evidence pipeline and makes no live model
-call whatsoever.
+merge gate. Nothing in the frozen Vertical Slice moved: configuration version
+`vs001-1.0.0`, scenario data, deterministic behavior, and all fourteen golden
+hashes remain unchanged. Release 1.6.0 intentionally advances the separate
+model experiment from v1.0.0 to v1.1.0 and changes the registered external
+provider from direct OpenAI access to `openrouter-mara-action-v1`; the prompt
+text and `mara-action-selection-1.0.0` prompt version remain unchanged. **The
+live milestone remains pending** — no live OpenRouter request is claimed by
+this release.
 
 **Compatibility break:** ledger exports are now format version 2
 (`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).

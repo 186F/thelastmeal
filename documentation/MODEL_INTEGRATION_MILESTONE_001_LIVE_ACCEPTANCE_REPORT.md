@@ -4,7 +4,7 @@
 
 This is a TEMPLATE. Every evidence field below is literally `PENDING` until
 the live acceptance sequence (re-audit remediation brief §16) has actually
-been performed against the real OpenAI API. Do not mark any run or criterion
+been performed against the live OpenRouter Responses API. Do not mark any run or criterion
 passed on the basis of fake-adapter or fixture evidence; fake results are
 infrastructure evidence only and must never be transcribed here as live
 results. Failed or surprising live runs are recorded, not discarded.
@@ -21,7 +21,7 @@ OpenRouter Responses under model experiment version 1.1.0. Formal runs must use
 one exact `OPENROUTER_MODEL`, one exact `OPENROUTER_PROVIDER`, fallbacks disabled,
 and router metadata enabled; see
 [`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
-That release makes version-2 run bundles preserve every exact client request,
+Release 1.5.0 makes version-2 run bundles preserve every exact client request,
 runs the complete ledger validator in both model CLIs, makes `model:finalize`
 strict by default, and adds the keyless three-case rehearsal to the required
 CI job. Two consequences bind this sequence:
