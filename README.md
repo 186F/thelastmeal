@@ -383,13 +383,18 @@ GitHub Actions (`.github/workflows/`):
 
 - **`ci.yml`** — on every push/PR, from a clean checkout: `npm ci`, typecheck,
   lint, validate, unit/integration tests, production build, Playwright e2e,
-  and a fast 10-run deterministic batch. Any failing required command fails
-  the workflow; batch and Playwright reports upload as artifacts. Dependency
-  caching covers `node_modules` sources only — no generated output is ever
-  cached as an authoritative input.
+  and the FULL 100-runs-per-scenario deterministic batch (complete canonical
+  event-stream equality; ~2 min on ubuntu). Any failing required command
+  fails the workflow; batch and Playwright reports upload as artifacts.
+  Dependency caching covers `node_modules` sources only — no generated output
+  is ever cached as an authoritative input.
 - **`deterministic-batch.yml`** — scheduled weekly and manually dispatchable:
-  the full 100-runs-per-scenario batch with complete canonical event-stream
-  equality, uploading ledgers and reports.
+  the same full 100-run batch, uploading ledgers and reports.
+
+Note: the authoritative 100-run gate is the standalone `npm run batch`
+runner. The Vitest suite carries a lighter in-suite batch check because long
+CPU-bound batches inside a Vitest worker trip the runner's internal RPC
+timeout on slow machines even with all tests passing.
 
 ## Dependency roles
 

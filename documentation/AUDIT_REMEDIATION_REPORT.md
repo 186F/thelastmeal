@@ -245,11 +245,14 @@ runs, and across pause/resume operator interleavings. The 100-run batch
 `canonicalLedgerHash`, **complete canonical event-stream equality for every
 repeat run** (string comparison against run 1's serialized stream, with the
 diff reporter on mismatch), zero invariant violations, and replay equality.
-CI runs the batch at `--runs=10` as a documented fast mode; the scheduled
-`deterministic-batch.yml` workflow and `npm run batch` default remain the full
-100 runs. Replay verifies `worldStateHash` (re-simulating, not replaying, is
-the axis that verifies the ledger hash — replay "reproducing" a hash of its
-own input would be circular).
+The authoritative 100-run gate is the standalone `npm run batch` runner,
+which CI executes IN FULL on every push and the scheduled workflow re-runs
+weekly; the Vitest suite carries a lighter in-suite batch check because long
+CPU-bound batches inside a Vitest worker trip the runner's internal
+worker-RPC timeout on slow CI machines even when every test passes. Replay
+verifies `worldStateHash` (re-simulating, not replaying, is the axis that
+verifies the ledger hash — replay "reproducing" a hash of its own input would
+be circular).
 
 **Files.** `src/sim/replay/streamDiff.ts` (new), `src/sim/batch.ts`,
 `src/shared/reports.ts`, `tests/integration/{determinism,command-parity,hundred-runs}.test.ts`.

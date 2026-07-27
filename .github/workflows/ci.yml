@@ -42,8 +42,8 @@ jobs:
       - name: Browser end-to-end tests
         run: npm run test:e2e
 
-      - name: Deterministic batch (fast CI mode, 10 runs/scenario)
-        run: npm run batch -- --runs=10
+      - name: Deterministic batch (full gate, 100 runs/scenario)
+        run: npm run batch
 
       - name: Upload batch report
         if: always()
