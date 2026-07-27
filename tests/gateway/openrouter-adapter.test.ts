@@ -49,9 +49,7 @@ function successPayload() {
           },
         ],
       },
-      attempts: [
-        { provider: 'Anthropic', model: 'anthropic/claude-sonnet-test', status: 200 },
-      ],
+      attempts: [{ provider: 'Anthropic', model: 'anthropic/claude-sonnet-test', status: 200 }],
     },
   };
 }
@@ -142,7 +140,9 @@ describe('OpenRouterResponsesDecisionAdapter', () => {
       fetchImpl,
     });
 
-    await expect(adapter.decide(adapterInput(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(
+      adapter.decide(adapterInput(), new AbortController().signal),
+    ).rejects.toMatchObject({
       failureCode: 'upstream-error',
       message: 'Insufficient credits',
     } satisfies Partial<AdapterFailure>);
@@ -173,7 +173,9 @@ describe('OpenRouterResponsesDecisionAdapter', () => {
       fetchImpl,
     });
 
-    await expect(adapter.decide(adapterInput(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(
+      adapter.decide(adapterInput(), new AbortController().signal),
+    ).rejects.toMatchObject({
       failureCode: 'upstream-refusal',
       rawOutput: 'I cannot do that.',
     } satisfies Partial<AdapterFailure>);
