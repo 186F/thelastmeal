@@ -4,14 +4,16 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  test:
+  migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/openrouter-integration
       - run: npm ci --silent
       - name: Migrate provider fixtures
         shell: bash
@@ -67,12 +69,19 @@ jobs:
             tests/unit/model-gateway-client.test.ts \
             tests/unit/provider-plan.test.ts \
             tests/unit/run-bundle.test.ts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: migrated-test-fixtures
-          path: |
-            tests/gateway/gateway.test.ts
-            tests/unit/model-gateway-client.test.ts
-            tests/unit/provider-plan.test.ts
+      - name: Commit fixture migration
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Fixtures already migrated."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            tests/gateway/gateway.test.ts \
+            tests/unit/model-gateway-client.test.ts \
+            tests/unit/provider-plan.test.ts \
             tests/unit/run-bundle.test.ts
-          if-no-files-found: error
+          git commit -m "Update tests for OpenRouter experiment identity"
+          git push origin HEAD:agent/openrouter-integration
