@@ -1,7 +1,7 @@
 import { loadGatewayConfig } from './config';
 import { createGateway, stopWithFallback } from './server';
 import { FakeDecisionAdapter } from './adapters/fakeDecisionAdapter';
-import { OpenAIResponsesDecisionAdapter } from './adapters/openaiResponsesAdapter';
+import { OpenRouterResponsesDecisionAdapter } from './adapters/openRouterResponsesAdapter';
 import { ModelTraceWriter } from './tracing/modelTraceWriter';
 import { PROMPT_VERSION } from './prompts/maraActionSelection';
 import { EXTERNAL_MARA_PROVIDER_ID } from './schemas';
@@ -9,28 +9,29 @@ import { EXTERNAL_MARA_PROVIDER_ID } from './schemas';
 /**
  * Gateway CLI entry.
  *   npm run gateway:dev:fake  -> deterministic fake adapter, no key needed
- *   npm run gateway:dev       -> live OpenAI adapter (fails fast without
- *                                OPENAI_API_KEY / OPENAI_MODEL)
+ *   npm run gateway:dev       -> live OpenRouter Responses adapter (fails fast
+ *                                without key/model/provider configuration)
  *
  * Logs never include secrets: only nonsecret configuration is printed.
  */
 const useFake = process.argv.includes('--fake');
-const config = loadGatewayConfig(useFake ? 'fake' : 'openai');
+const config = loadGatewayConfig(useFake ? 'fake' : 'openrouter');
 const adapter = useFake
   ? new FakeDecisionAdapter()
-  : new OpenAIResponsesDecisionAdapter(
-      config.openaiApiKey!,
-      config.openaiModel!,
-      config.maxOutputTokens,
-    );
+  : new OpenRouterResponsesDecisionAdapter({
+      apiKey: config.openRouterApiKey!,
+      model: config.openRouterModel!,
+      provider: config.openRouterProvider!,
+      maxOutputTokens: config.maxOutputTokens,
+      httpReferer: config.openRouterHttpReferer,
+      appTitle: config.openRouterAppTitle,
+    });
 
 const gateway = createGateway(config, adapter, new ModelTraceWriter(config.traceDir));
 
 // Graceful shutdown (1.5.0 G1): SIGINT/SIGTERM drain in-flight requests via
 // stop(); after a 2s grace stopWithFallback force-closes any stragglers with
-// closeAllConnections(), then the process exits 0. This turns a live
-// gateway-stop from a hard kill (which could land between the sidecar write
-// and the trace row) into a deterministic drain-then-refuse.
+// closeAllConnections(), then the process exits 0.
 let shuttingDown = false;
 function shutdown(signal: NodeJS.Signals): void {
   if (shuttingDown) return;
@@ -46,10 +47,12 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 gateway
   .start()
   .then((port) => {
+    const model = useFake ? 'fake-adapter' : (config.openRouterModel ?? '');
+    const route = useFake ? 'local' : (config.openRouterProvider ?? '');
     console.log(
       `model gateway listening on http://127.0.0.1:${port} ` +
         `(adapter=${adapter.id}, provider=${EXTERNAL_MARA_PROVIDER_ID}, prompt=${PROMPT_VERSION}, ` +
-        `model=${useFake ? 'fake-adapter' : (config.openaiModel ?? '')}, traceDir=${config.traceDir})`,
+        `model=${model}, route=${route}, traceDir=${config.traceDir})`,
     );
   })
   .catch((error: Error) => {
