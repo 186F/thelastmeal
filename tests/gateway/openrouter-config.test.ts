@@ -20,17 +20,27 @@ describe('OpenRouter gateway configuration', () => {
     expect(config.openRouterApiKey).toBe('test-key');
     expect(config.openRouterModel).toBe('anthropic/claude-sonnet-test');
     expect(config.openRouterProvider).toBe('anthropic');
-    const view = publicConfig(config, EXTERNAL_MARA_PROVIDER_ID, 'prompt-v1', 1, MODEL_EXPERIMENT_VERSION);
+    const view = publicConfig(
+      config,
+      EXTERNAL_MARA_PROVIDER_ID,
+      'prompt-v1',
+      1,
+      MODEL_EXPERIMENT_VERSION,
+    );
     expect(view.modelId).toBe('anthropic/claude-sonnet-test');
     expect(JSON.stringify(view)).not.toContain('test-key');
   });
 
   it('fails fast when key, model, or pinned provider is missing', () => {
-    for (const missing of ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL', 'OPENROUTER_PROVIDER'] as const) {
+    for (const missing of [
+      'OPENROUTER_API_KEY',
+      'OPENROUTER_MODEL',
+      'OPENROUTER_PROVIDER',
+    ] as const) {
       const env: Record<string, string | undefined> = { ...baseEnv, [missing]: undefined };
-      expect(() =>
-        loadGatewayConfig('openrouter', env, '/definitely-not-a-project-root'),
-      ).toThrow(/gateway-config-missing/);
+      expect(() => loadGatewayConfig('openrouter', env, '/definitely-not-a-project-root')).toThrow(
+        /gateway-config-missing/,
+      );
     }
   });
 
