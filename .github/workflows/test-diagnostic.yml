@@ -1,0 +1,96 @@
+name: Test diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/openrouter-integration
+      - name: Update documentation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('README.md')
+          s = p.read_text()
+          s = s.replace('The implementation itself is at **release 1.5.0**', 'The implementation itself is at **release 1.6.0**')
+          marker = """- **1.5.0** — model-run artifact integrity, CI verification, and keyless
+  rehearsal, per
+  [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md)
+  (report, including every recorded amendment to that brief:
+  [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md))
+"""
+          addition = marker + """- **1.6.0** — pinned OpenRouter Responses integration: one exact model slug,
+  one exact provider route, fallbacks disabled, parameter support required,
+  and router metadata retained as hash-bound noncanonical evidence (report:
+  [`documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md))
+"""
+          if '- **1.6.0** — pinned OpenRouter Responses integration' not in s:
+              s = s.replace(marker, addition)
+          s = s.replace('across all five\nreleases', 'across all six\nreleases')
+          s = s.replace('`model-backed-npc-001` v `1.0.0`', '`model-backed-npc-001` v `1.1.0`')
+          s = s.replace('`openai-mara-action-v1`', '`openrouter-mara-action-v1`')
+          s = s.replace('OpenAI API\nkey (live runs only', 'OpenRouter API\nkey with sufficient credits (live runs only')
+          s = s.replace('fill in OPENAI_API_KEY and OPENAI_MODEL', 'fill in OPENROUTER_API_KEY, OPENROUTER_MODEL, and OPENROUTER_PROVIDER')
+          s = s.replace('requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`', 'requires `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER` in `.env.gateway`')
+          anchor = """- **Gateway** (`gateway/`): exact envelope validation, context-hash
+  recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),
+"""
+          replacement = """- **Gateway** (`gateway/`): exact envelope validation, context-hash
+  recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),
+  and an explicit OpenRouter Responses adapter using the stateless
+  `/api/v1/responses` route. Every paid request names one exact model slug and
+  one exact provider slug, sends `require_parameters: true`, disables provider
+  fallbacks, and opts into OpenRouter router metadata. The actual selected
+  provider and opaque routing record are written to `routing/<requestId>.json`
+  sidecars; they are noncanonical but recursively covered by the formal bundle
+  manifest. The OpenRouter Responses API is beta, so one disposable live smoke
+  request is required before formal data collection.
+"""
+          if 'explicit OpenRouter Responses adapter' not in s:
+              s = s.replace(anchor, replacement)
+          s = s.replace('dispatched request. Since 1.5.0', 'dispatched request, plus `routing/<requestId>.json` whenever OpenRouter returns routing metadata. Since 1.5.0')
+          p.write_text(s)
+
+          p = Path('documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md')
+          s = p.read_text()
+          s = s.replace('`model-backed-npc-001` v `1.0.0`', '`model-backed-npc-001` v `1.1.0`')
+          s = s.replace('`openai-mara-action-v1`', '`openrouter-mara-action-v1`')
+          s = s.replace('Requested model (`OPENAI_MODEL`)', 'Requested model (`OPENROUTER_MODEL`)')
+          row = '| Requested model (`OPENROUTER_MODEL`) | PENDING |\n'
+          if 'Pinned OpenRouter provider' not in s:
+              s = s.replace(row, row + '| Pinned OpenRouter provider (`OPENROUTER_PROVIDER`) | PENDING |\n')
+          settings = '| Gateway settings (timeout / concurrency / per-run budget / total cap) | PENDING |'
+          if 'OpenRouter routing (`require_parameters`' not in s:
+              s = s.replace(settings, settings + '\n| OpenRouter routing (`require_parameters`, fallbacks, provider allowlist) | PENDING |')
+          intro = """The release 1.5.0 artifact-integrity work and its CI gates passed — see
+[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
+"""
+          if 'registered live route was subsequently migrated' not in s:
+              s = s.replace(intro, intro + """The registered live route was subsequently migrated in release 1.6.0 to
+OpenRouter Responses under model experiment version 1.1.0. Formal runs must use
+one exact `OPENROUTER_MODEL`, one exact `OPENROUTER_PROVIDER`, fallbacks disabled,
+and router metadata enabled; see
+[`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
+""")
+          p.write_text(s)
+          PY
+          npx prettier --write README.md documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md
+      - name: Commit documentation
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md
+          git commit -m "Document pinned OpenRouter live integration"
+          git push origin HEAD:agent/openrouter-integration
