@@ -28,6 +28,7 @@ function successPayload() {
   return {
     id: 'resp-openrouter-1',
     model: 'anthropic/claude-sonnet-test',
+    status: 'completed',
     output_text: JSON.stringify({
       selectedAffordanceId: 'aff:work',
       reasonCode: 'routine',
@@ -155,6 +156,7 @@ describe('OpenRouterResponsesDecisionAdapter', () => {
         JSON.stringify({
           id: 'resp-refusal',
           model: 'anthropic/claude-sonnet-test',
+          status: 'completed',
           output: [
             {
               type: 'message',
@@ -178,6 +180,32 @@ describe('OpenRouterResponsesDecisionAdapter', () => {
     ).rejects.toMatchObject({
       failureCode: 'upstream-refusal',
       rawOutput: 'I cannot do that.',
+    } satisfies Partial<AdapterFailure>);
+  });
+
+  it('rejects an incomplete response even when its partial text parses as a valid choice', async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          ...successPayload(),
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    const adapter = new OpenRouterResponsesDecisionAdapter({
+      apiKey: 'test-openrouter-key',
+      model: 'anthropic/claude-sonnet-test',
+      provider: 'anthropic',
+      maxOutputTokens: 300,
+      fetchImpl,
+    });
+
+    await expect(
+      adapter.decide(adapterInput(), new AbortController().signal),
+    ).rejects.toMatchObject({
+      failureCode: 'invalid-model-output',
+      message: 'OpenRouter response status incomplete: max_output_tokens',
     } satisfies Partial<AdapterFailure>);
   });
 });
