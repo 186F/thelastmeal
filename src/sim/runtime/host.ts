@@ -1,5 +1,10 @@
 import type { PresentationSnapshot } from '../../shared/snapshots';
-import type { DecisionRequest, DecisionResponse } from '../../shared/decisionContracts';
+import type {
+  DecisionResponse,
+  ExternalDecisionFailure,
+  ExternalDecisionRequest,
+} from '../../shared/decisionContracts';
+import type { ConditionId } from '../decisions/conditions';
 import type { LedgerFile } from '../../shared/ledgerFile';
 import { ledgerFileName } from '../../shared/ledgerFile';
 import type { ScenarioId } from '../../shared/ids';
@@ -73,16 +78,26 @@ export class SimulationHost {
   }
 
   get providerId(): string {
-    return this.run ? this.run.provider.id : 'deterministic-utility-v1';
+    return this.run ? this.run.plan.id : 'deterministic-utility-v1';
   }
 
-  loadScenario(id: ScenarioId): void {
-    this.run = createRun(id);
+  get conditionId(): ConditionId | null {
+    return this.loadedConditionId;
+  }
+
+  private loadedConditionId: ConditionId | null = null;
+
+  loadScenario(id: ScenarioId, conditionId?: ConditionId): void {
+    this.run = conditionId ? createRun(id, { conditionId }) : createRun(id);
+    this.loadedConditionId = conditionId ?? null;
   }
 
   reset(): void {
     if (!this.run) throw new Error('no-scenario-loaded');
-    this.run = createRun(this.run.scenario.id);
+    const id = this.run.scenario.id;
+    this.run = this.loadedConditionId
+      ? createRun(id, { conditionId: this.loadedConditionId })
+      : createRun(id);
   }
 
   /**
@@ -98,11 +113,23 @@ export class SimulationHost {
   }
 
   /**
-   * Drain pending external decision requests (provider deferred). These are
-   * the messages a future external gateway would consume; this build only
-   * surfaces them as diagnostics.
+   * Queue an externally reported gateway/model failure (milestone 001,
+   * section 15). Like responses, failures drain at the fixed in-tick point,
+   * never mid-command.
    */
-  drainExternalDecisionRequests(): DecisionRequest[] {
+  submitDecisionFailure(failure: ExternalDecisionFailure): void {
+    const run = this.requireRun();
+    if (run.state.terminal) throw new Error('run-already-complete');
+    run.failureInbox.push(failure);
+  }
+
+  /**
+   * Drain pending external decision requests (provider deferred): the exact
+   * request plus its bounded deterministic model context. The worker
+   * forwards these to the main thread; whether they reach a gateway is the
+   * registered condition's transport decision.
+   */
+  drainExternalDecisionRequests(): ExternalDecisionRequest[] {
     const run = this.run;
     if (!run || run.externalRequests.length === 0) return [];
     return run.externalRequests.splice(0, run.externalRequests.length);
@@ -154,7 +181,7 @@ export class SimulationHost {
     return buildSnapshot(
       run.state,
       run.ledger.events,
-      run.provider.id,
+      run.plan.id,
       run.worldStateHash,
       run.canonicalLedgerHash,
     );

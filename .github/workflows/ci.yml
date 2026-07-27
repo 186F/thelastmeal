@@ -24,6 +24,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Typecheck gateway
+        run: npm run typecheck:gateway
+
       - name: Lint
         run: npm run lint
 
@@ -33,8 +36,17 @@ jobs:
       - name: Unit and integration tests
         run: npm run test:run
 
+      - name: Gateway tests (fake adapter, no secrets)
+        run: npm run test:gateway
+
       - name: Production build
         run: npm run build
+
+      - name: Gateway production build
+        run: npm run build:gateway
+
+      - name: Build-secret scan (dist)
+        run: npm run check:dist
 
       - name: Install Playwright browser
         run: npm run test:e2e:install

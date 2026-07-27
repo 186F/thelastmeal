@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION } from '../shared/versions';
 import type { RunStatus } from '../shared/snapshots';
 import type { OperatorSpeed, WorkerCommand, WorkerResponse } from '../shared/workerProtocol';
+import { externalDecisionRequestSchema } from '../sim/decisions/externalSchemas';
 import { runFullBatch } from '../sim/batch';
 import { renderMarkdownReport } from '../sim/reporting';
 import { SimulationHost } from '../sim/runtime/host';
@@ -24,6 +25,10 @@ export class WorkerSession {
   snapshotSeq = 0;
   lastSentEventSeq = 0;
   completionAnnounced = false;
+  /** Incremented on every load-scenario/reset; stamped onto outgoing
+   * decision-request messages so the client can discard requests from a
+   * superseded run. */
+  runSeq = 0;
 
   /** True while the pacing loop should be stepping ticks. */
   get isRunning(): boolean {
@@ -75,10 +80,11 @@ export function handleCommand(session: WorkerSession, command: WorkerCommand): W
       }
 
       case 'load-scenario': {
-        session.host.loadScenario(command.scenarioId);
+        session.host.loadScenario(command.scenarioId, command.conditionId);
         session.runStatus = 'idle';
         session.lastSentEventSeq = 0;
         session.completionAnnounced = false;
+        session.runSeq += 1;
         ack(true);
         refreshAfterMutation();
         break;
@@ -154,6 +160,7 @@ export function handleCommand(session: WorkerSession, command: WorkerCommand): W
         session.runStatus = 'idle';
         session.lastSentEventSeq = 0;
         session.completionAnnounced = false;
+        session.runSeq += 1;
         ack(true);
         refreshAfterMutation();
         break;
@@ -265,6 +272,19 @@ export function handleCommand(session: WorkerSession, command: WorkerCommand): W
         break;
       }
 
+      case 'submit-decision-failure': {
+        requireLoaded(session);
+        if (session.host.terminal) {
+          ack(false, 'run-already-complete');
+          break;
+        }
+        // Queued like responses: failures drain at the same fixed in-tick
+        // point (milestone 001, section 15).
+        session.host.submitDecisionFailure(command.failure);
+        ack(true);
+        break;
+      }
+
       case 'export-traces': {
         requireLoaded(session);
         const exported = session.host.exportTraces();
@@ -365,11 +385,32 @@ function pushNewEvents(session: WorkerSession, out: WorkerResponse[]): void {
   });
 }
 
-/** Forward pending external decision requests (diagnostics-only seam). */
+/**
+ * Forward pending external decision requests to the main thread. Every
+ * request is exact-schema validated at this worker output boundary
+ * (milestone 001, section 16); the engine already validated it at
+ * construction, so a parse failure here is an engine-contract violation —
+ * reported, never silently forwarded, and never thrown (this path also runs
+ * inside the unguarded pacing loop).
+ */
 function pushExternalDecisionRequests(session: WorkerSession, out: WorkerResponse[]): void {
   if (session.host.scenarioId === null) return;
   for (const request of session.host.drainExternalDecisionRequests()) {
-    out.push({ protocolVersion: PROTOCOL_VERSION, type: 'decision-request', request });
+    const parsed = externalDecisionRequestSchema.safeParse(request);
+    if (!parsed.success) {
+      out.push({
+        protocolVersion: PROTOCOL_VERSION,
+        type: 'fatal',
+        message: `invalid-decision-request-dropped: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
+      });
+      continue;
+    }
+    out.push({
+      protocolVersion: PROTOCOL_VERSION,
+      type: 'decision-request',
+      request,
+      runSeq: session.runSeq,
+    });
   }
 }
 

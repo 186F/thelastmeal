@@ -128,7 +128,13 @@ export type DecisionResponseRejectedEvent = Evt<
 
 export type DecisionRequestExpiredEvent = Evt<
   'DecisionRequestExpired',
-  { npcId: NpcId; requestId: string; reasonCode: 'ttl-expired' | 'scenario-ended' }
+  {
+    npcId: NpcId;
+    requestId: string;
+    /** `external-failure` (milestone 001): the request was resolved by an
+     * explicitly reported gateway/model failure rather than the TTL. */
+    reasonCode: 'ttl-expired' | 'scenario-ended' | 'external-failure';
+  }
 >;
 
 export type DecisionRequestSupersededEvent = Evt<

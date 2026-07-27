@@ -1,4 +1,6 @@
-import type { DecisionRequest } from '../shared/decisionContracts';
+import type { ExternalDecisionRequest } from '../shared/decisionContracts';
+import type { ConditionId } from '../sim/decisions/conditions';
+import type { ModelGatewayStatus } from './modelGatewayClient';
 import type { EventEnvelope } from '../shared/events';
 import type { NpcId, ScenarioId } from '../shared/ids';
 import type { BatchReport } from '../shared/reports';
@@ -28,7 +30,17 @@ export interface ViewState {
   finalWorldHash: string | null;
   finalLedgerHash: string | null;
   /** Diagnostics log of external-gateway decision requests (capped). */
-  externalDecisionRequests: DecisionRequest[];
+  externalDecisionRequests: ExternalDecisionRequest[];
+  /** Registered experimental condition selected for the next load. */
+  selectedConditionId: ConditionId;
+  /** Model-integration diagnostics (milestone 001, section 18). */
+  model: {
+    gateway: ModelGatewayStatus | null;
+    /** Engine acceptances of gateway-constructed responses (gw- prefix). */
+    acceptedModelResponses: number;
+    /** Engine DecisionResponseRejected counts by structured reason. */
+    engineRejections: Record<string, number>;
+  };
   replayResult: {
     ok: boolean;
     match: boolean;
@@ -75,6 +87,12 @@ export class ViewStore {
     finalWorldHash: null,
     finalLedgerHash: null,
     externalDecisionRequests: [],
+    selectedConditionId: 'deterministic-baseline-v1',
+    model: {
+      gateway: null,
+      acceptedModelResponses: 0,
+      engineRejections: {},
+    },
     replayResult: null,
     importResult: null,
     batch: {
@@ -119,6 +137,15 @@ export class ViewStore {
           if (payload.scores.length > 0) {
             s.lastDecisionScores[payload.npcId] = payload.scores;
           }
+        } else if (event.type === 'DecisionResponseAccepted') {
+          const payload = event.payload as { responseId: string };
+          if (payload.responseId.startsWith('gw-')) {
+            s.model.acceptedModelResponses += 1;
+          }
+        } else if (event.type === 'DecisionResponseRejected') {
+          const payload = event.payload as { rejectionReason: string };
+          s.model.engineRejections[payload.rejectionReason] =
+            (s.model.engineRejections[payload.rejectionReason] ?? 0) + 1;
         }
       }
       s.eventLog.push(...events);
@@ -136,6 +163,8 @@ export class ViewStore {
       s.finalWorldHash = null;
       s.finalLedgerHash = null;
       s.externalDecisionRequests = [];
+      s.model.acceptedModelResponses = 0;
+      s.model.engineRejections = {};
       s.replayResult = null;
     });
   }

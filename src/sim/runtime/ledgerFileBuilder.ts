@@ -30,7 +30,7 @@ export function buildLedgerFile(run: EngineRun): LedgerFile {
       configVersion: run.state.configVersion,
       schemaVersion: SCHEMA_VERSION,
     },
-    providerId: run.provider.id,
+    providerId: run.plan.id,
     events: run.ledger.toJSON(),
     finalSummary: buildFinalSummary(run.state, run.ledger.events),
     worldStateHash: run.worldStateHash,

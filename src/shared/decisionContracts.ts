@@ -93,6 +93,149 @@ export interface DecisionResponse {
   scores: DecisionResponseScoreRecord[];
 }
 
+/**
+ * Structured external decision context (model integration milestone 001,
+ * section 9): the immutable, bounded, integers-only snapshot a model
+ * provider receives alongside the replayable DecisionRequest. Types live
+ * here (the shared leaf layer) so the worker protocol can name them; the
+ * deterministic builder and the exact runtime schemas live in
+ * `src/sim/decisions/` where the config-derived bounds are.
+ */
+export interface ExternalDecisionContext {
+  npc: {
+    id: NpcId;
+    displayName: string;
+    traits: { key: string; valueMicro: number }[];
+    values: string[];
+    skills: { repair: string; firstAid: string };
+    goalId: string;
+    goalText: string;
+    hardBoundaryId: string;
+    hardBoundaryText: string;
+  };
+  state: {
+    tick: number;
+    locationId: string;
+    currentAction: {
+      category: string;
+      mode: string;
+      phase: string;
+      interruptible: boolean;
+      completesAtTick: number | null;
+    } | null;
+    hungerMicro: number;
+    fatigueMicro: number;
+    injury: { severityMicro: number; treatmentStarted: boolean; worsened: boolean };
+    incapacitated: boolean;
+  };
+  world: {
+    purifierProgressUnits: number;
+    purifierTotalUnits: number;
+    taskOutcome: string;
+    benchOccupantId: NpcId | null;
+    mealExists: boolean;
+    mealReservedForNpcId: NpcId | null;
+    taskDeadlineTick: number;
+  };
+  cognition: {
+    beliefs: { subject: string; value: string; confidenceMicro: number; updatedTick: number }[];
+    memories: {
+      canonicalFact: string;
+      preScenario: boolean;
+      perception: string;
+      interpretation: string;
+      confidenceMicro: number;
+      importanceMicro: number;
+      createdTick: number;
+      themes: string[];
+      socialTargetId: NpcId | null;
+      valenceMicro: number;
+      selfRelevanceMicro: number;
+    }[];
+    relationships: { toNpcId: NpcId; valueMicro: number }[];
+    commitments: {
+      id: string;
+      kind: string;
+      role: string;
+      otherPartyId: NpcId;
+      status: string;
+      renegotiated: boolean;
+      terms: CommitmentTermsShape;
+      hasPendingProposal: boolean;
+      activeReliefStartTick: number | null;
+    }[];
+    recentSignals: { kind: string; fromNpcId: NpcId; toNpcId: NpcId | null; tick: number }[];
+  };
+  affordances: {
+    id: string;
+    category: string;
+    mode: string;
+    actorId: NpcId;
+    targetNpcId: NpcId | null;
+    targetResourceId: string | null;
+    requiredLocationId: string | null;
+    durationTicks: number;
+    expectedTravelTicks: number;
+    preconditions: string[];
+    reservations: string[];
+    violation: boolean;
+    interruptible: boolean;
+    isContinuation: boolean;
+    description: string;
+  }[];
+}
+
+export interface ExternalContextTruncation {
+  beliefs: number;
+  memories: number;
+  commitments: number;
+  relationships: number;
+  recentSignals: number;
+}
+
+/** What the engine's external outbox holds and the worker's
+ * `decision-request` message carries: the replayable request, the bounded
+ * deterministic context, its hash, and truncation diagnostics. */
+export interface ExternalDecisionRequest {
+  request: DecisionRequest;
+  context: ExternalDecisionContext;
+  contextHash: string;
+  truncationCounts: ExternalContextTruncation;
+}
+
+/**
+ * Typed external-gateway failure (model integration milestone 001, section
+ * 15): a KNOWN gateway/model failure is reported explicitly through the
+ * `submit-decision-failure` command instead of relying on silent TTL expiry.
+ * The engine verifies the pending request and provider binding, records
+ * DecisionProviderFailed with the structured code, and resolves the request
+ * with an explicit expiry; the NPC re-decides on the ordinary cadence.
+ */
+export const EXTERNAL_FAILURE_CODES = [
+  'gateway-unavailable',
+  'request-timeout',
+  'upstream-timeout',
+  'upstream-error',
+  'upstream-refusal',
+  'invalid-model-output',
+  'invalid-gateway-response',
+  'budget-exhausted',
+  'client-aborted',
+] as const;
+export type ExternalFailureCode = (typeof EXTERNAL_FAILURE_CODES)[number];
+
+export interface ExternalDecisionFailure {
+  failureId: string;
+  requestId: string;
+  npcId: NpcId;
+  scenarioId: ScenarioId;
+  providerId: string;
+  failureCode: ExternalFailureCode;
+  /** Diagnostic only: whether the client judged the failure retryable. The
+   * engine never retries — one request, at most one upstream call. */
+  retryable: boolean;
+}
+
 /** Structured response-rejection reasons (remediation 1, section 5.6;
  * `provider-mismatch` added by re-audit finding 1: a response must come from
  * the decision authority named by its request). */

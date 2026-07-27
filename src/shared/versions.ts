@@ -21,7 +21,15 @@
  * derived-data concerns.
  */
 export const SCHEMA_VERSION = 2;
-export const PROTOCOL_VERSION = 2;
+/**
+ * PROTOCOL_VERSION 2 -> 3 (model integration milestone 001): load-scenario
+ * gains an optional registered conditionId, submit-decision-failure is added,
+ * and the decision-request message carries the exact external request plus
+ * its bounded model context. SCHEMA_VERSION and LEDGER_FILE_FORMAT_VERSION
+ * stay 2 — event vocabulary only widened compatibly (the `external-failure`
+ * expiry reason), so existing format-2 ledgers import unchanged.
+ */
+export const PROTOCOL_VERSION = 3;
 export const CONFIG_VERSION = 'vs001-1.0.0';
 export const LEDGER_FILE_FORMAT_VERSION = 2;
 export const EXPERIMENT_ID = 'vertical-slice-001';

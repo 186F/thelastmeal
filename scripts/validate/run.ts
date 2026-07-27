@@ -81,6 +81,41 @@ for (const root of scanRoots) {
   }
 }
 
+// --- Layer 2a-2: model-SDK and secret boundaries (milestone 001) --------------
+// The OpenAI SDK and the model secret exist ONLY in the server-side gateway:
+// no module under src/ (browser app, worker, shared, sim, render, ui) may
+// import the SDK or reference the key/env path; the gateway may not import
+// presentation or worker modules.
+
+{
+  const files: string[] = [];
+  walk(join(projectRoot, 'src'), files);
+  for (const file of files) {
+    const rel = relative(projectRoot, file).replaceAll('\\', '/');
+    const source = stripComments(readFileSync(file, 'utf8'));
+    if (/from\s+['"]openai['"]/.test(source) || /from\s+['"]openai\//.test(source)) {
+      err('client-imports-openai-sdk', 'The OpenAI SDK is gateway-only', rel);
+    }
+    if (/OPENAI_API_KEY/.test(source)) {
+      err('client-references-openai-key', 'The model key path is gateway-only', rel);
+    }
+    if (/VITE_OPENAI/.test(source)) {
+      err('client-vite-openai-secret', 'No secret may use a VITE_ prefix', rel);
+    }
+  }
+}
+{
+  const files: string[] = [];
+  walk(join(projectRoot, 'gateway'), files);
+  for (const file of files) {
+    const rel = relative(projectRoot, file).replaceAll('\\', '/');
+    const source = stripComments(readFileSync(file, 'utf8'));
+    if (/from\s+['"][^'"]*\/(render|ui|app|worker)\//.test(source)) {
+      err('gateway-imports-presentation', 'The gateway imports contracts, not app modules', rel);
+    }
+  }
+}
+
 // --- Layer 2b: required npm scripts -------------------------------------------
 
 const REQUIRED_SCRIPTS = [

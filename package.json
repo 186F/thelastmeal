@@ -1,25 +1,34 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.2.0",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0)",
+  "version": "1.3.0",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0)",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "typecheck:gateway": "tsc -p gateway/tsconfig.json",
     "lint": "eslint . && prettier --check .",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:gateway": "vitest run tests/gateway",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
+    "test:model:live": "tsx scripts/model/liveSmoke.ts",
     "validate": "tsx scripts/validate/run.ts",
     "batch": "tsx scripts/batch/run.ts",
-    "eval:individuality": "tsx scripts/evaluation/individuality.ts"
+    "eval:individuality": "tsx scripts/evaluation/individuality.ts",
+    "gateway:dev": "tsx gateway/main.ts",
+    "gateway:dev:fake": "tsx gateway/main.ts --fake",
+    "build:gateway": "vite build --config gateway/vite.config.ts",
+    "check:dist": "tsx scripts/security/scanDist.ts",
+    "model:summarize": "tsx scripts/model/summarize.ts"
   },
   "dependencies": {
+    "openai": "6.49.0",
     "three": "^0.170.0",
     "zod": "^3.24.1"
   },

@@ -80,7 +80,10 @@ const commitmentTerms = z
   })
   .strict();
 
-const offeredAffordance = z
+/** Exported for the external decision-request contract (milestone 001):
+ * the outbound schema reuses this exact, config-derived definition so a
+ * second hand-maintained copy can never drift. */
+export const offeredAffordanceSchema = z
   .object({
     id: affordanceId,
     category: actionCategory,
@@ -188,7 +191,7 @@ const eventSchemaList = [
     expiresAtTick: futureTick,
     hardDependencyFingerprint: hash16,
     affordanceIds: z.array(affordanceId),
-    offeredAffordances: z.array(offeredAffordance),
+    offeredAffordances: z.array(offeredAffordanceSchema),
   }),
   ev('DecisionResponseReceived', {
     npcId,
@@ -220,7 +223,7 @@ const eventSchemaList = [
   ev('DecisionRequestExpired', {
     npcId,
     requestId: decisionRequestId,
-    reasonCode: z.enum(['ttl-expired', 'scenario-ended']),
+    reasonCode: z.enum(['ttl-expired', 'scenario-ended', 'external-failure']),
   }),
   ev('DecisionRequestSuperseded', {
     npcId,

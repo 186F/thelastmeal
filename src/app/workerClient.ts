@@ -1,5 +1,11 @@
 import { PROTOCOL_VERSION } from '../shared/versions';
-import type { DecisionResponse } from '../shared/decisionContracts';
+import type {
+  DecisionResponse,
+  ExternalDecisionFailure,
+  ExternalDecisionRequest,
+} from '../shared/decisionContracts';
+import { externalDecisionRequestSchema } from '../sim/decisions/externalSchemas';
+import { MODEL_CONDITION_SCENARIOS } from '../sim/decisions/conditions';
 import type { ScenarioId } from '../shared/ids';
 import {
   workerEventsResponseSchema,
@@ -27,6 +33,16 @@ export class WorkerClient {
   private readonly worker: Worker;
   private commandSeq = 0;
   private terminated = false;
+  /** Wired by the composition root: forwards exact-validated decision
+   * requests to the model gateway client when a model condition is active. */
+  onDecisionRequest: ((request: ExternalDecisionRequest) => void) | null = null;
+  /** Wired by the composition root: a scenario load/reset starts a fresh
+   * gateway run (aborting in-flight calls, minting a new runId). */
+  onRunReset: (() => void) | null = null;
+  /** Mirrors the worker's runSeq: incremented when WE issue load/reset, so
+   * decision-requests still in transit from a superseded run are dropped
+   * before they can be re-labelled with the new gateway runId. */
+  private expectedRunSeq = 0;
 
   constructor(
     private readonly store: ViewStore,
@@ -61,7 +77,28 @@ export class WorkerClient {
 
   loadScenario(id: ScenarioId): void {
     this.store.resetRunViews();
-    this.send({ type: 'load-scenario', scenarioId: id });
+    this.onRunReset?.();
+    this.expectedRunSeq += 1;
+    let conditionId = this.store.state.selectedConditionId;
+    // A scenario the model condition refuses (Scenario F stays part of the
+    // frozen deterministic experiment) silently degrades the SELECTION to the
+    // baseline so the UI and the worker can never desynchronize on a
+    // rejected load.
+    if (conditionId === 'mara-model-per-decision-v1' && !MODEL_CONDITION_SCENARIOS.includes(id)) {
+      conditionId = 'deterministic-baseline-v1';
+      this.store.update((s) => {
+        s.selectedConditionId = 'deterministic-baseline-v1';
+        s.lastError = `condition-not-supported-for-scenario: reverted to deterministic-baseline-v1 for ${id}`;
+      });
+    }
+    // The baseline condition is the default wiring: omit it so the command
+    // stream (and worker behavior) stays byte-identical to pre-milestone
+    // builds unless a non-default condition is actually selected.
+    if (conditionId === 'deterministic-baseline-v1') {
+      this.send({ type: 'load-scenario', scenarioId: id });
+    } else {
+      this.send({ type: 'load-scenario', scenarioId: id, conditionId });
+    }
   }
   start(): void {
     this.send({ type: 'start' });
@@ -74,6 +111,8 @@ export class WorkerClient {
   }
   reset(): void {
     this.store.resetRunViews();
+    this.onRunReset?.();
+    this.expectedRunSeq += 1;
     this.send({ type: 'reset' });
   }
   step(ticks = 1): void {
@@ -124,6 +163,9 @@ export class WorkerClient {
   }
   submitDecisionResponse(response: DecisionResponse): void {
     this.send({ type: 'submit-decision-response', response });
+  }
+  submitDecisionFailure(failure: ExternalDecisionFailure): void {
+    this.send({ type: 'submit-decision-failure', failure });
   }
 
   terminate(): void {
@@ -221,14 +263,29 @@ export class WorkerClient {
           };
         });
         break;
-      case 'decision-request':
+      case 'decision-request': {
+        // A request from a superseded run (still in the message queue when a
+        // new load/reset was issued) must never be forwarded: it would carry
+        // the NEW gateway runId and bypass the stale-run discard.
+        if (response.runSeq !== this.expectedRunSeq) break;
+        // Exact payload validation at the main-thread boundary (milestone
+        // 001, section 16): a failed parse is surfaced and NEVER forwarded.
+        const parsed = externalDecisionRequestSchema.safeParse(response.request);
+        if (!parsed.success) {
+          this.store.update((s) => {
+            s.lastError = `invalid-decision-request-payload: ${parsed.error.issues[0]?.message ?? ''}`;
+          });
+          break;
+        }
         this.store.update((s) => {
           s.externalDecisionRequests.push(response.request);
           if (s.externalDecisionRequests.length > 50) {
             s.externalDecisionRequests.splice(0, s.externalDecisionRequests.length - 50);
           }
         });
+        this.onDecisionRequest?.(response.request);
         break;
+      }
       case 'batch-progress':
         this.store.update((s) => {
           s.batch.running = true;

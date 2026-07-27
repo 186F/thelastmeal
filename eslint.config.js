@@ -54,6 +54,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-gateway/**',
       'node_modules/**',
       'artifacts/**',
       'coverage/**',

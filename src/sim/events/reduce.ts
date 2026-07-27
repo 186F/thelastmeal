@@ -214,6 +214,10 @@ function applyEventBody(state: CanonicalState, event: SimEvent): void {
         throw new Error(`reduce-expiry-without-pending-request: ${p.requestId}`);
       }
       npc.pendingDecision = null;
+      // ttl-expired flags immediate re-evaluation; scenario-ended is
+      // terminal; external-failure deliberately does NOT flag it (milestone
+      // 001, section 15): the NPC re-decides on the ordinary cadence, which
+      // bounds the outbound request rate while a gateway is failing.
       if (p.reasonCode === 'ttl-expired') {
         npc.needsReevaluation = true;
       }

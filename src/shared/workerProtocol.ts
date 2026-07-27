@@ -1,11 +1,25 @@
 import { z } from 'zod';
 import { PROTOCOL_VERSION } from './versions';
 import { eventEnvelopeSchema, type EventEnvelope } from './events';
-import type { DecisionRequest, DecisionResponse } from './decisionContracts';
+import {
+  EXTERNAL_FAILURE_CODES,
+  type DecisionResponse,
+  type ExternalDecisionFailure,
+  type ExternalDecisionRequest,
+} from './decisionContracts';
 import type { PresentationSnapshot, RunStatus } from './snapshots';
 import type { BatchReport, FinalSummary } from './reports';
 import { ACTION_MODES, type ScenarioId } from './ids';
 import type { ValidationIssue } from './validation';
+
+/** Registered experimental condition IDs (milestone 001, section 6). The
+ * authoritative registry lives in `src/sim/decisions/conditions.ts`; this
+ * mirror exists so the shared protocol layer stays a leaf. A drift test pins
+ * the two lists together. */
+export const PROTOCOL_CONDITION_IDS = [
+  'deterministic-baseline-v1',
+  'mara-model-per-decision-v1',
+] as const;
 
 /**
  * Typed, versioned message protocol between the browser application (main
@@ -34,7 +48,11 @@ export interface CommandBase {
 export type WorkerCommand = CommandBase &
   (
     | { type: 'hello' }
-    | { type: 'load-scenario'; scenarioId: ScenarioId }
+    | {
+        type: 'load-scenario';
+        scenarioId: ScenarioId;
+        conditionId?: (typeof PROTOCOL_CONDITION_IDS)[number];
+      }
     | { type: 'start' }
     | { type: 'pause' }
     | { type: 'resume' }
@@ -50,6 +68,7 @@ export type WorkerCommand = CommandBase &
     | { type: 'export-batch-report' }
     | { type: 'validate-config' }
     | { type: 'submit-decision-response'; response: DecisionResponse }
+    | { type: 'submit-decision-failure'; failure: ExternalDecisionFailure }
   );
 
 const commandBase = {
@@ -88,6 +107,20 @@ export const decisionResponseSchema = z
   })
   .strict();
 
+/** Exact runtime schema for an externally reported decision failure
+ * (milestone 001, section 15). */
+export const externalDecisionFailureSchema = z
+  .object({
+    failureId: z.string().min(1).max(100),
+    requestId: z.string().min(1).max(200),
+    npcId: z.enum(['mara', 'jonas', 'rin']),
+    scenarioId: z.enum(['A', 'B1', 'B2', 'C', 'D', 'E', 'F']),
+    providerId: z.string().min(1).max(200),
+    failureCode: z.enum(EXTERNAL_FAILURE_CODES),
+    retryable: z.boolean(),
+  })
+  .strict();
+
 export const workerCommandSchema = z.discriminatedUnion('type', [
   z.object({ ...commandBase, type: z.literal('hello') }).strict(),
   z
@@ -95,6 +128,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
       ...commandBase,
       type: z.literal('load-scenario'),
       scenarioId: z.enum(['A', 'B1', 'B2', 'C', 'D', 'E', 'F']),
+      conditionId: z.enum(PROTOCOL_CONDITION_IDS).optional(),
     })
     .strict(),
   z.object({ ...commandBase, type: z.literal('start') }).strict(),
@@ -136,6 +170,13 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
       ...commandBase,
       type: z.literal('submit-decision-response'),
       response: decisionResponseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBase,
+      type: z.literal('submit-decision-failure'),
+      failure: externalDecisionFailureSchema,
     })
     .strict(),
 ]);
@@ -188,7 +229,16 @@ export type WorkerResponse = { protocolVersion: number } & (
       expectedLedgerHash: string | null;
       errors: string[];
     }
-  | { type: 'decision-request'; request: DecisionRequest }
+  | {
+      type: 'decision-request';
+      request: ExternalDecisionRequest;
+      /** Count of load-scenario/reset commands the worker has processed:
+       * lets the client discard requests from a superseded run that were
+       * still in the message queue when a new run started (adversarial
+       * review: without it, old-run requests would be re-labelled with the
+       * NEW gateway runId and bypass the stale-run discard). */
+      runSeq: number;
+    }
   | { type: 'batch-progress'; completed: number; total: number; currentScenarioId: ScenarioId }
   | { type: 'batch-result'; report: BatchReport; reportJson: string; reportMarkdown: string }
   | { type: 'traces-export'; fileName: string; json: string }

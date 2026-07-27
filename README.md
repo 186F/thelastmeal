@@ -20,7 +20,7 @@ hardened the decision lifecycle, constraint enforcement, schemas, hashing,
 determinism proofs, memory generalization, and evaluation blinding.
 
 **Compatibility break:** ledger exports are now format version 2
-(`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 2).
+(`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).
 Version-1 exports are rejected at import with an explicit
 `unsupported-format-version` error — never silently reinterpreted. Re-export
 from a current run instead.
@@ -91,6 +91,14 @@ No API key, cloud service, backend, database, paid asset, or model account is ne
 | `npm run validate`           | Experiment-data validation + architecture checks (sim-purity import scan, required npm scripts); exits nonzero on failure                                                                                                                                                                                                            |
 | `npm run batch`              | Headless deterministic batch: every scenario, 100 repeat runs each, replay verification, invariant checks, and **complete canonical event-stream equality** across repeats; writes `artifacts/` (ledgers, context-rich traces, report.json, report.md); exits nonzero on any violation. Use `-- --runs=N` to change the repeat count |
 | `npm run eval:individuality` | Role-counterbalanced individuality evaluation (separate from v1.0 results): all six identity-role rotations per scenario, blinded behavior-only reviewer packages in `artifacts/individuality-eval/reviewer/`. `-- --answer-key` also writes the separate answer key; `-- --scenarios=A,C` restricts scenarios                       |
+| `npm run typecheck:gateway`  | TypeScript strict checking for the Node model gateway                                                                                                                                                                                                                                                                                |
+| `npm run test:gateway`       | Gateway test suite (fake adapter; no network beyond localhost, no secrets)                                                                                                                                                                                                                                                           |
+| `npm run gateway:dev:fake`   | Start the local model gateway with the deterministic fake adapter (no key)                                                                                                                                                                                                                                                           |
+| `npm run gateway:dev`        | Start the LIVE model gateway (requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`)                                                                                                                                                                                                                                            |
+| `npm run build:gateway`      | Bundle the gateway into `dist-gateway/`                                                                                                                                                                                                                                                                                              |
+| `npm run check:dist`         | Post-build secret scan over `dist/` (key paths, SDK, canary)                                                                                                                                                                                                                                                                         |
+| `npm run model:summarize`    | Build `model-summary.json` + `bundle-manifest.json` for a model run (`-- --run-id <id>`)                                                                                                                                                                                                                                             |
+| `npm run test:model:live`    | Opt-in live smoke call (`RUN_LIVE_MODEL_TESTS=1`; skipped by default, never in CI)                                                                                                                                                                                                                                                   |
 
 ## Running the browser application
 
@@ -315,6 +323,67 @@ never knows which provider decided. Provider transport/SDK types stay outside
 `src/sim`; a future model gateway belongs in a separate Node process, never in
 browser code, and no API key may appear in client code, committed files,
 storage, or exported ledgers.
+
+## Model integration — one model-backed NPC (milestone 001)
+
+The first real external model condition: **Mara** can be driven by a language
+model through a local server-side gateway while Jonas and Rin stay on the
+deterministic provider. The model only ever selects among affordances the
+engine offered; every response passes the same provider-binding, staleness,
+constraint, and validity gate as every other decision source, and a completed
+model-backed ledger replays to the same `worldStateHash` without the model.
+
+- **Conditions** (engine-resolved; the browser can only name a registered
+  condition, never a provider, prompt, or model):
+  `deterministic-baseline-v1` (byte-identical to the frozen defaults) and
+  `mara-model-per-decision-v1` (Mara → `openai-mara-action-v1`, one gateway
+  call per genuine decision opportunity). Scenario F stays deterministic-only.
+- **Gateway** (`gateway/`): exact envelope validation, context-hash
+  recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),
+  JSON-Schema structured output over a dynamic offered-ID enum, typed failure
+  codes, per-run budget (80 calls) and single-flight concurrency, noncanonical
+  JSONL traces + run manifests under `artifacts/model-runs/<runId>/`.
+- **Failure lifecycle:** known gateway/model failures are reported through
+  `submit-decision-failure` and recorded as `DecisionProviderFailed` plus an
+  `external-failure` request expiry; the NPC continues on the provisional
+  fallback and re-decides on the ordinary cadence. Gateway absence, timeouts,
+  malformed output, duplicates, and stale responses never stop logical time.
+- **Frozen baselines are untouched:** all fourteen golden hashes and the
+  complete deterministic streams are byte-identical; the 100-run batch never
+  starts a gateway; CI uses only the fake adapter and no secret.
+
+### Manual setup (live model runs)
+
+Prerequisites: Node.js 22+, npm, a Chromium-based browser, and an OpenAI API
+key (live runs only — the fake gateway needs none).
+
+```bash
+npm ci
+cp .env.gateway.example .env.gateway   # fill in OPENAI_API_KEY and OPENAI_MODEL
+npm run gateway:dev:fake               # keyless deterministic gateway, or:
+npm run gateway:dev                    # live gateway (fails fast without key/model)
+npm run dev                            # browser app on http://localhost:5173
+```
+
+The gateway URL is nonsecret configuration (`VITE_MODEL_GATEWAY_URL`, default
+`http://localhost:8787`). **No secret may ever use a `VITE_` prefix**, and the
+key exists only in the gateway process — the architecture validator and the
+post-build dist scan (`npm run check:dist`) enforce both.
+
+Walkthrough: in the _Model integration_ panel select
+`mara-model-per-decision-v1` (this reloads the scenario under the condition),
+run Scenario A at 1×, and watch the panel's call/acceptance/failure counters
+and latency. Export the ledger when the run completes, replay it (`Replay
+live/imported`) to verify the hash match, then drop the exported
+`ledger-*.json` into `artifacts/model-runs/<runId>/` and run
+`npm run model:summarize -- --run-id <runId>` to produce
+`model-summary.json` (infrastructure, engine lifecycle, and behavioral
+metrics) plus a hash-linked `bundle-manifest.json`. Follow the run discipline
+in the implementation brief (1× speed first; never pause awaiting the model;
+never edit the prompt between a paired B1/B2 comparison; a fresh `runId`
+every run). An opt-in live smoke test exists as
+`RUN_LIVE_MODEL_TESTS=1 npm run test:model:live` — it is skipped by default
+and never runs in CI.
 
 ## Deployment
 

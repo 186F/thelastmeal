@@ -34,22 +34,30 @@ import { applyEvent } from '../events/reduce';
 import type { EventDraft, SimEvent } from '../events/types';
 import { evaluateConstraints } from '../decisions/constraints';
 import { hardDependencyFingerprint } from '../decisions/dependencyFingerprint';
-import { DeterministicProvider } from '../decisions/deterministicProvider';
 import { FallbackProvider } from '../decisions/fallbackProvider';
-import { ScriptedFailureProvider } from '../decisions/failingProvider';
 import {
   ProviderFailureError,
   isDeferred,
-  isScheduledResponseSource,
   type CommitmentView,
   type DecisionContext,
   type DecisionProvider,
   type DecisionResult,
+  type ProviderDecision,
 } from '../decisions/provider';
+import { singleProviderPlan, type ProviderPlan } from '../decisions/providerPlan';
+import {
+  defaultScenarioProvider,
+  planForCondition,
+  type ConditionId,
+} from '../decisions/conditions';
+import { buildExternalDecisionContext, externalContextHash } from '../decisions/externalContext';
+import { externalDecisionRequestSchema } from '../decisions/externalSchemas';
 import type {
   DecisionRejectionReason,
   DecisionRequest,
   DecisionResponse,
+  ExternalDecisionFailure,
+  ExternalDecisionRequest,
 } from '../../shared/decisionContracts';
 import { DECISION_REQUEST_TTL_TICKS } from '../config';
 import { SeededRng } from '../rng/rng';
@@ -82,7 +90,16 @@ export interface EngineRun {
   state: CanonicalState;
   ledger: EventLedger;
   rng: SeededRng;
+  /**
+   * Single mutable provider slot backing the DEFAULT single-provider plan
+   * (its id is the plan id, read live so tests may swap it). For registered
+   * multi-provider plans this slot is not consulted — the plan's per-NPC map
+   * is fixed at creation.
+   */
   provider: DecisionProvider;
+  /** Run-level provider plan (milestone 001, section 7): the engine-owned
+   * resolution of WHICH decision authority serves each NPC. */
+  plan: ProviderPlan;
   fallback: DecisionProvider;
   counters: { action: number; decision: number; request: number; proposal: number; signal: number };
   /** Semantic world-state hash, set at scenario end (remediation 4). */
@@ -97,11 +114,19 @@ export interface EngineRun {
    */
   responseInbox: DecisionResponse[];
   /**
-   * Outbox of pending requests whose provider deferred — the seam intended
-   * for a future external gateway. This build never forwards them to any
-   * network; the worker exposes them as diagnostics-only messages.
+   * Outbox of pending requests whose provider deferred: the exact-validated
+   * request plus its deterministic bounded model context (milestone 001,
+   * section 9). The worker forwards these to the main thread; the browser's
+   * gateway client decides whether a registered external condition sends
+   * them to the local model gateway. Non-canonical transport.
    */
-  externalRequests: DecisionRequest[];
+  externalRequests: ExternalDecisionRequest[];
+  /**
+   * Externally reported gateway/model failures (milestone 001, section 15),
+   * drained at the same fixed in-tick point as responses so canonical
+   * outcomes never depend on operator tick-batch sizes.
+   */
+  failureInbox: ExternalDecisionFailure[];
   /**
    * Engine-owned resolved-request registry (re-audit finding 5): requestId ->
    * how and when the request was resolved, so a late response to ANY
@@ -180,6 +205,18 @@ export interface CreateRunOptions {
    * wrapper.
    */
   provider?: DecisionProvider;
+  /**
+   * Registered experimental condition (milestone 001, section 6). The engine
+   * alone resolves it into a provider plan; arbitrary providers, provider
+   * IDs, prompts, or model names can never be smuggled through this seam.
+   * Mutually exclusive with `provider`. Omitted = the frozen default wiring.
+   */
+  conditionId?: ConditionId;
+  /**
+   * Test-only seam: a fully-formed provider plan (e.g. the recorded-response
+   * fixture plan). Mutually exclusive with `provider` and `conditionId`.
+   */
+  plan?: ProviderPlan;
 }
 
 export function createRun(scenarioId: ScenarioId, options?: CreateRunOptions): EngineRun {
@@ -197,13 +234,14 @@ export function createRunWithRoles(
   options?: CreateRunOptions,
 ): EngineRun {
   assertValidRoles(roles);
+  const given = [options?.provider, options?.conditionId, options?.plan].filter(
+    (v) => v !== undefined,
+  );
+  if (given.length > 1) {
+    throw new Error('create-run-provider-condition-conflict');
+  }
   const state = buildInitialState(scenario, roles);
-  const base = new DeterministicProvider();
-  const provider =
-    options?.provider ??
-    (scenario.providerFailureFromTick !== null
-      ? new ScriptedFailureProvider(base, scenario.providerFailureFromTick)
-      : base);
+  const provider = options?.provider ?? defaultScenarioProvider(scenario);
   const run: EngineRun = {
     scenario,
     roles,
@@ -211,14 +249,23 @@ export function createRunWithRoles(
     ledger: new EventLedger(),
     rng: new SeededRng(scenario.seed),
     provider,
+    // Placeholder until the plan is attached two lines below (the default
+    // plan reads `run.provider` live, so it needs the run object to exist).
+    plan: null as unknown as ProviderPlan,
     fallback: new FallbackProvider(),
     counters: { action: 0, decision: 0, request: 0, proposal: 0, signal: 0 },
     worldStateHash: null,
     canonicalLedgerHash: null,
     responseInbox: [],
     externalRequests: [],
+    failureInbox: [],
     resolvedRequests: new Map(),
   };
+  run.plan =
+    options?.plan ??
+    (options?.conditionId
+      ? planForCondition(options.conditionId, scenario, () => provider)
+      : singleProviderPlan(() => run.provider));
   emitScenarioStart(run);
   return run;
 }
@@ -383,7 +430,7 @@ function emitScenarioStart(run: EngineRun): void {
       scenarioVersion: scenario.version,
       seed: scenario.seed,
       configVersion: run.state.configVersion,
-      providerId: run.provider.id,
+      providerId: run.plan.id,
     },
   });
 
@@ -831,6 +878,10 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
     recordResolvedRequest(run, supersededRequestId, 'superseded', tick);
   }
 
+  // The plan names the decision authority for THIS NPC (milestone 001,
+  // section 7); the request records that actual provider, and the acceptance
+  // gate binds any response to it.
+  const provider = run.plan.providerFor(npc.id);
   const fingerprint = hardDependencyFingerprint(run.state, npc.id);
   const expiresAtTick = tick + DECISION_REQUEST_TTL_TICKS;
   const requested = emit(run, {
@@ -841,7 +892,7 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
     payload: {
       npcId: npc.id,
       requestId,
-      providerId: run.provider.id,
+      providerId: provider.id,
       stateVersion,
       worldRevision: run.state.worldRevision,
       expiresAtTick,
@@ -852,38 +903,9 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
   });
 
   const ctx = buildDecisionContext(run, npc, tick, stateVersion, requestId, affordances);
+  let returned: ProviderDecision;
   try {
-    const returned = run.provider.decide(ctx);
-    if (isDeferred(returned)) {
-      // The request stays pending; the world never blocks on a provider.
-      run.externalRequests.push({
-        requestId,
-        npcId: npc.id,
-        scenarioId: run.state.scenarioId,
-        requestedAtTick: tick,
-        expiresAtTick,
-        worldRevisionAtRequest: run.state.worldRevision,
-        providerId: run.provider.id,
-        offeredAffordances: affordances,
-        offeredAffordanceIds: affordances.map((a) => a.id),
-        hardDependencyFingerprint: fingerprint,
-      });
-      if (!npc.currentAction) {
-        // Idle NPCs act on the deterministic fallback immediately, without
-        // consuming the pending request (provisional behavior).
-        provisionalFallback(run, npc, tick, requestId, ctx, requested.id);
-      }
-      return;
-    }
-    const response = localResponse(run, requestId, npc.id, run.provider.id, returned, '');
-    const outcome = processDecisionResponse(run, response, tick, false);
-    if (!outcome.accepted) {
-      // The provider's own response failed the acceptance gate (unoffered
-      // affordance, constraint violation, ...): one bounded retry through
-      // the deterministic fallback, which terminates on the always-offered
-      // `wait`.
-      runFallbackThroughGate(run, npc, tick, requestId, ctx);
-    }
+    returned = provider.decide(ctx);
   } catch (error) {
     const errorCode =
       error instanceof ProviderFailureError ? error.errorCode : 'provider-exception';
@@ -893,8 +915,57 @@ function decideForNpc(run: EngineRun, npc: NpcState, tick: number): void {
       actorId: npc.id,
       targetId: null,
       causationId: requested.id,
-      payload: { npcId: npc.id, requestId, providerId: run.provider.id, errorCode },
+      payload: { npcId: npc.id, requestId, providerId: provider.id, errorCode },
     });
+    runFallbackThroughGate(run, npc, tick, requestId, ctx);
+    return;
+  }
+  if (isDeferred(returned)) {
+    // The request stays pending; the world never blocks on a provider. The
+    // outbound request + bounded model context are built and exact-validated
+    // HERE, outside the provider try/catch: a contract violation is an
+    // engine bug that must fail loudly, never masquerade as a provider
+    // failure (re-audit finding 6, throw-site caution).
+    const request: DecisionRequest = {
+      requestId,
+      npcId: npc.id,
+      scenarioId: run.state.scenarioId,
+      requestedAtTick: tick,
+      expiresAtTick,
+      worldRevisionAtRequest: run.state.worldRevision,
+      providerId: provider.id,
+      offeredAffordances: affordances,
+      offeredAffordanceIds: affordances.map((a) => a.id),
+      hardDependencyFingerprint: fingerprint,
+    };
+    const { context, truncationCounts } = buildExternalDecisionContext(run.state, ctx);
+    const external: ExternalDecisionRequest = {
+      request,
+      context,
+      contextHash: externalContextHash(context),
+      truncationCounts,
+    };
+    const parsed = externalDecisionRequestSchema.safeParse(external);
+    if (!parsed.success) {
+      throw new Error(
+        `external-request-contract-violation: ${parsed.error.issues[0]?.message ?? 'unknown'}`,
+      );
+    }
+    run.externalRequests.push(external);
+    if (!npc.currentAction) {
+      // Idle NPCs act on the deterministic fallback immediately, without
+      // consuming the pending request (provisional behavior).
+      provisionalFallback(run, npc, tick, requestId, ctx, requested.id);
+    }
+    return;
+  }
+  const response = localResponse(run, requestId, npc.id, provider.id, returned, '');
+  const outcome = processDecisionResponse(run, response, tick, false);
+  if (!outcome.accepted) {
+    // The provider's own response failed the acceptance gate (unoffered
+    // affordance, constraint violation, ...): one bounded retry through
+    // the deterministic fallback, which terminates on the always-offered
+    // `wait`.
     runFallbackThroughGate(run, npc, tick, requestId, ctx);
   }
 }
@@ -997,11 +1068,12 @@ function provisionalFallback(
   proposeAndLaunch(run, npc, tick, { ...chosen, interruptible: true }, used.id);
 }
 
-/** Drain scheduled and injected decision responses in deterministic order. */
+/** Drain scheduled and injected decision responses, then reported external
+ * failures, in deterministic order at the single fixed in-tick point. */
 function drainDecisionResponses(run: EngineRun, tick: number): void {
   const due: DecisionResponse[] = [];
-  if (isScheduledResponseSource(run.provider)) {
-    due.push(...run.provider.dueResponses(tick));
+  for (const source of run.plan.scheduledResponseSources()) {
+    due.push(...source.dueResponses(tick));
   }
   if (run.responseInbox.length > 0) {
     due.push(...run.responseInbox);
@@ -1010,6 +1082,63 @@ function drainDecisionResponses(run: EngineRun, tick: number): void {
   for (const response of due) {
     processDecisionResponse(run, response, tick, false);
   }
+  if (run.failureInbox.length > 0) {
+    const failures = run.failureInbox.splice(0, run.failureInbox.length);
+    for (const failure of failures) {
+      processDecisionFailure(run, failure, tick);
+    }
+  }
+}
+
+/**
+ * Explicit external-failure lifecycle (milestone 001, section 15). A KNOWN
+ * gateway/model failure resolves its pending request with a recorded
+ * terminal outcome instead of waiting for silent TTL expiry:
+ * DecisionProviderFailed carries the structured failure code, then the
+ * request is expired with reason `external-failure`. The reducer does NOT
+ * flag re-evaluation for this reason — the NPC keeps its provisional or
+ * ongoing action and re-decides on the ordinary cadence, which also bounds
+ * the request rate while a gateway is down.
+ *
+ * A failure that no longer matches a live pending request (unknown, already
+ * accepted/expired/superseded, wrong provider, wrong scenario) is moot: the
+ * lifecycle it reports on already ended, so it carries no canonical
+ * consequence and is dropped without an event.
+ */
+function processDecisionFailure(
+  run: EngineRun,
+  failure: ExternalDecisionFailure,
+  tick: number,
+): void {
+  const npc = run.state.npcs[failure.npcId];
+  const pending = npc.pendingDecision;
+  if (!pending || pending.requestId !== failure.requestId) return;
+  if (failure.scenarioId !== run.state.scenarioId) return;
+  if (failure.providerId !== pending.providerId) return;
+  emit(run, {
+    type: 'DecisionProviderFailed',
+    tick,
+    actorId: failure.npcId,
+    targetId: null,
+    payload: {
+      npcId: failure.npcId,
+      requestId: failure.requestId,
+      providerId: pending.providerId,
+      errorCode: failure.failureCode,
+    },
+  });
+  emit(run, {
+    type: 'DecisionRequestExpired',
+    tick,
+    actorId: failure.npcId,
+    targetId: null,
+    payload: {
+      npcId: failure.npcId,
+      requestId: failure.requestId,
+      reasonCode: 'external-failure',
+    },
+  });
+  recordResolvedRequest(run, failure.requestId, 'expired', tick);
 }
 
 function expireDecisionRequests(run: EngineRun, tick: number): void {
