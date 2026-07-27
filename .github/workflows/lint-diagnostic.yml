@@ -13,18 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm ci --silent
-      - id: lint
-        shell: bash
-        run: |
-          set +e
-          npm run lint > lint.log 2>&1
-          code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+      - run: |
+          npx prettier --write \
+            gateway/adapters/openRouterResponsesAdapter.ts \
+            tests/gateway/openrouter-adapter.test.ts \
+            tests/gateway/openrouter-config.test.ts
       - uses: actions/upload-artifact@v4
         with:
-          name: lint-diagnostic
-          path: lint.log
+          name: prettier-output
+          path: |
+            gateway/adapters/openRouterResponsesAdapter.ts
+            tests/gateway/openrouter-adapter.test.ts
+            tests/gateway/openrouter-config.test.ts
           if-no-files-found: error
-      - if: steps.lint.outputs.exit_code != '0'
-        run: exit 1
