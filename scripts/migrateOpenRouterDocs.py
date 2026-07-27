@@ -38,6 +38,26 @@ def update_readme() -> None:
         'requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`',
         'requires `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER` in `.env.gateway`',
     )
+    old_release_paragraph = (
+        'Nothing frozen moved: configuration version `vs001-1.0.0`, the\n'
+        'model experiment `model-backed-npc-001` v `1.1.0`, the condition\n'
+        '`mara-model-per-decision-v1`, the external provider `openrouter-mara-action-v1`,\n'
+        'and the prompt version `mara-action-selection-1.0.0` are all unchanged, as\n'
+        'are all fourteen golden hashes. **The live milestone remains pending after\n'
+        'this release** — 1.5.0 hardens the evidence pipeline and makes no live model\n'
+        'call whatsoever.\n'
+    )
+    new_release_paragraph = (
+        'Nothing in the frozen Vertical Slice moved: configuration version\n'
+        '`vs001-1.0.0`, scenario data, deterministic behavior, and all fourteen golden\n'
+        'hashes remain unchanged. Release 1.6.0 intentionally advances the separate\n'
+        'model experiment from v1.0.0 to v1.1.0 and changes the registered external\n'
+        'provider from direct OpenAI access to `openrouter-mara-action-v1`; the prompt\n'
+        'text and `mara-action-selection-1.0.0` prompt version remain unchanged. **The\n'
+        'live milestone remains pending** — no live OpenRouter request is claimed by\n'
+        'this release.\n'
+    )
+    text = text.replace(old_release_paragraph, new_release_paragraph)
     anchor = (
         '- **Gateway** (`gateway/`): exact envelope validation, context-hash\n'
         '  recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),\n'
@@ -64,6 +84,10 @@ def update_readme() -> None:
 def update_live_report() -> None:
     path = Path('documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md')
     text = path.read_text(encoding='utf-8')
+    text = text.replace(
+        'performed against the real OpenAI API.',
+        'performed against the live OpenRouter Responses API.',
+    )
     text = text.replace('`model-backed-npc-001` v `1.0.0`', '`model-backed-npc-001` v `1.1.0`')
     text = text.replace('`openai-mara-action-v1`', '`openrouter-mara-action-v1`')
     text = text.replace('Requested model (`OPENAI_MODEL`)', 'Requested model (`OPENROUTER_MODEL`)')
@@ -93,6 +117,10 @@ def update_live_report() -> None:
     )
     if 'registered live route was subsequently migrated' not in text:
         text = text.replace(intro, addition)
+    text = text.replace(
+        'That release makes version-2 run bundles preserve every exact client request,',
+        'Release 1.5.0 makes version-2 run bundles preserve every exact client request,',
+    )
     path.write_text(text, encoding='utf-8')
 
 
