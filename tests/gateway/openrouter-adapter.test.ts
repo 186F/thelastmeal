@@ -3,10 +3,7 @@ import {
   OPENROUTER_RESPONSES_ENDPOINT,
   OpenRouterResponsesDecisionAdapter,
 } from '../../gateway/adapters/openRouterResponsesAdapter';
-import {
-  AdapterFailure,
-  type AdapterInput,
-} from '../../gateway/adapters/modelDecisionAdapter';
+import type { AdapterFailure, AdapterInput } from '../../gateway/adapters/modelDecisionAdapter';
 
 function adapterInput(): AdapterInput {
   return {
