@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   checks:
@@ -39,6 +47,9 @@ jobs:
       - name: Gateway tests (fake adapter, no secrets)
         run: npm run test:gateway
 
+      - name: Formal model-bundle tests
+        run: npm run test:model:bundle
+
       - name: Production build
         run: npm run build
 
@@ -56,6 +67,26 @@ jobs:
 
       - name: Deterministic batch (full gate, 100 runs/scenario)
         run: npm run batch
+
+      # After the batch (A10): a failure in the newest step must never
+      # pre-empt the frozen 100-run determinism gate.
+      - name: Keyless formal model-run rehearsal
+        run: npm run model:rehearse -- --ci
+
+      - name: Upload model-rehearsal report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-rehearsal-report
+          path: |
+            artifacts/model-rehearsal/report.json
+            artifacts/model-rehearsal/report.md
+            artifacts/model-rehearsal/**/run-manifest.final.json
+            artifacts/model-rehearsal/**/bundle-manifest.json
+            artifacts/model-rehearsal/**/model-summary.json
+          # Evidence artifact: a path drift must fail loudly, never upload
+          # zero bytes behind a green step (A10 — never `ignore` here).
+          if-no-files-found: error
 
       - name: Upload batch report
         if: always()

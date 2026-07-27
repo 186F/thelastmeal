@@ -1,41 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { buildLedgerFile } from '../../src/sim/runtime/ledgerFileBuilder';
 import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
-import { canonicalLedgerHash } from '../../src/sim/replay/ledgerHash';
-import { replayLedger } from '../../src/sim/replay/replay';
 import { SimulationHost } from '../../src/sim/runtime/host';
+import { buildLedgerFile } from '../../src/sim/runtime/ledgerFileBuilder';
 import { createRun, stepTick } from '../../src/sim/runtime/engine';
 import { DeterministicProvider } from '../../src/sim/decisions/deterministicProvider';
 import { SimulatedAsyncProvider } from '../../src/sim/decisions/simulatedAsyncProvider';
 import type { LedgerFile } from '../../src/shared/ledgerFile';
-import type { ScenarioId } from '../../src/shared/ids';
-import type { SimEvent } from '../../src/sim/events/types';
-import { completedRun } from '../helpers';
-
-function exportedFile(scenario: ScenarioId = 'A'): LedgerFile {
-  return JSON.parse(JSON.stringify(buildLedgerFile(completedRun(scenario)))) as LedgerFile;
-}
+// The corrupt-ledger construction (genuine export + forger-grade reseal) is
+// shared with tests/integration/model-corruption.test.ts (1.5.0 V6) via the
+// non-test helper module — see tests/ledgerCorruption.ts.
+import { exportedFile, reseal } from '../ledgerCorruption';
 
 function errorCodes(result: ReturnType<typeof validateLedgerFile>): string[] {
   return result.issues.filter((i) => i.severity === 'error').map((i) => i.code);
-}
-
-/**
- * Reseals a tampered file the way a determined forger would: recomputes the
- * world-state hash from an actual replay, restamps the ScenarioEnded payload,
- * and recomputes the canonical ledger hash over the doctored stream. A tamper
- * that survives resealing can only be caught by the semantic cross-checks
- * (re-audit finding 2) — never by the hash comparisons.
- */
-function reseal(file: LedgerFile): string {
-  const replayed = replayLedger(file.scenario.id, file.events);
-  file.worldStateHash = replayed.worldStateHash;
-  const ended = file.events.find((e) => e.type === 'ScenarioEnded');
-  if (ended) {
-    (ended.payload as { worldStateHash: string }).worldStateHash = replayed.worldStateHash;
-  }
-  file.canonicalLedgerHash = canonicalLedgerHash(file.events as SimEvent[]);
-  return JSON.stringify(file);
 }
 
 describe('imported-ledger validation (all-or-nothing, remediation 3)', () => {

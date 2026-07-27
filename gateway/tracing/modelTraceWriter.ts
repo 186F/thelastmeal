@@ -6,10 +6,16 @@ import type { ModelTraceEntry, RunManifestSeed } from '../../src/shared/modelArt
  * Noncanonical model-run trace (milestone 001, section 17; trace schema v2 in
  * re-audit remediation G1). One JSONL entry per gateway request under
  * `<traceDir>/<runId>/model-trace.jsonl`, a run manifest seeded at first
- * sight of a run, and — after full validation, for every non-duplicate
- * dispatch — the exact validated envelope as
+ * sight of a run — since 1.5.0 G3 that means alongside the envelope sidecar
+ * on the run's FIRST validated non-duplicate envelope, so the seed's
+ * `startedAtUtc` is first-validated-envelope time and a first request killed
+ * mid-adapter still leaves a manifest — and, for every non-duplicate
+ * dispatch, the exact validated envelope as
  * `<traceDir>/<runId>/requests/<requestId>.json` (G2, deviation D3).
- * Wall-clock timestamps are diagnostic only and never enter canonical state.
+ * The seed's open `modelSettings` record additively gained `maxTotalCalls`
+ * (the resolved cap) and `maxRequestBodyBytes` in 1.5.0 G2; the trace schema
+ * version stays 2. Wall-clock timestamps are diagnostic only and never enter
+ * canonical state.
  *
  * Entry/seed types and their exact schemas live in
  * src/shared/modelArtifacts.ts (shared with the finalizer); this module keeps

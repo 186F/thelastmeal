@@ -1,5 +1,5 @@
 import { loadGatewayConfig } from './config';
-import { createGateway } from './server';
+import { createGateway, stopWithFallback } from './server';
 import { FakeDecisionAdapter } from './adapters/fakeDecisionAdapter';
 import { OpenAIResponsesDecisionAdapter } from './adapters/openaiResponsesAdapter';
 import { ModelTraceWriter } from './tracing/modelTraceWriter';
@@ -25,6 +25,24 @@ const adapter = useFake
     );
 
 const gateway = createGateway(config, adapter, new ModelTraceWriter(config.traceDir));
+
+// Graceful shutdown (1.5.0 G1): SIGINT/SIGTERM drain in-flight requests via
+// stop(); after a 2s grace stopWithFallback force-closes any stragglers with
+// closeAllConnections(), then the process exits 0. This turns a live
+// gateway-stop from a hard kill (which could land between the sidecar write
+// and the trace row) into a deterministic drain-then-refuse.
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`model gateway: received ${signal} — draining in-flight requests (2s grace)`);
+  void stopWithFallback(gateway)
+    .catch(() => undefined)
+    .then(() => process.exit(0));
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
 gateway
   .start()
   .then((port) => {

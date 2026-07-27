@@ -45,6 +45,17 @@ import { ModelClientTraceRecorder, type ModelClientTraceEntry } from './modelCli
  * 'invalid-gateway-response', and the config endpoint is NOT re-polled per
  * request. 'unreachable' keeps the original behavior: connect is retried per
  * dispatch and requests fail as 'gateway-unavailable'.
+ *
+ * Exact-request archive (1.5.0, C2): every request that passes the
+ * schema/Mara/provider filter is archived as a COMPLETE prospective envelope
+ * BEFORE the contract latch, budget, queue-cap, connect, and dispatch
+ * decisions — so requests that never produce a gateway sidecar (overflow,
+ * budget, latch, unreachable, post-stop) still leave exact bytes in the run
+ * bundle. The archived and dispatched envelopes are built by the SAME
+ * buildEnvelope() path and cannot diverge. A duplicate requestId with a
+ * canonically identical envelope coalesces (first kept); a DIFFERING
+ * duplicate never throws (the handler runs inside onmessage) — it records a
+ * diagnostic and poisons the archive, which blocks bundle export.
  */
 
 const providerConfigSchema = z
@@ -61,6 +72,10 @@ const providerConfigSchema = z
   .strict();
 
 type ProviderConfig = z.infer<typeof providerConfigSchema>;
+
+/** The exact transport envelope shape POSTed to /v1/decision (and archived
+ * client-side before any dispatch decision). */
+type ExternalDecisionRequestEnvelope = z.infer<typeof externalDecisionRequestEnvelopeSchema>;
 
 export type GatewayConnectResult = 'ok' | 'unreachable' | 'contract-mismatch';
 
@@ -100,6 +115,15 @@ export interface ModelGatewayStatus {
   pendingRequestId: string | null;
   inputTokens: number;
   outputTokens: number;
+  /** True while ANY request is unresolved: pumping, in flight, or queued.
+   * The export idle predicate uses THIS, not queued/pending — those report
+   * a false idle in the window between queue.shift() and pendingRequestId
+   * being set (1.5.0, C4). */
+  busy: boolean;
+  /** True once a duplicate requestId arrived with a canonically DIFFERENT
+   * envelope (C2): the exact-request archive can no longer attest the run
+   * and bundle export is blocked until newRun(). */
+  archivePoisoned: boolean;
 }
 
 export interface ModelGatewayClientOptions {
@@ -151,6 +175,17 @@ export class ModelGatewayClient {
   private pumping = false;
   private callsThisRun = 0;
   private failedRequestIds = new Set<string>();
+  /** Exact-request archive (C2): one deep-copied prospective envelope per
+   * requestId, captured at handleDecisionRequest time BEFORE any dispatch
+   * decision. `json` is the compact serialization of the FIRST-seen envelope,
+   * kept for the canonical duplicate comparison. */
+  private readonly requestArchive = new Map<
+    string,
+    { envelope: ExternalDecisionRequestEnvelope; json: string }
+  >();
+  /** Duplicate-conflict poison messages (C2); empty in healthy runs. */
+  private archiveDiagnosticsLog: string[] = [];
+  private archivePoisonedFlag = false;
   private status: ModelGatewayStatus;
 
   constructor(private readonly options: ModelGatewayClientOptions) {
@@ -181,11 +216,15 @@ export class ModelGatewayClient {
       pendingRequestId: null,
       inputTokens: 0,
       outputTokens: 0,
+      busy: this.pumping || this.inFlight !== null || this.queue.length > 0,
+      archivePoisoned: this.archivePoisonedFlag,
     };
   }
 
   private publish(): void {
     this.status.queuedRequests = this.queue.length;
+    this.status.busy = this.pumping || this.inFlight !== null || this.queue.length > 0;
+    this.status.archivePoisoned = this.archivePoisonedFlag;
     this.options.onStatus?.({ ...this.status, failuresByCode: { ...this.status.failuresByCode } });
   }
 
@@ -200,6 +239,24 @@ export class ModelGatewayClient {
     return this.trace.entries();
   }
 
+  /** Snapshot of the exact-request archive (C2): one complete prospective
+   * envelope per requestId seen this run, deep-copied, sorted by requestId. */
+  exactRequestEnvelopes(): ExternalDecisionRequestEnvelope[] {
+    return [...this.requestArchive.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([, entry]) => structuredClone(entry.envelope));
+  }
+
+  /** Duplicate-conflict poison messages (C2); empty in healthy runs. */
+  archiveDiagnostics(): string[] {
+    return [...this.archiveDiagnosticsLog];
+  }
+
+  /** True once a differing-duplicate conflict poisoned the archive (C2). */
+  archivePoisoned(): boolean {
+    return this.archivePoisonedFlag;
+  }
+
   /** Test/diagnostic helper: resolves once nothing is queued, pumping, or in
    * flight. */
   async settle(timeoutMs = 10_000): Promise<void> {
@@ -210,8 +267,9 @@ export class ModelGatewayClient {
     }
   }
 
-  /** Starts a fresh run: aborts in-flight work, clears the queue and the
-   * client trace, releases the contract-mismatch latch, mints a new
+  /** Starts a fresh run: aborts in-flight work, clears the queue, the
+   * client trace, and the exact-request archive (with its diagnostics and
+   * poison flag), releases the contract-mismatch latch, mints a new
    * noncanonical runId. Called on scenario load and reset. */
   newRun(): void {
     this.inFlight?.abort();
@@ -221,6 +279,9 @@ export class ModelGatewayClient {
     this.failedRequestIds.clear();
     this.contractMismatchField = null;
     this.trace.reset();
+    this.requestArchive.clear();
+    this.archiveDiagnosticsLog = [];
+    this.archivePoisonedFlag = false;
     this.runId = this.makeRunId();
     this.status = this.freshStatus();
     this.publish();
@@ -288,6 +349,11 @@ export class ModelGatewayClient {
       return;
     }
 
+    // Exact-request archive (C2): capture the complete prospective envelope
+    // BEFORE the contract latch, budget, queue-cap, connect, and dispatch —
+    // so every typed failure below still leaves exact bytes in the bundle.
+    this.archiveRequest(external);
+
     const queuedAtUtc = new Date().toISOString();
     if (this.contractMismatchField !== null) {
       // Latched contract mismatch: fail fast, never POST, never re-poll.
@@ -319,6 +385,51 @@ export class ModelGatewayClient {
     void this.pump();
   }
 
+  /** Builds the transport envelope for a request with the CURRENT runId and
+   * the pinned prompt version. The single code path shared by the archive
+   * (handleDecisionRequest time) and the dispatch POST (C2) — the archived
+   * and dispatched bytes cannot diverge. */
+  private buildEnvelope(external: ExternalDecisionRequest): ExternalDecisionRequestEnvelope {
+    return {
+      schemaVersion: EXTERNAL_REQUEST_SCHEMA_VERSION,
+      experimentId: MODEL_EXPERIMENT_ID,
+      experimentVersion: MODEL_EXPERIMENT_VERSION,
+      conditionId: MODEL_CONDITION_ID,
+      runId: this.runId,
+      providerId: external.request.providerId,
+      // Pinned constant, NOT the gateway-advertised value: connect() already
+      // proved they match, and the envelope must never drift with a gateway.
+      promptVersion: MODEL_PROMPT_VERSION,
+      contextHash: external.contextHash,
+      request: external.request,
+      context: external.context,
+      truncationCounts: external.truncationCounts,
+    };
+  }
+
+  /** Archives a deep copy of the prospective envelope keyed by requestId
+   * (C2). Duplicate rule: a canonically identical envelope coalesces (first
+   * kept); a DIFFERING envelope for the same requestId records a diagnostic
+   * and poisons the archive — it never throws (this runs inside onmessage
+   * with no catch) and never replaces the earlier envelope. */
+  private archiveRequest(external: ExternalDecisionRequest): void {
+    const requestId = external.request.requestId;
+    const envelope = this.buildEnvelope(external);
+    const json = JSON.stringify(envelope);
+    const existing = this.requestArchive.get(requestId);
+    if (existing === undefined) {
+      this.requestArchive.set(requestId, { envelope: structuredClone(envelope), json });
+      return;
+    }
+    if (existing.json === json) return; // identical duplicate: keep the first
+    this.archiveDiagnosticsLog.push(
+      `duplicate-request-conflict: requestId ${requestId} re-seen with a ` +
+        `canonically different envelope in run ${this.runId}; first envelope kept`,
+    );
+    this.archivePoisonedFlag = true;
+    this.publish();
+  }
+
   private async pump(): Promise<void> {
     // The latch is taken and released SYNCHRONOUSLY around the whole loop:
     // between `pumping = true` and the first await there is no suspension
@@ -332,6 +443,11 @@ export class ModelGatewayClient {
       }
     } finally {
       this.pumping = false;
+      // Publish the idle transition (C4): every publish during dispatch runs
+      // while `pumping` is still true, so without this final publish the
+      // status surface would latch `busy: true` after the last request and
+      // the export button's idle predicate could never enable.
+      this.publish();
     }
   }
 
@@ -379,21 +495,9 @@ export class ModelGatewayClient {
     this.status.pendingRequestId = external.request.requestId;
     this.publish();
 
-    const envelope = {
-      schemaVersion: EXTERNAL_REQUEST_SCHEMA_VERSION,
-      experimentId: MODEL_EXPERIMENT_ID,
-      experimentVersion: MODEL_EXPERIMENT_VERSION,
-      conditionId: MODEL_CONDITION_ID,
-      runId: this.runId,
-      providerId: external.request.providerId,
-      // Pinned constant, NOT the gateway-advertised value: connect() already
-      // proved they match, and the envelope must never drift with a gateway.
-      promptVersion: MODEL_PROMPT_VERSION,
-      contextHash: external.contextHash,
-      request: external.request,
-      context: external.context,
-      truncationCounts: external.truncationCounts,
-    };
+    // Same construction path as the archive (C2): the dispatched bytes are
+    // exactly the archived bytes for this runId.
+    const envelope = this.buildEnvelope(external);
     const envelopeParsed = externalDecisionRequestEnvelopeSchema.safeParse(envelope);
     if (!envelopeParsed.success) {
       this.status.pendingRequestId = null;
@@ -496,6 +600,9 @@ export class ModelGatewayClient {
             clientFailureCode: null,
             responseId: result.data.response.responseId,
             failureId: null,
+            // Explicit stamp at the result-parse site (A2): this HTTP result
+            // was produced by the gateway.
+            gatewayResultObserved: true,
           },
         ),
       );
@@ -516,6 +623,10 @@ export class ModelGatewayClient {
             clientFailureCode: result.data.failure.failureCode,
             responseId: null,
             failureId: result.data.failure.failureId,
+            // Explicit stamp at the result-parse site (A2): a parsed gateway
+            // failure BODY (gwf- id) is gateway evidence, unlike the
+            // client-minted cf- failures below.
+            gatewayResultObserved: true,
           },
         ),
       );
@@ -530,7 +641,7 @@ export class ModelGatewayClient {
     timing: TraceTiming,
     outcome: Pick<
       ModelClientTraceEntry,
-      'clientOutcome' | 'clientFailureCode' | 'responseId' | 'failureId'
+      'clientOutcome' | 'clientFailureCode' | 'responseId' | 'failureId' | 'gatewayResultObserved'
     >,
   ): ModelClientTraceEntry {
     return {
@@ -551,6 +662,7 @@ export class ModelGatewayClient {
       responseId: outcome.responseId,
       failureId: outcome.failureId,
       clientLatencyMs: timing.latencyMs,
+      gatewayResultObserved: outcome.gatewayResultObserved,
     };
   }
 
@@ -565,6 +677,9 @@ export class ModelGatewayClient {
         clientFailureCode: null,
         responseId: null,
         failureId: null,
+        // A discarded stale result is never gateway evidence for the CURRENT
+        // run's strict reconciliation (A2/A6 carve-out).
+        gatewayResultObserved: false,
       }),
     );
   }
@@ -587,6 +702,9 @@ export class ModelGatewayClient {
         clientFailureCode: failureCode,
         responseId: null,
         failureId: `cf-${external.request.requestId}`,
+        // Client-minted cf- failure (A2): timeout/unreachable/budget/latch/
+        // invalid transport result — the gateway produced NO parsed result.
+        gatewayResultObserved: false,
       }),
     );
     this.recordFailure(failureCode);

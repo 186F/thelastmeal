@@ -1,19 +1,22 @@
 import type { ClientTraceEntry } from '../shared/modelArtifacts';
 
 /**
- * Slim client-side model trace (re-audit remediation F4, deviation D3).
+ * Slim client-side model trace (re-audit remediation F4, deviation D3;
+ * entry schema v2 since 1.5.0 — `gatewayResultObserved`, amendment A2).
  *
  * One entry per external request the ModelGatewayClient ever sees — including
  * requests that never dispatch (queue overflow, budget exhaustion,
  * contract-mismatch fast-fails, gateway-unavailable) and results discarded by
  * the stale-runId check. Entries carry identity + timing + outcome ONLY: no
  * request payloads, no secrets, no environment. Exact envelopes are persisted
- * by the GATEWAY as `requests/<requestId>.json` sidecars. Wall-clock
- * timestamps are allowed here (noncanonical diagnostics); they are never join
- * keys — joins are by requestId.
+ * by the GATEWAY as `requests/<requestId>.json` sidecars and archived
+ * client-side into the run bundle's `exactRequestEnvelopes` (1.5.0 C2).
+ * Wall-clock timestamps are allowed here (noncanonical diagnostics); they are
+ * never join keys — joins are by requestId.
  */
 
-export const CLIENT_TRACE_SCHEMA_VERSION = 1;
+// Single source: the shared artifact contracts module owns the version.
+export { CLIENT_TRACE_SCHEMA_VERSION } from '../shared/modelArtifacts';
 
 export type ClientTraceOutcome = ClientTraceEntry['clientOutcome'];
 

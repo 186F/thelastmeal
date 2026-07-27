@@ -1,8 +1,8 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.4.0",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0)",
+  "version": "1.5.0",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:gateway": "vitest run tests/gateway",
+    "test:model:bundle": "vitest run tests/unit/run-bundle.test.ts tests/unit/model-artifact-schemas.test.ts tests/unit/model-gateway-client.test.ts tests/unit/external-request-schema.test.ts tests/integration/model-bundle.test.ts tests/integration/model-corruption.test.ts tests/integration/model-reconciliation-gap.test.ts tests/integration/model-ablation-context.test.ts tests/integration/model-rehearsal.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "test:model:live": "tsx scripts/model/liveSmoke.ts",
@@ -27,7 +28,8 @@
     "check:dist": "tsx scripts/security/scanDist.ts",
     "model:summarize": "tsx scripts/model/summarize.ts",
     "model:prepare-run": "tsx scripts/model/prepareRun.ts",
-    "model:finalize": "tsx scripts/model/finalize.ts"
+    "model:finalize": "tsx scripts/model/finalize.ts",
+    "model:rehearse": "tsx scripts/model/rehearse.ts"
   },
   "dependencies": {
     "openai": "6.49.0",

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ModelGatewayClient, type ModelGatewayStatus } from '../../src/app/modelGatewayClient';
 import { createRun, stepTick } from '../../src/sim/runtime/engine';
+import { externalDecisionRequestEnvelopeSchema } from '../../src/sim/decisions/externalSchemas';
+import { externalContextHash } from '../../src/sim/decisions/externalContext';
 import type {
   DecisionResponse,
   ExternalDecisionFailure,
@@ -15,6 +17,11 @@ import type {
  * submission even when the transport ignored the abort), plus the re-audit
  * remediation seams: contract pinning with a per-run mismatch latch (F2),
  * result reconciliation before counters (F3), and the slim client trace (F4).
+ *
+ * 1.5.0 (C2/C5): the exact-request archive — populated BEFORE every dispatch
+ * decision so overflow/budget/latch/unreachable/timeout requests still leave
+ * exact envelopes — with the coalesce/poison duplicate rule, plus the A2
+ * `gatewayResultObserved` stamping and the C4 `busy` status flag.
  */
 
 const PROVIDER_CONFIG_SHAPE = {
@@ -144,7 +151,24 @@ function makeClient(options: StubOptions & { timeoutMs?: number; maxCallsPerRun?
     configFetches: () => configFetches,
     maxConcurrent: () => maxConcurrentPosts,
     lastStatus: () => statuses[statuses.length - 1],
+    statuses: () => [...statuses],
   };
+}
+
+/** Parses every archived envelope with the REAL wire schema and recomputes
+ * the context hash (C5): the archive must be independently auditable. */
+function expectArchivedEnvelopesValid(client: ModelGatewayClient, expectedCount: number): void {
+  const envelopes = client.exactRequestEnvelopes();
+  expect(envelopes).toHaveLength(expectedCount);
+  for (const envelope of envelopes) {
+    const parsed = externalDecisionRequestEnvelopeSchema.safeParse(envelope);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) continue;
+    expect(externalContextHash(parsed.data.context)).toBe(parsed.data.contextHash);
+    expect(parsed.data.runId).toBe(client.currentRunId);
+    expect(parsed.data.promptVersion).toBe('mara-action-selection-1.0.0');
+    expect(parsed.data.conditionId).toBe('mara-model-per-decision-v1');
+  }
 }
 
 describe('ModelGatewayClient (adversarial-review regressions)', () => {
@@ -471,5 +495,272 @@ describe('slim client trace (F4)', () => {
     expect(entries[0]!.clientOutcome).toBe('failure');
     expect(entries[0]!.clientFailureCode).toBe('invalid-gateway-response');
     expect(entries[0]!.dispatchedAtUtc).toBeNull();
+  });
+});
+
+describe('exact-request archive (1.5.0 C2)', () => {
+  it('archives a schema-valid exact envelope for a normally dispatched request', async () => {
+    const harness = makeClient({});
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+    expect(harness.posts()).toBe(1);
+    expect(harness.responses).toHaveLength(1);
+    expectArchivedEnvelopesValid(harness.client, 1);
+  });
+
+  it('archives BEFORE dispatch: gateway-unavailable requests keep their exact envelope', async () => {
+    const harness = makeClient({ configHangs: true, timeoutMs: 40 });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle(5_000);
+    expect(harness.failures).toHaveLength(1);
+    expect(harness.failures[0]!.failureCode).toBe('gateway-unavailable');
+    expect(harness.posts()).toBe(0); // no POST ever happened — envelope exists anyway
+    expectArchivedEnvelopesValid(harness.client, 1);
+  });
+
+  it('archives contract-mismatch fast-fails that never POST', async () => {
+    const harness = makeClient({
+      configBody: JSON.stringify({ ...PROVIDER_CONFIG_SHAPE, promptVersion: 'other-2.0.0' }),
+    });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+    expect(harness.posts()).toBe(0);
+    expect(harness.failures[0]!.failureCode).toBe('invalid-gateway-response');
+    expectArchivedEnvelopesValid(harness.client, 1);
+  });
+
+  it('archives queue-overflow requests that were never enqueued', async () => {
+    const harness = makeClient({ configDelayMs: 50, decisionDelayMs: 20 });
+    const requests = genuineRequests(6);
+    harness.client.newRun();
+    for (const request of requests) harness.client.handleDecisionRequest(request);
+    await harness.client.settle();
+    // One dispatching + four queued; the sixth overflowed — but ALL six left
+    // exact envelopes in the archive.
+    expect(harness.failures.filter((f) => f.failureCode === 'budget-exhausted')).toHaveLength(1);
+    expectArchivedEnvelopesValid(harness.client, 6);
+  });
+
+  it('archives client-budget rejections (injected maxCallsPerRun: 2 — the default 80 is unreachable)', async () => {
+    const harness = makeClient({ decisionDelayMs: 1, maxCallsPerRun: 2 });
+    const requests = genuineRequests(3);
+    harness.client.newRun();
+    await harness.client.connect();
+    for (const request of requests) {
+      harness.client.handleDecisionRequest(request);
+      await harness.client.settle();
+    }
+    expect(harness.posts()).toBe(2);
+    expect(harness.failures.filter((f) => f.failureCode === 'budget-exhausted')).toHaveLength(1);
+    expectArchivedEnvelopesValid(harness.client, 3);
+  });
+
+  it('archives client-timeout requests', async () => {
+    const harness = makeClient({ decisionDelayMs: 200, timeoutMs: 50 });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle(5_000);
+    expect(harness.failures).toHaveLength(1);
+    expect(harness.failures[0]!.failureCode).toBe('request-timeout');
+    expectArchivedEnvelopesValid(harness.client, 1);
+  });
+
+  it('coalesces an identical duplicate requestId (first kept, no poison)', async () => {
+    const harness = makeClient({ decisionDelayMs: 10 });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    harness.client.handleDecisionRequest(structuredClone(request!)); // canonically identical
+    await harness.client.settle();
+    expectArchivedEnvelopesValid(harness.client, 1);
+    expect(harness.client.archiveDiagnostics()).toEqual([]);
+    expect(harness.client.archivePoisoned()).toBe(false);
+    expect(harness.lastStatus()!.archivePoisoned).toBe(false);
+  });
+
+  it('poisons on a DIFFERING duplicate without throwing, keeping the first envelope', async () => {
+    const harness = makeClient({});
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+
+    const conflicting = structuredClone(request!);
+    conflicting.contextHash = 'ffffffffffffffff';
+    // The handler runs inside onmessage with no catch: it must NEVER throw.
+    expect(() => harness.client.handleDecisionRequest(conflicting)).not.toThrow();
+    await harness.client.settle();
+
+    const diagnostics = harness.client.archiveDiagnostics();
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toContain('duplicate-request-conflict');
+    expect(diagnostics[0]).toContain(request!.request.requestId);
+    expect(harness.client.archivePoisoned()).toBe(true);
+    expect(harness.lastStatus()!.archivePoisoned).toBe(true);
+    // The earlier envelope was never replaced.
+    const envelopes = harness.client.exactRequestEnvelopes();
+    expect(envelopes).toHaveLength(1);
+    expect(envelopes[0]!.contextHash).toBe(request!.contextHash);
+  });
+
+  it('newRun() clears the archive, its diagnostics, and the poison flag', async () => {
+    const harness = makeClient({});
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+    const conflicting = structuredClone(request!);
+    conflicting.contextHash = 'ffffffffffffffff';
+    harness.client.handleDecisionRequest(conflicting);
+    await harness.client.settle();
+    expect(harness.client.archivePoisoned()).toBe(true);
+
+    harness.client.newRun();
+    expect(harness.client.exactRequestEnvelopes()).toEqual([]);
+    expect(harness.client.archiveDiagnostics()).toEqual([]);
+    expect(harness.client.archivePoisoned()).toBe(false);
+    expect(harness.lastStatus()!.archivePoisoned).toBe(false);
+  });
+
+  it('archives DEEP COPIES: later mutation of the request or the snapshot cannot corrupt it', async () => {
+    const harness = makeClient({});
+    const [genuine] = genuineRequests(1);
+    const request = structuredClone(genuine!);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request);
+    await harness.client.settle();
+
+    const before = JSON.stringify(harness.client.exactRequestEnvelopes()[0]);
+    // Mutate the ORIGINAL request object (shared with ViewState in the app).
+    request.truncationCounts.beliefs = 999;
+    expect(JSON.stringify(harness.client.exactRequestEnvelopes()[0])).toBe(before);
+    // Mutate a returned snapshot: the next snapshot is unaffected.
+    const snapshot = harness.client.exactRequestEnvelopes();
+    snapshot[0]!.contextHash = 'ffffffffffffffff';
+    expect(JSON.stringify(harness.client.exactRequestEnvelopes()[0])).toBe(before);
+  });
+});
+
+describe('gatewayResultObserved stamping (A2) and the busy flag (C4)', () => {
+  it('is TRUE for a parsed gateway response', async () => {
+    const harness = makeClient({});
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+    const [entry] = harness.client.clientTraceEntries();
+    expect(entry!.clientOutcome).toBe('response');
+    expect(entry!.gatewayResultObserved).toBe(true);
+  });
+
+  it('is TRUE for a parsed gateway FAILURE body (gwf- id): both signals agree', async () => {
+    const harness = makeClient({
+      decisionBodyFor: (requestId, request) =>
+        JSON.stringify({
+          outcome: 'failure',
+          failure: {
+            failureId: `gwf-${requestId}`,
+            requestId,
+            npcId: request.request.npcId,
+            scenarioId: request.request.scenarioId,
+            providerId: request.request.providerId,
+            failureCode: 'upstream-error',
+            retryable: false,
+          },
+        }),
+    });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+    const [entry] = harness.client.clientTraceEntries();
+    expect(entry!.clientOutcome).toBe('failure');
+    expect(entry!.failureId).toBe(`gwf-${request!.request.requestId}`);
+    expect(entry!.gatewayResultObserved).toBe(true);
+  });
+
+  it('is FALSE for every client-minted cf- failure (latch, budget, unreachable, timeout)', async () => {
+    // Contract latch.
+    const latched = makeClient({
+      configBody: JSON.stringify({ ...PROVIDER_CONFIG_SHAPE, promptVersion: 'other-2.0.0' }),
+    });
+    const requests = genuineRequests(3);
+    latched.client.newRun();
+    await latched.client.connect();
+    latched.client.handleDecisionRequest(requests[0]!);
+    await latched.client.settle();
+    // Unreachable gateway.
+    const unreachable = makeClient({ configHangs: true, timeoutMs: 40 });
+    unreachable.client.newRun();
+    unreachable.client.handleDecisionRequest(requests[1]!);
+    await unreachable.client.settle(5_000);
+    // Client budget.
+    const budget = makeClient({ maxCallsPerRun: 0 });
+    budget.client.newRun();
+    budget.client.handleDecisionRequest(requests[2]!);
+    await budget.client.settle();
+    // Client timeout.
+    const timedOut = makeClient({ decisionDelayMs: 200, timeoutMs: 50 });
+    timedOut.client.newRun();
+    await timedOut.client.connect();
+    timedOut.client.handleDecisionRequest(requests[0]!);
+    await timedOut.client.settle(5_000);
+
+    for (const harness of [latched, unreachable, budget, timedOut]) {
+      const [entry] = harness.client.clientTraceEntries();
+      expect(entry!.clientOutcome).toBe('failure');
+      expect(entry!.failureId).toBe(`cf-${entry!.requestId}`);
+      expect(entry!.gatewayResultObserved).toBe(false);
+    }
+  });
+
+  it('is FALSE for discarded-stale-run entries, whose old-run envelope is gone (A6 carve-out)', async () => {
+    const harness = makeClient({ decisionDelayMs: 60, ignoreAbort: true });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    harness.client.newRun(); // supersede while the POST is still pending
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await harness.client.settle();
+    const entries = harness.client.clientTraceEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.clientOutcome).toBe('discarded-stale-run');
+    expect(entries[0]!.gatewayResultObserved).toBe(false);
+    // newRun() cleared the archive: the discard entry legitimately has no
+    // exact envelope — consumers filter coverage by runId (A6).
+    expect(harness.client.exactRequestEnvelopes()).toEqual([]);
+  });
+
+  it('publishes busy=true while a request is unresolved and busy=false once settled (C4)', async () => {
+    const harness = makeClient({ decisionDelayMs: 30 });
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    // The enqueue publish already reports busy — the false-idle window
+    // between queue.shift() and pendingRequestId is covered by `pumping`.
+    expect(harness.lastStatus()!.busy).toBe(true);
+    await harness.client.settle();
+    expect(harness.statuses().some((s) => s.busy)).toBe(true);
+    expect(harness.lastStatus()!.busy).toBe(false);
+    expect(harness.responses).toHaveLength(1);
   });
 });

@@ -51,7 +51,9 @@ import type { ExternalFailureCode } from '../src/shared/decisionContracts';
  *      terminal result (no adapter call, no budget, no trace row, no
  *      sidecar); the SAME requestId with a DIFFERENT contextHash is a 400
  *      idempotency-conflict — a forgery/bug, never a duplicate
- *   5. exact-envelope sidecar persisted as requests/<requestId>.json (G2)
+ *   5. run-manifest seed + exact-envelope sidecar persisted at first sight
+ *      of the validated non-duplicate envelope (G2; seed-at-first-sight is
+ *      1.5.0 G3)
  *   6. concurrency, per-run budget, and the process-wide spend cap
  *   7. server-owned prompt construction
  *   8. adapter call under an abort-on-timeout signal
@@ -355,6 +357,11 @@ export function createGateway(
       return { statusCode: 200, body: result };
     };
 
+    // Seed-at-first-sight (1.5.0 G3): the run manifest is seeded together
+    // with the envelope sidecar on the first validated non-duplicate
+    // envelope — not at the first terminal result — so a first request
+    // killed mid-adapter still leaves a manifest on disk.
+    seedRunManifest(envelope);
     // Envelope sidecar (G2, deviation D3): the exact validated envelope,
     // persisted once per non-duplicate dispatch — replays and rejects never
     // reach this point.
@@ -452,15 +459,12 @@ export function createGateway(
     }
   }
 
-  function writeTrace(
-    envelope: ExternalDecisionRequestEnvelope,
-    gatewayOutcome: 'response' | ExternalFailureCode,
-    choice: ModelChoice | null,
-    meta: ModelChoiceMeta | null,
-    rawOutput: string | null,
-    latencyMs: number,
-    concurrentInFlight: number,
-  ): void {
+  /** Seeds the write-once run manifest at first sight of a validated
+   * non-duplicate envelope (1.5.0 G3; the trace writer dedupes per runId).
+   * `startedAtUtc` is therefore the FIRST-VALIDATED-ENVELOPE time for the
+   * run — never the time of the run's first terminal result, which may be
+   * arbitrarily later or (gateway killed mid-adapter) never come at all. */
+  function seedRunManifest(envelope: ExternalDecisionRequestEnvelope): void {
     trace.seedManifest({
       traceSchemaVersion: MODEL_TRACE_SCHEMA_VERSION,
       experimentId: envelope.experimentId,
@@ -475,15 +479,33 @@ export function createGateway(
       // requestedModelId can be cross-checked against returnedModelIds
       // derived from the trace rows' upstream-reported modelId (S2).
       modelId: config.adapterKind === 'openai' ? config.openaiModel : adapter.id,
+      // modelSettings gained maxTotalCalls + maxRequestBodyBytes in 1.5.0
+      // (G2) — additive keys in an open record, so the gateway trace schema
+      // stays v2. maxTotalCalls records the RESOLVED process-wide cap: the
+      // optional config field JSON-drops when undefined, the seed key must
+      // not.
       modelSettings: {
         adapter: adapter.id,
         requestTimeoutMs: config.requestTimeoutMs,
         maxOutputTokens: config.maxOutputTokens,
         maxCallsPerRun: config.maxCallsPerRun,
         maxConcurrency: config.maxConcurrency,
+        maxTotalCalls,
+        maxRequestBodyBytes: config.maxRequestBodyBytes,
       },
       startedAtUtc: new Date().toISOString(),
     });
+  }
+
+  function writeTrace(
+    envelope: ExternalDecisionRequestEnvelope,
+    gatewayOutcome: 'response' | ExternalFailureCode,
+    choice: ModelChoice | null,
+    meta: ModelChoiceMeta | null,
+    rawOutput: string | null,
+    latencyMs: number,
+    concurrentInFlight: number,
+  ): void {
     const requestId = envelope.request.requestId;
     // Raw model text is persisted (bounded) ONLY on invalid-model-output /
     // upstream-refusal outcomes; every other outcome — success included —
@@ -537,6 +559,26 @@ export function createGateway(
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };
+}
+
+/** Graceful stop with a bounded drain (1.5.0 G1): awaits `stop()` — which
+ * refuses new connections and waits for in-flight requests — and if the
+ * drain has not finished after `fallbackMs` (default 2s), force-destroys
+ * every remaining connection via `server.closeAllConnections()` so the close
+ * always completes. The CLI's SIGINT/SIGTERM handlers await this and then
+ * exit 0; the helper lives here (not in main.ts) so the shutdown behavior is
+ * unit-testable without sending process signals. */
+export async function stopWithFallback(
+  gateway: GatewayInstance,
+  fallbackMs = 2_000,
+): Promise<void> {
+  const stopping = gateway.stop();
+  const timer = setTimeout(() => gateway.server.closeAllConnections(), fallbackMs);
+  try {
+    await stopping;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function json(res: ServerResponse, status: number, payload: unknown): void {

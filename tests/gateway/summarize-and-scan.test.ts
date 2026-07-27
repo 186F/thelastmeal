@@ -78,6 +78,22 @@ function ledgerWithEvents(events: Record<string, unknown>[]): LedgerFile {
   return { events } as unknown as LedgerFile;
 }
 
+/** Any request-lifecycle event with an arbitrary payload (join unit tests). */
+function lifecycleEvent(type: string, payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: 'evt-000002',
+    seq: 2,
+    type,
+    tick: 80,
+    schemaVersion: 3,
+    actorId: 'mara',
+    targetId: null,
+    causationId: null,
+    correlationId: null,
+    payload,
+  };
+}
+
 function acceptanceEvent(requestId: string, responseId: string): Record<string, unknown> {
   return {
     id: 'evt-000001',
@@ -180,6 +196,7 @@ describe('model-run summarizer and bundle hashing', () => {
     interface BundleManifest {
       bundleManifestSchemaVersion: number;
       producer: string;
+      status: string | null;
       files: {
         modelTrace: { name: string; sha256: string };
         ledger: { name: string; sha256: string };
@@ -193,9 +210,11 @@ describe('model-run summarizer and bundle hashing', () => {
     ) as BundleManifest;
     // Producer discriminator (F4/F7/F16): the informal manifest names its
     // writer so it can never be mistaken for model:finalize's whole-directory
-    // evidence binding, which shares the filename.
-    expect(firstBundle.bundleManifestSchemaVersion).toBe(1);
+    // evidence binding, which shares the filename. The v2 `status` verdict is
+    // owned by model:finalize — the informal summarizer always writes null.
+    expect(firstBundle.bundleManifestSchemaVersion).toBe(2);
     expect(firstBundle.producer).toBe('model:summarize');
+    expect(firstBundle.status).toBeNull();
     // S2: the aggregate is sha256 over the sorted `<fileName>:<sha256>` lines.
     const expectedAggregate = createHash('sha256')
       .update(
@@ -265,6 +284,34 @@ describe('model-run summarizer and bundle hashing', () => {
       [custom],
     );
     expect(customJoin[0]!.engineOutcome).toBe('accepted');
+  });
+
+  it('reports the finalizer\'s CLOSED engine vocabulary — never a raw expiry reasonCode, never "unresolved" for a superseded request', () => {
+    // model-summary.json and finalized-trace.jsonl are hash-bound into the
+    // same bundle manifest, so both must speak the same vocabulary
+    // (accepted | rejected | expired | superseded | unresolved). The old
+    // private ladder here reported the DecisionRequestExpired reasonCode as
+    // the outcome and had no supersede lookup at all (A1's third canonical
+    // resolution landed as 'unresolved').
+    const expired = joinEngineOutcomes(
+      ledgerWithEvents([
+        lifecycleEvent('DecisionRequestExpired', {
+          requestId: 'dec-0010',
+          reasonCode: 'scenario-ended',
+        }),
+      ]),
+      [traceEntry('dec-0010', 'upstream-timeout')],
+    );
+    expect(expired[0]!.engineOutcome).toBe('expired');
+    // The reason survives as a diagnostic, never as the verdict.
+    expect(expired[0]!.engineExpiryReason).toBe('scenario-ended');
+
+    const superseded = joinEngineOutcomes(
+      ledgerWithEvents([lifecycleEvent('DecisionRequestSuperseded', { requestId: 'dec-0011' })]),
+      [traceEntry('dec-0011', 'response')],
+    );
+    expect(superseded[0]!.engineOutcome).toBe('superseded');
+    expect(superseded[0]!.engineExpiryReason).toBeNull();
   });
 });
 

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { GatewayConfig } from '../../gateway/config';
-import { loadGatewayConfig } from '../../gateway/config';
+import { DEFAULT_MAX_TOTAL_CALLS, loadGatewayConfig } from '../../gateway/config';
 import { createGateway, type GatewayInstance } from '../../gateway/server';
 import { FakeDecisionAdapter } from '../../gateway/adapters/fakeDecisionAdapter';
 import {
@@ -21,7 +21,7 @@ import {
   buildUserContent,
 } from '../../gateway/prompts/maraActionSelection';
 import { MemoryTraceWriter } from '../../gateway/tracing/modelTraceWriter';
-import type { ModelTraceEntry } from '../../gateway/tracing/modelTraceWriter';
+import type { ModelTraceEntry, RunManifestSeed } from '../../gateway/tracing/modelTraceWriter';
 import { computeInfraMetrics } from '../../gateway/metrics/runMetrics';
 import {
   EXTERNAL_REQUEST_SCHEMA_VERSION,
@@ -649,6 +649,49 @@ describe('gateway config (re-audit remediation G4)', () => {
     expect(() => loadGatewayConfig('fake', { MODEL_MAX_TOTAL_CALLS: 'many' }, root)).toThrow(
       /MODEL_MAX_TOTAL_CALLS/,
     );
+  });
+});
+
+describe('run-manifest seed modelSettings (1.5.0 G2 — additive, trace schema stays 2)', () => {
+  /** Runs ONE genuine dispatch against a gateway built from `config` and
+   * returns the resulting run-manifest seed. */
+  async function seedFor(config: GatewayConfig): Promise<RunManifestSeed> {
+    const trace = new MemoryTraceWriter();
+    const gateway = createGateway(config, new FakeDecisionAdapter(), trace);
+    const port = await gateway.start();
+    try {
+      const response = await post(port, envelope());
+      expect(response.status).toBe(200);
+    } finally {
+      await gateway.stop();
+    }
+    expect(trace.manifests).toHaveLength(1);
+    return trace.manifests[0]!;
+  }
+
+  it('records the spend cap and the body-size cap by VALUE (non-default caps, never just key presence)', async () => {
+    // NON-default values, so a hardcoded copy of a default could never fake
+    // a pass. 64 KiB still admits the ~10 KB genuine envelope.
+    const seed = await seedFor(testConfig({ maxTotalCalls: 7, maxRequestBodyBytes: 64 * 1024 }));
+    expect(seed.modelSettings.maxTotalCalls).toBe(7);
+    expect(seed.modelSettings.maxRequestBodyBytes).toBe(64 * 1024);
+    // The pre-1.5.0 settings ride alongside the two new keys, unchanged.
+    expect(seed.modelSettings.adapter).toBe('fake-decision-adapter-v1');
+    expect(seed.modelSettings.maxCallsPerRun).toBe(80);
+    expect(seed.traceSchemaVersion).toBe(2);
+  });
+
+  it('an ABSENT config.maxTotalCalls still records the RESOLVED default by value — the optional field JSON-drops when undefined, the seed key must not', async () => {
+    const withoutCap = testConfig();
+    delete withoutCap.maxTotalCalls;
+    // The hazard the resolved local guards against: the optional config
+    // field vanishes from serialized JSON entirely when undefined.
+    expect(JSON.stringify(withoutCap)).not.toContain('maxTotalCalls');
+    const seed = await seedFor(withoutCap);
+    expect(seed.modelSettings.maxTotalCalls).toBe(DEFAULT_MAX_TOTAL_CALLS);
+    // And the seed key survives a JSON round trip with that value.
+    const roundTripped = JSON.parse(JSON.stringify(seed.modelSettings)) as Record<string, unknown>;
+    expect(roundTripped.maxTotalCalls).toBe(400);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ModelGatewayClient, type ModelGatewayStatus } from '../../src/app/modelGatewayClient';
-import { buildRunBundle, canExportRunBundle } from '../../src/app/runBundle';
+import { buildRunBundle, canExportRunBundle, validateRunBundle } from '../../src/app/runBundle';
 import { ViewStore, type ViewState } from '../../src/app/store';
 import { createRun, stepTick } from '../../src/sim/runtime/engine';
 import { runBundleSchema, type RunBundle } from '../../src/shared/modelArtifacts';
@@ -19,13 +19,16 @@ import type {
 } from '../../src/shared/decisionContracts';
 
 /**
- * Re-audit remediation F9: the run-bundle exporter (the ONLY producer of
- * client-bundle.json) previously lived untyped and untested inside the model
- * panel's click handler. These tests drive a mixed run through the real
- * ModelGatewayClient (same stub-harness pattern as
- * model-gateway-client.test.ts), assemble the bundle with the extracted pure
- * buildRunBundle(), and hold it against the shared `runBundleSchema` — the
- * exact schema scripts/model/prepareRun.ts parses after a paid live run.
+ * Re-audit remediation F9, upgraded to bundle schema v2 (1.5.0 C3): the
+ * run-bundle exporter (the ONLY producer of client-bundle.json) previously
+ * lived untyped and untested inside the model panel's click handler. These
+ * tests drive a mixed run through the real ModelGatewayClient (same
+ * stub-harness pattern as model-gateway-client.test.ts), assemble the bundle
+ * with the extracted pure buildRunBundle(), and hold it against the shared
+ * `runBundleSchema` — the exact schema scripts/model/prepareRun.ts parses
+ * after a paid live run. v2 adds the exact-request archive, the run-level
+ * runCompletedAtUtc (A4), the poison gate, and producer-side
+ * validateRunBundle (A6/A7).
  */
 
 const PROVIDER_CONFIG = JSON.stringify({
@@ -127,7 +130,9 @@ function makeClient(options: StubOptions) {
   };
 }
 
-/** A terminal model-condition ViewState, the shape the panel exports from. */
+/** A terminal model-condition ViewState, the shape the panel exports from.
+ * runCompletedAtUtc is stamped (as workerClient does on run-complete) —
+ * without it the v2 export gate must refuse. */
 function terminalState(gateway: ModelGatewayStatus | null): ViewState {
   const state = new ViewStore().state;
   state.runStatus = 'complete';
@@ -135,6 +140,7 @@ function terminalState(gateway: ModelGatewayStatus | null): ViewState {
   state.selectedScenarioId = 'A';
   state.finalWorldHash = '0123456789abcdef';
   state.finalLedgerHash = 'fedcba9876543210';
+  state.runCompletedAtUtc = '2026-07-27T11:59:58.000Z';
   state.model.gateway = gateway;
   return state;
 }
@@ -147,11 +153,13 @@ function attemptExport(state: ViewState, client: ModelGatewayClient): RunBundle 
     client.clientTraceEntries(),
     client.currentRunId,
     '2026-07-27T12:00:00.000Z',
+    client.exactRequestEnvelopes(),
+    client.archiveDiagnostics(),
   );
 }
 
-describe('buildRunBundle (re-audit remediation F9)', () => {
-  it('emits a schema-valid bundle for a mixed run whose handoff matches the terminal state', async () => {
+describe('buildRunBundle v2 (re-audit remediation F9; 1.5.0 C3)', () => {
+  it('emits a schema-valid v2 bundle for a mixed run: handoff, trace, and exact-request archive', async () => {
     const requests = genuineRequests(7);
     const staleRequest = requests[0]!;
     const phaseTwo = requests.slice(1); // 6 requests: 1 dispatching + 4 queued + 1 overflow
@@ -200,6 +208,7 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
     // The exact contract prepareRun/finalize parse (strict zod, no widening).
     const parsed = runBundleSchema.parse(bundle);
     expect(parsed).toEqual(bundle);
+    expect(bundle!.bundleSchemaVersion).toBe(2);
 
     expect(bundle!.handoff.runId).toBe(harness.client.currentRunId);
     expect(bundle!.handoff.runId).toBe(gw.runId);
@@ -219,6 +228,7 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
       'upstream-error': 1,
       'budget-exhausted': 1,
     });
+    expect(bundle!.handoff.runCompletedAtUtc).toBe('2026-07-27T11:59:58.000Z');
     expect(bundle!.handoff.exportedAtUtc).toBe('2026-07-27T12:00:00.000Z');
 
     // The slim client trace rides along whole: one entry per request the
@@ -230,6 +240,17 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
     const stale = bundle!.clientTrace.find((e) => e.clientOutcome === 'discarded-stale-run')!;
     expect(stale.runId).toBe(staleRunId);
     expect(stale.requestId).toBe(staleRequest.request.requestId);
+    expect(stale.gatewayResultObserved).toBe(false);
+
+    // The exact-request archive covers exactly the CURRENT run's requests —
+    // the stale request's envelope was cleared with its run (A6 carve-out).
+    expect(bundle!.exactRequestEnvelopes).toHaveLength(6);
+    expect(bundle!.archiveDiagnostics).toEqual([]);
+
+    // Producer-side validation (C3): schema + pinned literals + hash
+    // recompute + runId-scoped coverage — all green on a healthy mixed run
+    // despite the foreign-runId discard entry.
+    expect(validateRunBundle(bundle!)).toEqual([]);
 
     // The handoff copies, never aliases, the live failure counters.
     bundle!.handoff.failuresByCode['upstream-error'] = 999;
@@ -242,7 +263,14 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
     state.finalLedgerHash = null;
     state.snapshot = null;
 
-    const bundle = buildRunBundle(state, [], 'run-fallback-0001', '2026-07-27T12:00:00.000Z');
+    const bundle = buildRunBundle(
+      state,
+      [],
+      'run-fallback-0001',
+      '2026-07-27T12:00:00.000Z',
+      [],
+      [],
+    );
     const parsed = runBundleSchema.parse(bundle);
     expect(parsed.handoff.worldStateHash).toBeNull();
     expect(parsed.handoff.canonicalLedgerHash).toBeNull();
@@ -251,7 +279,10 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
     expect(parsed.handoff.callsAttempted).toBe(0);
     expect(parsed.handoff.gatewayResponses).toBe(0);
     expect(parsed.handoff.failuresByCode).toEqual({});
+    expect(parsed.handoff.runCompletedAtUtc).toBe(state.runCompletedAtUtc);
     expect(parsed.clientTrace).toEqual([]);
+    expect(parsed.exactRequestEnvelopes).toEqual([]);
+    expect(parsed.archiveDiagnostics).toEqual([]);
   });
 
   it('produces no bundle for non-terminal or baseline states (enable predicate)', async () => {
@@ -272,5 +303,109 @@ describe('buildRunBundle (re-audit remediation F9)', () => {
     const terminal = terminalState(harness.lastStatus()!);
     expect(canExportRunBundle(terminal)).toBe(true);
     expect(attemptExport(terminal, harness.client)).not.toBeNull();
+  });
+
+  it('refuses to export until runCompletedAtUtc is stamped (C3)', async () => {
+    const harness = makeClient({});
+    harness.client.newRun();
+    await harness.client.connect();
+    const state = terminalState(harness.lastStatus()!);
+    state.runCompletedAtUtc = null; // terminal snapshot seen, receipt not yet stamped
+    expect(canExportRunBundle(state)).toBe(false);
+    expect(attemptExport(state, harness.client)).toBeNull();
+    state.runCompletedAtUtc = '2026-07-27T11:59:58.000Z';
+    expect(canExportRunBundle(state)).toBe(true);
+  });
+
+  it('a poisoned exact-request archive blocks export (C2/C3)', async () => {
+    const harness = makeClient({});
+    const [request] = genuineRequests(1);
+    harness.client.newRun();
+    await harness.client.connect();
+    harness.client.handleDecisionRequest(request!);
+    await harness.client.settle();
+
+    // Same requestId, canonically different envelope → poison, no throw.
+    const conflicting = structuredClone(request!);
+    conflicting.contextHash = 'ffffffffffffffff';
+    harness.client.handleDecisionRequest(conflicting);
+    await harness.client.settle();
+
+    expect(harness.client.archivePoisoned()).toBe(true);
+    expect(harness.lastStatus()!.archivePoisoned).toBe(true);
+    const state = terminalState(harness.lastStatus()!);
+    expect(canExportRunBundle(state)).toBe(false);
+    expect(attemptExport(state, harness.client)).toBeNull();
+
+    // Even if assembled directly, the diagnostics fail producer validation.
+    const bundle = buildRunBundle(
+      state,
+      harness.client.clientTraceEntries(),
+      harness.client.currentRunId,
+      '2026-07-27T12:00:00.000Z',
+      harness.client.exactRequestEnvelopes(),
+      harness.client.archiveDiagnostics(),
+    );
+    expect(runBundleSchema.parse(bundle)).toEqual(bundle); // still schema-valid
+    const problems = validateRunBundle(bundle);
+    expect(problems.some((p) => p.includes('archiveDiagnostics'))).toBe(true);
+  });
+
+  it('validateRunBundle flags tampered envelopes and coverage gaps (C3/A6)', async () => {
+    const requests = genuineRequests(2);
+    const harness = makeClient({});
+    harness.client.newRun();
+    await harness.client.connect();
+    for (const request of requests) {
+      harness.client.handleDecisionRequest(request);
+      await harness.client.settle();
+    }
+    const state = terminalState(harness.lastStatus()!);
+    const healthy = attemptExport(state, harness.client)!;
+    expect(validateRunBundle(healthy)).toEqual([]);
+
+    // A tampered context hash no longer recomputes.
+    const tampered = structuredClone(healthy);
+    (tampered.exactRequestEnvelopes[0] as { contextHash: string }).contextHash = 'ffffffffffffffff';
+    expect(validateRunBundle(tampered).some((p) => p.includes('contextHash'))).toBe(true);
+
+    // A missing envelope breaks runId-scoped trace↔archive coverage.
+    const missing = structuredClone(healthy);
+    missing.exactRequestEnvelopes.pop();
+    expect(
+      validateRunBundle(missing).some((p) => p.includes('no archived exact-request envelope')),
+    ).toBe(true);
+
+    // An extra envelope with no trace entry breaks the reverse direction.
+    const extra = structuredClone(healthy);
+    extra.clientTrace.pop();
+    expect(validateRunBundle(extra).some((p) => p.includes('no run '))).toBe(true);
+  });
+
+  it('threads the injected clocks so runCompletedAtUtc <= exportedAtUtc (A5: equality legal)', async () => {
+    const harness = makeClient({});
+    harness.client.newRun();
+    await harness.client.connect();
+    // Deterministic clock sequence, mirroring workerClient's injectable now()
+    // (run-complete receipt) followed by the panel's export stamp.
+    const ticks = ['2026-07-27T12:00:00.000Z', '2026-07-27T12:00:00.000Z'];
+    let tickIndex = 0;
+    const now = (): string => ticks[Math.min(tickIndex++, ticks.length - 1)]!;
+
+    const state = terminalState(harness.lastStatus()!);
+    state.runCompletedAtUtc = now(); // stamped at run-complete receipt
+    const bundle = buildRunBundle(
+      state,
+      harness.client.clientTraceEntries(),
+      harness.client.currentRunId,
+      now(), // stamped at export click
+      harness.client.exactRequestEnvelopes(),
+      harness.client.archiveDiagnostics(),
+    );
+    expect(bundle.handoff.runCompletedAtUtc).not.toBeNull();
+    // Monotonic NON-decreasing (A5): equality is reachable and legal — never
+    // assert distinctness.
+    expect(bundle.handoff.runCompletedAtUtc! <= bundle.handoff.exportedAtUtc).toBe(true);
+    expect(runBundleSchema.parse(bundle)).toEqual(bundle);
   });
 });

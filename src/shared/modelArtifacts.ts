@@ -154,12 +154,17 @@ export const runManifestSeedSchema = z
   })
   .strict();
 
+/** Client trace entry schema version (1.5.0: v2 adds
+ * `gatewayResultObserved`, amendment A2). */
+export const CLIENT_TRACE_SCHEMA_VERSION = 2;
+
 /** Slim browser-side trace entry (F4, deviation D3): identity + timing +
  * outcome ONLY — no request payloads, no secrets, no environment. Exact
  * envelopes are persisted by the GATEWAY as `requests/<requestId>.json`
- * sidecars. Wall-clock fields are noncanonical diagnostics, never join keys.
- * Shape mirror of src/app/modelClientTraceRecorder.ts ModelClientTraceEntry
- * (clientTraceSchemaVersion 1). */
+ * sidecars AND (since bundle v2) archived client-side in the run bundle's
+ * `exactRequestEnvelopes`. Wall-clock fields are noncanonical diagnostics,
+ * never join keys. Shape mirror of src/app/modelClientTraceRecorder.ts
+ * ModelClientTraceEntry (clientTraceSchemaVersion 2). */
 export const clientTraceEntrySchema = z
   .object({
     runId: shortString,
@@ -179,18 +184,41 @@ export const clientTraceEntrySchema = z
     responseId: z.string().nullable(),
     failureId: z.string().nullable(),
     clientLatencyMs: z.number().nonnegative().nullable(),
+    /** Strict gateway-evidence predicate (A2): true ONLY when the client
+     * parsed an HTTP result PRODUCED by the gateway — a response, or a
+     * failure whose body the gateway minted (gwf- failureId / typed gateway
+     * error body). False for client-minted cf- failures (timeout,
+     * unreachable, budget, contract latch, invalid transport results) and
+     * discarded-stale-run entries. Stamped explicitly at the result-parse
+     * sites, never inferred from id prefixes. NOT the same as
+     * `dispatchedAtUtc !== null`, which only means a POST was attempted. */
+    gatewayResultObserved: z.boolean(),
   })
   .strict();
 
 export type ClientTraceEntry = z.infer<typeof clientTraceEntrySchema>;
 
-/** The browser's one-button run bundle (F5): terminal handoff facts + the
- * slim client trace. `worldStateHash`/`canonicalLedgerHash` are null when the
- * terminal surface genuinely lacked them — the finalizer treats null as
- * absent and notes it. */
+/** The browser's one-button run bundle (F5; v2 in 1.5.0): terminal handoff
+ * facts + the slim client trace + the client-side exact-request archive.
+ * `worldStateHash`/`canonicalLedgerHash` are null when the terminal surface
+ * genuinely lacked them — the finalizer treats null as absent and notes it.
+ *
+ * v2 additions:
+ * - `handoff.runCompletedAtUtc` (A4): stamped browser-side when the worker's
+ *   existing `run-complete` message is received; the export gate guarantees
+ *   it is non-null in any exported bundle (the schema allows null so a
+ *   mid-run assembly is still representable).
+ * - `exactRequestEnvelopes`: one COMPLETE prospective envelope per request
+ *   the client ever saw for the current run, archived BEFORE any dispatch
+ *   decision. Validated as `z.array(z.unknown())` here (A7: this module is a
+ *   LEAF — per-envelope validation with externalDecisionRequestEnvelopeSchema
+ *   plus pinned-contract and hash-recompute checks lives in the producer,
+ *   src/app/runBundle.ts, and in the finalizer).
+ * - `archiveDiagnostics`: duplicate-conflict poison messages; empty in every
+ *   healthy run (a poisoned archive blocks export). */
 export const runBundleSchema = z
   .object({
-    bundleSchemaVersion: z.literal(1),
+    bundleSchemaVersion: z.literal(2),
     handoff: z
       .object({
         runId: shortString,
@@ -206,18 +234,30 @@ export const runBundleSchema = z
         gatewayResponses: nonNegInt,
         acceptedModelResponses: nonNegInt,
         failuresByCode: countsByKey,
+        /** Run-level completion timestamp (A4): named runCompletedAtUtc so
+         * it can never shadow the PER-REQUEST clientTrace `completedAtUtc`. */
+        runCompletedAtUtc: z.string().nullable(),
         exportedAtUtc: shortString,
       })
       .strict(),
     clientTrace: z.array(clientTraceEntrySchema),
+    exactRequestEnvelopes: z.array(z.unknown()),
+    archiveDiagnostics: z.array(z.string()),
   })
   .strict();
 
 export type RunBundle = z.infer<typeof runBundleSchema>;
 
-/** Finalized joined trace row version (S3): one row per requestId, joining
- * client entry (0..1) + gateway rows + engine lifecycle from the ledger. */
-export const FINALIZED_TRACE_SCHEMA_VERSION = 1;
+/** Finalized joined trace row version (S3; v2 in 1.5.0): one row per
+ * requestId, joining client entry (0..1) + gateway rows + engine lifecycle
+ * from the ledger. v2 adds exact-request provenance WITHOUT triplicating the
+ * envelope bytes (A3): rows point at the once-per-source envelopes (gateway
+ * sidecar file / client bundle array index) plus a canonical sha256, and
+ * carry the strict-mode disposition taxonomy (A2/V4) and the 'superseded'
+ * engine resolution (A1). */
+export const FINALIZED_TRACE_SCHEMA_VERSION = 2;
+
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const finalizedTraceEntrySchema = z
   .object({
@@ -235,8 +275,29 @@ export const finalizedTraceEntrySchema = z
      * or DecisionProviderFailed (explicit failures); null when the result
      * never reached the engine. */
     logicalSubmittedTick: nonNegInt.nullable(),
-    /** `requests/<requestId>.json` when the sidecar exists, else null. */
+    /** Which once-per-source exact envelopes exist for this request (A3):
+     * 'client' = bundle exactRequestEnvelopes entry, 'gateway' = sidecar. */
+    exactRequestSources: z.array(z.enum(['client', 'gateway'])).max(2),
+    /** sha256 of the canonical compact JSON of the reconciled envelope; null
+     * when no envelope exists from any source. */
+    envelopeSha256: sha256Hex.nullable(),
+    /** `requests/<requestId>.json` when the gateway sidecar exists, else
+     * null. */
     requestEnvelopeFile: z.string().nullable(),
+    /** Index into the bundle's exactRequestEnvelopes array, else null. */
+    clientEnvelopeIndex: nonNegInt.nullable(),
+    /** Strict-mode disposition (A2/V4): how the finalizer explained this
+     * request's gateway evidence. Null only in degraded joins that could not
+     * classify the row. */
+    strictDisposition: z
+      .enum([
+        'gateway-answered',
+        'never-dispatched',
+        'gateway-interrupted',
+        'moot-after-resolution',
+        'stale-run-discard',
+      ])
+      .nullable(),
     contextHash: hash16,
     truncationCounts: countsByKey,
     responseId: z.string().nullable(),
@@ -256,7 +317,10 @@ export const finalizedTraceEntrySchema = z
     gatewayLatencyMs: z.number().nonnegative().nullable(),
     clientOutcome: clientOutcome.nullable(),
     gatewayOutcome: gatewayOutcome.nullable(),
-    engineOutcome: z.enum(['accepted', 'rejected', 'expired']).nullable(),
+    /** Engine verdict for this request. 'superseded' is a canonical request
+     * resolution (A1): a request whose only resolution is superseded is
+     * COMPLETE evidence, not a failure. */
+    engineOutcome: z.enum(['accepted', 'rejected', 'expired', 'superseded']).nullable(),
     engineRejectionReason: z.enum(DECISION_REJECTION_REASONS).nullable(),
     /** Event id of the engine's resolving lifecycle event, when one exists. */
     engineResolutionEventId: z.string().nullable(),
@@ -265,14 +329,21 @@ export const finalizedTraceEntrySchema = z
 
 export type FinalizedTraceEntry = z.infer<typeof finalizedTraceEntrySchema>;
 
-/** Final manifest version (S4). Written as `run-manifest.final.json` NEXT TO
- * the untouched seed manifest — the seed is never mutated. */
-export const FINAL_MANIFEST_SCHEMA_VERSION = 1;
+/** Final manifest version (S4; v2 in 1.5.0). Written as
+ * `run-manifest.final.json` NEXT TO the untouched seed manifest — the seed
+ * is never mutated. v2 widens `status` to completed|degraded, records the
+ * run-level timestamps (A4/A5: runCompletedAtUtc <= exportedAtUtc <=
+ * finalizedAtUtc, monotonic NON-decreasing, equality legal), and adds the
+ * client-evidence counters (V5). */
+export const FINAL_MANIFEST_SCHEMA_VERSION = 2;
 
 export const finalManifestSchema = z
   .object({
     manifestFinalSchemaVersion: z.literal(FINAL_MANIFEST_SCHEMA_VERSION),
-    status: z.literal('completed'),
+    /** 'completed' only when EVERY strict criterion held; 'degraded' is
+     * written exclusively under --allow-degraded with failedCriteria
+     * populated. */
+    status: z.enum(['completed', 'degraded']),
     experimentId: shortString,
     experimentVersion: shortString,
     conditionId: shortString,
@@ -289,12 +360,30 @@ export const finalManifestSchema = z
      * the seed's single modelId alone. */
     returnedModelIds: z.array(shortString),
     modelSettings: z.record(z.string(), z.unknown()),
+    /** Gateway-first-sight time (seed manifest). NOT run start, and excluded
+     * from the A5 monotonic ordering check. */
     startedAtUtc: shortString,
+    /** Browser receipt time of the worker's run-complete message (A4), from
+     * the bundle handoff; null only in degraded bundle-less joins. */
+    runCompletedAtUtc: z.string().nullable(),
+    /** Bundle-export click time, from the bundle handoff; null only in
+     * degraded bundle-less joins. */
+    exportedAtUtc: z.string().nullable(),
     finalizedAtUtc: shortString,
     worldStateHash: hash16,
     canonicalLedgerHash: hash16,
-    /** Client count when a client trace is present, else gateway row count. */
+    /** ENGINE-emitted external request count: ledger DecisionRequested rows
+     * carrying the external provider (V5) — no longer the client/gateway row
+     * count fallback. */
     externalRequestsEmitted: nonNegInt,
+    /** runId-scoped client trace entries; null in bundle-less joins (V5). */
+    requestsSeenByClient: nonNegInt.nullable(),
+    /** Entries with gatewayResultObserved === true (A2); null in bundle-less
+     * joins. */
+    requestsWithGatewayResult: nonNegInt.nullable(),
+    /** Entries with dispatchedAtUtc !== null — "POST attempted", NOT gateway
+     * evidence (A2); null in bundle-less joins. */
+    requestsDispatchedToGateway: nonNegInt.nullable(),
     upstreamCallsAttempted: nonNegInt,
     callsCompleted: nonNegInt,
     callsFailedByCategory: countsByKey,
@@ -303,6 +392,9 @@ export const finalManifestSchema = z
     inputTokens: nonNegInt,
     outputTokens: nonNegInt,
     totalTokens: nonNegInt,
+    /** Strict criteria that did NOT hold — always empty when status is
+     * 'completed'; populated under --allow-degraded. */
+    failedCriteria: z.array(z.string()),
     /** Which sources the join actually had (deviation D2: a missing client
      * bundle degrades completeness with a note instead of hard-failing). */
     completeness: z
@@ -315,3 +407,50 @@ export const finalManifestSchema = z
   .strict();
 
 export type FinalManifest = z.infer<typeof finalManifestSchema>;
+
+/** Bundle-manifest schema version (1.5.0: v2 adds `status`). BOTH writers —
+ * model:finalize's whole-directory evidence binding and model:summarize's
+ * informal 4-file manifest — stamp this version. */
+export const BUNDLE_MANIFEST_SCHEMA_VERSION = 2;
+
+const manifestFileHash = z.object({ name: shortString, sha256: sha256Hex }).strict();
+const manifestFileHashMaybe = z
+  .object({ name: shortString, sha256: sha256Hex.nullable() })
+  .strict();
+
+/** `bundle-manifest.json` (v2): the producer discriminator (F4/F7/F16)
+ * separates the finalizer's whole-directory binding from summarize's
+ * informal manifest. `status` mirrors the final manifest's verdict and is
+ * emitted ONLY by model:finalize — summarize (which runs pre-finalize and
+ * asserts no final manifest exists) always writes null. */
+export const bundleManifestSchema = z.discriminatedUnion('producer', [
+  z
+    .object({
+      bundleManifestSchemaVersion: z.literal(BUNDLE_MANIFEST_SCHEMA_VERSION),
+      producer: z.literal('model:finalize'),
+      runId: shortString,
+      files: z.array(manifestFileHash),
+      aggregateSha256: sha256Hex,
+      status: z.enum(['completed', 'degraded']).nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      bundleManifestSchemaVersion: z.literal(BUNDLE_MANIFEST_SCHEMA_VERSION),
+      producer: z.literal('model:summarize'),
+      runId: shortString,
+      files: z
+        .object({
+          ledger: manifestFileHash.nullable(),
+          modelTrace: manifestFileHashMaybe,
+          runManifest: manifestFileHashMaybe,
+          modelSummary: manifestFileHashMaybe,
+        })
+        .strict(),
+      aggregateSha256: sha256Hex,
+      status: z.null(),
+    })
+    .strict(),
+]);
+
+export type BundleManifest = z.infer<typeof bundleManifestSchema>;

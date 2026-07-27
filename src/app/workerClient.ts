@@ -51,6 +51,9 @@ export class WorkerClient {
   constructor(
     private readonly store: ViewStore,
     private readonly onDownload: (fileName: string, text: string, mime: string) => void,
+    /** Injectable clock for the run-level completion stamp (1.5.0 A4),
+     * mirroring the gateway client's makeRunId injection seam. */
+    private readonly now: () => string = () => new Date().toISOString(),
   ) {
     this.worker = new Worker(new URL('../worker/simWorker.ts', import.meta.url), {
       type: 'module',
@@ -236,6 +239,9 @@ export class WorkerClient {
         this.store.update((s) => {
           s.finalWorldHash = response.worldStateHash;
           s.finalLedgerHash = response.canonicalLedgerHash;
+          // Run-level completion stamp (1.5.0 A4): browser receipt time of
+          // the EXISTING run-complete message — no worker-protocol change.
+          s.runCompletedAtUtc = this.now();
           s.runStatus = 'complete';
         });
         break;
