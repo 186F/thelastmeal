@@ -12,7 +12,7 @@ The authoritative specification is
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
 version `vs001-1.0.0` — those frozen experiment identifiers never change with the
-package. The implementation itself is at **release 1.5.0**, reached through this
+package. The implementation itself is at **release 1.6.0**, reached through this
 lineage:
 
 - **1.1.0** — audit remediation, per
@@ -34,9 +34,13 @@ lineage:
   [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md)
   (report, including every recorded amendment to that brief:
   [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md))
+- **1.6.0** — pinned OpenRouter Responses integration: one exact model slug,
+  one exact provider route, fallbacks disabled, parameter support required,
+  and router metadata retained as hash-bound noncanonical evidence (report:
+  [`documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md))
 
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged across all five
+timelines, weights, the ten action categories — is unchanged across all six
 releases; the remediations hardened the decision lifecycle, constraint
 enforcement, schemas, hashing, determinism proofs, memory generalization,
 evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,
@@ -46,13 +50,14 @@ finalization run the complete ledger validator, finalization is strict by
 default with an explicit archival-only degraded mode, and a keyless
 three-case rehearsal runs in CI on every push and pull request, with the
 GitHub Actions `Required checks (clean checkout)` job as the authoritative
-merge gate. Nothing frozen moved: configuration version `vs001-1.0.0`, the
-model experiment `model-backed-npc-001` v `1.0.0`, the condition
-`mara-model-per-decision-v1`, the external provider `openai-mara-action-v1`,
-and the prompt version `mara-action-selection-1.0.0` are all unchanged, as
-are all fourteen golden hashes. **The live milestone remains pending after
-this release** — 1.5.0 hardens the evidence pipeline and makes no live model
-call whatsoever.
+merge gate. Nothing in the frozen Vertical Slice moved: configuration version
+`vs001-1.0.0`, scenario data, deterministic behavior, and all fourteen golden
+hashes remain unchanged. Release 1.6.0 intentionally advances the separate
+model experiment from v1.0.0 to v1.1.0 and changes the registered external
+provider from direct OpenAI access to `openrouter-mara-action-v1`; the prompt
+text and `mara-action-selection-1.0.0` prompt version remain unchanged. **The
+live milestone remains pending** — no live OpenRouter request is claimed by
+this release.
 
 **Compatibility break:** ledger exports are now format version 2
 (`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).
@@ -130,7 +135,7 @@ No API key, cloud service, backend, database, paid asset, or model account is ne
 | `npm run test:gateway`       | Gateway test suite (fake adapter; no network beyond localhost, no secrets)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `npm run test:model:bundle`  | Named formal model-artifact gate (also a dedicated CI step): the nine bundle/schema/client/corruption/finalizer/rehearsal suites, once                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `npm run gateway:dev:fake`   | Start the local model gateway with the deterministic fake adapter (no key)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `npm run gateway:dev`        | Start the LIVE model gateway (requires `OPENAI_API_KEY`/`OPENAI_MODEL` in `.env.gateway`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `npm run gateway:dev`        | Start the LIVE model gateway (requires `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER` in `.env.gateway`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `npm run build:gateway`      | Bundle the gateway into `dist-gateway/`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `npm run check:dist`         | Post-build secret scan over `dist/` (key paths, SDK, canary)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `npm run model:summarize`    | Informal summary: build `model-summary.json` + `bundle-manifest.json` for a model run (`-- --run-id <id>`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -375,10 +380,18 @@ model-backed ledger replays to the same `worldStateHash` without the model.
 - **Conditions** (engine-resolved; the browser can only name a registered
   condition, never a provider, prompt, or model):
   `deterministic-baseline-v1` (byte-identical to the frozen defaults) and
-  `mara-model-per-decision-v1` (Mara → `openai-mara-action-v1`, one gateway
+  `mara-model-per-decision-v1` (Mara → `openrouter-mara-action-v1`, one gateway
   call per genuine decision opportunity). Scenario F stays deterministic-only.
 - **Gateway** (`gateway/`): exact envelope validation, context-hash
   recomputation, server-owned versioned prompt (`mara-action-selection-1.0.0`),
+  and an explicit OpenRouter Responses adapter using the stateless
+  `/api/v1/responses` route. Every paid request names one exact model slug and
+  one exact provider slug, sends `require_parameters: true`, disables provider
+  fallbacks, and opts into OpenRouter router metadata. The actual selected
+  provider and opaque routing record are written to `routing/<requestId>.json`
+  sidecars; they are noncanonical but recursively covered by the formal bundle
+  manifest. The OpenRouter Responses API is beta, so one disposable live smoke
+  request is required before formal data collection.
   JSON-Schema structured output over a dynamic offered-ID enum, typed failure
   codes, per-run budget (80 calls) and single-flight concurrency, plus a
   process-wide spend cap across ALL runs (`MODEL_MAX_TOTAL_CALLS`, default
@@ -398,7 +411,7 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   IDs, offered-affordance IDs, bounded raw model text on invalid-output and
   refusal outcomes), a write-once `run-manifest.json` seed, and the exact
   validated request envelope persisted as `requests/<requestId>.json` per
-  dispatched request. Since 1.5.0 the seed is written at FIRST SIGHT of a
+  dispatched request, plus `routing/<requestId>.json` whenever OpenRouter returns routing metadata. Since 1.5.0 the seed is written at FIRST SIGHT of a
   validated non-duplicate envelope (alongside the sidecar, before the
   adapter call), so `startedAtUtc` is first-validated-envelope time and even
   a gateway killed mid-adapter leaves a manifest; the seed's `modelSettings`
@@ -522,12 +535,12 @@ never reported as live results.
 
 ### Manual setup (live model runs)
 
-Prerequisites: Node.js 22+, npm, a Chromium-based browser, and an OpenAI API
-key (live runs only — the fake gateway needs none).
+Prerequisites: Node.js 22+, npm, a Chromium-based browser, and an OpenRouter API
+key with sufficient credits (live runs only — the fake gateway needs none).
 
 ```bash
 npm ci
-cp .env.gateway.example .env.gateway   # fill in OPENAI_API_KEY and OPENAI_MODEL
+cp .env.gateway.example .env.gateway   # fill in OPENROUTER_API_KEY, OPENROUTER_MODEL, and OPENROUTER_PROVIDER
 npm run gateway:dev:fake               # keyless deterministic gateway, or:
 npm run gateway:dev                    # live gateway (fails fast without key/model)
 npm run dev                            # browser app; Vite prints the URL

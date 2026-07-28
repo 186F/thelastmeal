@@ -17,10 +17,13 @@ import {
   bundleManifestSchema,
   finalManifestSchema,
   finalizedTraceEntrySchema,
+  ROUTER_METADATA_MAX_CHARS,
   modelTraceEntrySchema,
+  routerTraceEntrySchema,
   runBundleSchema,
   runManifestSeedSchema,
   type FinalizedTraceEntry,
+  type RouterTraceEntry,
   type RunBundle,
   type RunManifestSeed,
 } from '../../src/shared/modelArtifacts';
@@ -401,6 +404,59 @@ export function finalizeRunDirectory(
     }
   }
 
+  // Router evidence (1.6.0). These sidecars exist only on pinned-route runs,
+  // but walkFiles hashes whatever is present into bundle-manifest.json — so a
+  // present sidecar IS formal evidence and gets the same strict-validate and
+  // orphan treatment as the requests/ archive. Before 1.6.0 this directory was
+  // write-only: recursively hashed, never read, never validated, never
+  // cross-checked against the provider the experiment claims to have pinned.
+  //
+  // safeParse + contra rather than a throwing parse (the requests/ pattern
+  // above) so a batch of bad sidecars is reported at once instead of only the
+  // first; the severity is identical, since contradictions are fatal in BOTH
+  // modes.
+  const routingDir = join(dir, 'routing');
+  const routerEntries = new Map<string, RouterTraceEntry>();
+  if (existsSync(routingDir)) {
+    for (const file of readdirSync(routingDir).filter((f) => f.endsWith('.json'))) {
+      const rawSidecar: unknown = JSON.parse(readFileSync(join(routingDir, file), 'utf8'));
+      // Bound the RAW parsed metadata, before zod sees it. The schema's own
+      // refine measures zod's rebuilt record, which silently drops keys such
+      // as `__proto__` — so a hand-edited sidecar can carry unbounded bytes
+      // past the schema while measuring as tiny (measured: a 60,197-byte file
+      // whose metadata refine saw 17 chars). This is the artifact-integrity
+      // bound, so it must measure the artifact.
+      const rawMetadata = (rawSidecar as { metadata?: unknown } | null)?.metadata;
+      const routingMetadataChars =
+        rawMetadata === null || rawMetadata === undefined ? 0 : JSON.stringify(rawMetadata).length;
+      if (routingMetadataChars > ROUTER_METADATA_MAX_CHARS) {
+        contra(
+          `routing sidecar '${file}' metadata is ${routingMetadataChars} chars, past the ` +
+            `${ROUTER_METADATA_MAX_CHARS}-char bound`,
+        );
+        continue;
+      }
+      const parsed = routerTraceEntrySchema.safeParse(rawSidecar);
+      if (!parsed.success) {
+        contra(
+          `routing sidecar '${file}' failed validation: ${parsed.error.issues
+            .slice(0, 3)
+            .map((issue) => `${issue.path.join('.') || '<root>'} ${issue.message}`)
+            .join('; ')}`,
+        );
+        continue;
+      }
+      const entry = parsed.data;
+      if (file !== `${entry.requestId}.json`) {
+        contra(`routing sidecar '${file}' names request '${entry.requestId}'`);
+      }
+      if (entry.runId !== runId) {
+        contra(`routing sidecar '${file}' carries runId '${entry.runId}' != '${runId}'`);
+      }
+      routerEntries.set(entry.requestId, entry);
+    }
+  }
+
   // ---- 2. Consistency (contradiction -> nonzero in BOTH modes) -----------
   const scenarioId: string = seed.scenarioId;
 
@@ -455,6 +511,56 @@ export function finalizeRunDirectory(
     if (!ledgerIndex.requested.has(row.requestId)) {
       contra(
         `trace row ${row.requestId} is an orphan: no external DecisionRequested in the ledger`,
+      );
+    }
+  }
+
+  /** Pinned-route run (1.6.0): the seed records the RESOLVED adapter, so this
+   * is read off the manifest rather than assumed from the provider id. */
+  const pinnedRouteRun = seed.modelSettings.adapterKind === 'openrouter';
+  const pinnedProvider =
+    typeof seed.modelSettings.openRouterProvider === 'string'
+      ? seed.modelSettings.openRouterProvider
+      : null;
+
+  /** The pinned provider and the reported provider live in two different
+   * naming namespaces: the config pins the ROUTING SLUG the gateway puts in
+   * `provider.only` ('anthropic', 'amazon-bedrock') while the router reports a
+   * DISPLAY NAME ('Anthropic', 'Amazon Bedrock'). They diverge on case AND on
+   * word separators, so folding case alone is not enough — 'amazon-bedrock'
+   * vs 'Amazon Bedrock' would read as a substitution on a perfectly pinned
+   * run. Normalizing both sides to alphanumerics compares the only part of
+   * the two namespaces that is actually shared. */
+  const normalizeProviderName = (value: string): string =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Pinned-route enforcement (1.6.0). The experiment's premise is one exact
+  // model, one exact provider, no fallbacks. All three were CAPTURED by the
+  // OpenRouter integration and enforced nowhere: the final manifest recorded
+  // requestedModelId and returnedModelIds side by side without ever comparing
+  // them, and the provider that actually served each call existed only inside
+  // routing sidecars this finalizer did not read. Silent substitution is
+  // precisely what pinning exists to prevent, so it must not be able to reach
+  // a `completed` manifest.
+  const providerMismatches: string[] = [];
+  for (const [requestId, entry] of routerEntries) {
+    // Orphan fatality, the same rule trace rows get: router evidence naming a
+    // request the engine never emitted is unexplainable, not merely extra.
+    if (!ledgerIndex.requested.has(requestId)) {
+      contra(
+        `routing sidecar ${requestId} is an orphan: no external DecisionRequested in the ledger`,
+      );
+      continue;
+    }
+    // A null upstreamProviderId means the metadata named no selected endpoint
+    // — an ABSENCE, handled as a strict criterion below, never as a mismatch.
+    if (
+      pinnedProvider !== null &&
+      entry.upstreamProviderId !== null &&
+      normalizeProviderName(entry.upstreamProviderId) !== normalizeProviderName(pinnedProvider)
+    ) {
+      providerMismatches.push(
+        `${requestId} served by '${entry.upstreamProviderId}' (pinned '${pinnedProvider}')`,
       );
     }
   }
@@ -710,6 +816,82 @@ export function finalizeRunDirectory(
 
   // ---- 3. Strict evidence criteria (V3) -----------------------------------
   const finalizedAtUtc = now();
+
+  /** Distinct non-null modelIds the upstream actually reported. Computed ONCE
+   * and reused by the final manifest below — two hash-bound facts must never
+   * be derived by two separate expressions. */
+  const returnedModelIds = [
+    ...new Set(traceRows.map((r) => r.modelId).filter((m): m is string => m !== null)),
+  ].sort();
+
+  // Pinned model (1.6.0). Deliberately a strict CRITERION rather than a
+  // contradiction: an upstream reporting a legitimately variant slug must not
+  // destroy an expensive live run's artifacts, but a substitution must never
+  // reach a `completed` manifest either. --allow-degraded preserves the data
+  // and names the reason in failedCriteria.
+  if (seed.modelId !== null) {
+    const substituted = returnedModelIds.filter((id) => id !== seed.modelId);
+    if (substituted.length > 0) {
+      failedCriteria.push(
+        `pinned-model: run requested '${seed.modelId}' but the upstream reported ${substituted
+          .map((id) => `'${id}'`)
+          .join(', ')}`,
+      );
+    }
+  }
+
+  // A provider that disagrees with the pin is a strict CRITERION, not a
+  // contradiction, for the same reason `pinned-model` is: the comparison
+  // bridges two upstream-owned naming namespaces, so a naming divergence we
+  // failed to anticipate must not destroy an expensive live run's artifacts.
+  // It can still never read as `completed`.
+  if (providerMismatches.length > 0) {
+    failedCriteria.push(
+      `pinned-provider: ${providerMismatches.length} call(s) were served by a provider the run did ` +
+        `not pin with fallbacks disabled (e.g. ${providerMismatches.slice(0, 3).join('; ')})`,
+    );
+  }
+
+  if (pinnedRouteRun) {
+    /** Requests the gateway actually ANSWERED. Both routing criteria below are
+     * scoped to these: the gateway writes a routing sidecar for FAILED calls
+     * too (the OpenRouter adapter builds `meta` before it throws on an HTTP
+     * error, and metaFromPayload always sets both router keys), and such a
+     * sidecar legitimately carries a null provider because nothing was served.
+     * Scoring those as unproven provenance would mean a single upstream 402 or
+     * 5xx anywhere in a run made `completed` permanently unreachable — the
+     * exact failure class this enforcement exists to prevent. */
+    const answeredRequestIds = new Set(
+      traceRows.filter((row) => row.gatewayOutcome === 'response').map((row) => row.requestId),
+    );
+
+    // Every answered call carries router evidence, so a missing sidecar is
+    // lost evidence rather than an adapter that declined to report.
+    const missingRouting = [...answeredRequestIds]
+      .filter((requestId) => !routerEntries.has(requestId))
+      .sort();
+    if (missingRouting.length > 0) {
+      failedCriteria.push(
+        `routing-evidence: ${missingRouting.length} answered request(s) have no routing sidecar ` +
+          `(e.g. ${missingRouting.slice(0, 3).join(', ')})`,
+      );
+    }
+    // A sidecar naming no selected endpoint cannot prove the pinned provider
+    // served the call, and the mismatch check above can only fire on a provider
+    // it can actually see — so unproven provenance on an ANSWERED call is
+    // recorded here rather than passing silently.
+    const providerUnproven = [...routerEntries.values()]
+      .filter((entry) => answeredRequestIds.has(entry.requestId))
+      .filter((entry) => entry.upstreamProviderId === null)
+      .map((entry) => entry.requestId)
+      .sort();
+    if (providerUnproven.length > 0) {
+      failedCriteria.push(
+        `routing-provider-evidence: ${providerUnproven.length} answered request(s) have a routing ` +
+          `sidecar naming no selected provider (e.g. ${providerUnproven.slice(0, 3).join(', ')})`,
+      );
+    }
+  }
 
   if (clientPresent) {
     // runId-scoped coverage (A6): every ENGINE-emitted external request needs
@@ -1081,9 +1263,7 @@ export function finalizeRunDirectory(
     externalProviderId: seed.externalProviderId,
     promptVersion: seed.promptVersion,
     requestedModelId: seed.modelId,
-    returnedModelIds: [
-      ...new Set(traceRows.map((r) => r.modelId).filter((m): m is string => m !== null)),
-    ].sort(),
+    returnedModelIds,
     modelSettings: seed.modelSettings,
     startedAtUtc: seed.startedAtUtc,
     runCompletedAtUtc: handoff?.runCompletedAtUtc ?? null,

@@ -1,6 +1,6 @@
 import { loadGatewayConfig } from '../../gateway/config';
 import { createGateway } from '../../gateway/server';
-import { OpenAIResponsesDecisionAdapter } from '../../gateway/adapters/openaiResponsesAdapter';
+import { OpenRouterResponsesDecisionAdapter } from '../../gateway/adapters/openRouterResponsesAdapter';
 import { ModelTraceWriter } from '../../gateway/tracing/modelTraceWriter';
 import { PROMPT_VERSION } from '../../gateway/prompts/maraActionSelection';
 import {
@@ -15,28 +15,31 @@ import {
 import { createRun, stepTick } from '../../src/sim/runtime/engine';
 
 /**
- * Live opt-in smoke test (milestone 001, section 23.9):
+ * Live opt-in smoke test:
  *
  *   RUN_LIVE_MODEL_TESTS=1 npm run test:model:live
  *
  * Skips by default and never runs on pull requests. Performs ONE small,
- * genuine gateway request against the configured upstream model and
- * validates the response schema — it does not run a full scenario.
+ * genuine OpenRouter Responses request and validates the gateway response
+ * schema. It does not run a full scenario and is not formal experiment data.
  */
 
 if (process.env.RUN_LIVE_MODEL_TESTS !== '1') {
   console.log(
-    'live model smoke: skipped (set RUN_LIVE_MODEL_TESTS=1 with a configured key to run)',
+    'live model smoke: skipped (set RUN_LIVE_MODEL_TESTS=1 with OpenRouter configuration to run)',
   );
   process.exit(0);
 }
 
-const config = loadGatewayConfig('openai');
-const adapter = new OpenAIResponsesDecisionAdapter(
-  config.openaiApiKey!,
-  config.openaiModel!,
-  config.maxOutputTokens,
-);
+const config = loadGatewayConfig('openrouter');
+const adapter = new OpenRouterResponsesDecisionAdapter({
+  apiKey: config.openRouterApiKey!,
+  model: config.openRouterModel!,
+  provider: config.openRouterProvider!,
+  maxOutputTokens: config.maxOutputTokens,
+  httpReferer: config.openRouterHttpReferer,
+  appTitle: config.openRouterAppTitle,
+});
 const gateway = createGateway(
   { ...config, port: 0 },
   adapter,
@@ -79,13 +82,14 @@ try {
   }
   if (parsed.data.outcome === 'response') {
     console.log(
-      `live model smoke: PASSED — model selected ${parsed.data.response.selectedAffordanceId} ` +
+      `live model smoke: PASSED — OpenRouter model selected ${parsed.data.response.selectedAffordanceId} ` +
         `(reason ${parsed.data.response.reasonCode}, confidence ${parsed.data.response.confidenceBp}bp, ` +
         `tokens in/out ${parsed.data.usage?.inputTokens ?? '?'}/${parsed.data.usage?.outputTokens ?? '?'})`,
     );
   } else {
     console.error(
-      `live model smoke: upstream failure ${parsed.data.failure.failureCode} (typed failure path verified; check key/model configuration)`,
+      `live model smoke: upstream failure ${parsed.data.failure.failureCode} ` +
+        '(typed failure path verified; check OpenRouter key/model/provider configuration)',
     );
     process.exit(1);
   }

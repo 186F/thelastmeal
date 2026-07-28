@@ -43,14 +43,14 @@ describe('provider plans', () => {
     for (const event of requests) {
       const payload = event.payload as { npcId: string; providerId: string };
       expect(payload.providerId).toBe(
-        payload.npcId === 'mara' ? 'openai-mara-action-v1' : 'deterministic-utility-v1',
+        payload.npcId === 'mara' ? EXTERNAL_MARA_PROVIDER_ID : 'deterministic-utility-v1',
       );
     }
     // External requests are emitted only for Mara.
     expect(run.externalRequests.length).toBeGreaterThan(0);
     for (const external of run.externalRequests) {
       expect(external.request.npcId).toBe('mara');
-      expect(external.request.providerId).toBe('openai-mara-action-v1');
+      expect(external.request.providerId).toBe(EXTERNAL_MARA_PROVIDER_ID);
     }
     // The run-level plan ID is recorded in ScenarioStarted.
     const started = run.ledger.events[0]!;

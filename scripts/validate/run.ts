@@ -81,11 +81,10 @@ for (const root of scanRoots) {
   }
 }
 
-// --- Layer 2a-2: model-SDK and secret boundaries (milestone 001) --------------
-// The OpenAI SDK and the model secret exist ONLY in the server-side gateway:
-// no module under src/ (browser app, worker, shared, sim, render, ui) may
-// import the SDK or reference the key/env path; the gateway may not import
-// presentation or worker modules.
+// --- Layer 2a-2: model-SDK and secret boundaries -----------------------------
+// Vendor SDKs, upstream hosts and model secrets exist ONLY in the server-side
+// gateway. No module under src/ (browser app, worker, shared, sim, render, ui)
+// may import the OpenAI SDK or reference either provider's key/env path.
 
 {
   const files: string[] = [];
@@ -97,10 +96,16 @@ for (const root of scanRoots) {
       err('client-imports-openai-sdk', 'The OpenAI SDK is gateway-only', rel);
     }
     if (/OPENAI_API_KEY/.test(source)) {
-      err('client-references-openai-key', 'The model key path is gateway-only', rel);
+      err('client-references-openai-key', 'The direct OpenAI key path is gateway-only', rel);
     }
-    if (/VITE_OPENAI/.test(source)) {
-      err('client-vite-openai-secret', 'No secret may use a VITE_ prefix', rel);
+    if (/OPENROUTER_API_KEY/.test(source)) {
+      err('client-references-openrouter-key', 'The OpenRouter key path is gateway-only', rel);
+    }
+    if (/VITE_(OPENAI|OPENROUTER)/.test(source)) {
+      err('client-vite-model-secret', 'No model secret may use a VITE_ prefix', rel);
+    }
+    if (/openrouter\.ai\/api\//.test(source)) {
+      err('client-references-openrouter-host', 'The upstream OpenRouter host is gateway-only', rel);
     }
   }
 }

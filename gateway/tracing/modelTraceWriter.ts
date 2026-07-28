@@ -1,32 +1,28 @@
 import { appendFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ModelTraceEntry, RunManifestSeed } from '../../src/shared/modelArtifacts';
+import type {
+  ModelTraceEntry,
+  RouterTraceEntry,
+  RunManifestSeed,
+} from '../../src/shared/modelArtifacts';
 
 /**
- * Noncanonical model-run trace (milestone 001, section 17; trace schema v2 in
- * re-audit remediation G1). One JSONL entry per gateway request under
- * `<traceDir>/<runId>/model-trace.jsonl`, a run manifest seeded at first
- * sight of a run — since 1.5.0 G3 that means alongside the envelope sidecar
- * on the run's FIRST validated non-duplicate envelope, so the seed's
- * `startedAtUtc` is first-validated-envelope time and a first request killed
- * mid-adapter still leaves a manifest — and, for every non-duplicate
- * dispatch, the exact validated envelope as
- * `<traceDir>/<runId>/requests/<requestId>.json` (G2, deviation D3).
- * The seed's open `modelSettings` record additively gained `maxTotalCalls`
- * (the resolved cap) and `maxRequestBodyBytes` in 1.5.0 G2; the trace schema
- * version stays 2. Wall-clock timestamps are diagnostic only and never enter
- * canonical state.
+ * Noncanonical model-run trace. One JSONL entry per gateway request under
+ * `<traceDir>/<runId>/model-trace.jsonl`, a run manifest seeded at first sight
+ * of a run, exact request envelopes under `requests/`, and optional upstream
+ * router evidence under `routing/`.
  *
- * Entry/seed types and their exact schemas live in
- * src/shared/modelArtifacts.ts (shared with the finalizer); this module keeps
- * only the writer classes.
+ * Wall-clock timestamps and routing metadata are diagnostic only and never
+ * enter canonical state. The formal bundle manifest recursively hashes these
+ * sidecars together with the other run evidence.
  *
  * NEVER recorded: API keys, authorization headers, process environment,
- * cookies, or hidden model reasoning — entries are built exclusively from
- * the validated envelope, the validated model choice, and adapter metadata.
+ * cookies, or hidden model reasoning.
  */
 
-export type { ModelTraceEntry, RunManifestSeed };
+/** RouterTraceEntry is defined in src/shared/modelArtifacts alongside its zod
+ * schema — one source for the writer here and the finalizer's validation. */
+export type { ModelTraceEntry, RouterTraceEntry, RunManifestSeed };
 
 export class ModelTraceWriter {
   private readonly seededRuns = new Set<string>();
@@ -56,13 +52,20 @@ export class ModelTraceWriter {
 
   /** Persists the exact validated envelope as a pretty-printed sidecar
    * (`requests/<requestId>.json`). Called by the gateway ONLY after full
-   * validation and only for a non-duplicate dispatch — never on idempotent
-   * replays, never on pre-validation rejects. `requestId` is schema-checked
-   * (`dec-\d{4,}`) before any call, so the file name is always safe. */
+   * validation and only for a non-duplicate dispatch. */
   writeRequest(runId: string, requestId: string, envelope: unknown): void {
     const dir = join(this.runDir(runId), 'requests');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${requestId}.json`), JSON.stringify(envelope, null, 2), 'utf8');
+  }
+
+  /** Persists OpenRouter routing evidence separately from the vendor-neutral
+   * model trace. The sidecar is written at most once per non-duplicate
+   * dispatch and is recursively covered by bundle-manifest.json. */
+  writeRouterMetadata(entry: RouterTraceEntry): void {
+    const dir = join(this.runDir(entry.runId), 'routing');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${entry.requestId}.json`), JSON.stringify(entry, null, 2), 'utf8');
   }
 }
 
@@ -72,6 +75,8 @@ export class MemoryTraceWriter extends ModelTraceWriter {
   readonly manifests: RunManifestSeed[] = [];
   /** Envelope sidecars keyed `<runId>:<requestId>`. */
   readonly requests = new Map<string, unknown>();
+  /** Routing sidecars keyed `<runId>:<requestId>`. */
+  readonly routing = new Map<string, RouterTraceEntry>();
 
   constructor() {
     super('unused');
@@ -87,5 +92,9 @@ export class MemoryTraceWriter extends ModelTraceWriter {
 
   override writeRequest(runId: string, requestId: string, envelope: unknown): void {
     this.requests.set(`${runId}:${requestId}`, envelope);
+  }
+
+  override writeRouterMetadata(entry: RouterTraceEntry): void {
+    this.routing.set(`${entry.runId}:${entry.requestId}`, entry);
   }
 }

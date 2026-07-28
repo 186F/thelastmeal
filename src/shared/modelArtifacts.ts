@@ -154,6 +154,54 @@ export const runManifestSeedSchema = z
   })
   .strict();
 
+/** Router evidence schema version (1.6.0). */
+export const ROUTER_TRACE_SCHEMA_VERSION = 1;
+
+/** Ceiling on persisted router metadata. Enforced on WRITE by the adapter's
+ * boundedRouterMetadata and again on READ by the finalizer: a sidecar that
+ * grew past the bound (hand edit, adapter regression, a router that started
+ * returning far more metadata) must not be hashed into a formal bundle
+ * unchallenged. */
+export const ROUTER_METADATA_MAX_CHARS = 16_384;
+
+/** One `routing/<requestId>.json` sidecar per non-duplicate dispatch on a
+ * pinned-route run. These files are recursively hashed into
+ * bundle-manifest.json, which makes them formal evidence — so they are
+ * validated on read exactly like every other bundled artifact, and the
+ * finalizer cross-checks them against the pinned provider (1.6.0).
+ *
+ * NEVER recorded: API keys, authorization headers, process environment,
+ * cookies, or hidden model reasoning. */
+export const routerTraceEntrySchema = z
+  .object({
+    routingSchemaVersion: z.literal(ROUTER_TRACE_SCHEMA_VERSION),
+    runId: shortString,
+    requestId: shortString,
+    /** Provider that actually served the call, per router metadata. Null when
+     * the metadata named no selected endpoint — an ABSENCE, never evidence of
+     * a mismatch. */
+    upstreamProviderId: z.string().nullable(),
+    /** Opaque JSON-safe router metadata; consumers must ignore unknown
+     * fields. Bounded by total serialized size rather than by shape, because
+     * the router owns this payload's schema and we refuse to pin it.
+     *
+     * This refine is a SHAPE-LEVEL guard, not the authoritative bound: zod
+     * rebuilds a record during parsing and drops keys it refuses to copy
+     * (notably `__proto__`), so the value measured here can be smaller than
+     * the bytes actually on disk. Readers that must bound the ARTIFACT — the
+     * finalizer above all — measure the raw parsed JSON before schema
+     * validation. See routingMetadataChars in scripts/model/finalize.ts. */
+    metadata: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .refine((m) => m === null || JSON.stringify(m).length <= ROUTER_METADATA_MAX_CHARS, {
+        message: `router metadata exceeds ${ROUTER_METADATA_MAX_CHARS} chars`,
+      }),
+  })
+  .strict();
+
+export type RouterTraceEntry = z.infer<typeof routerTraceEntrySchema>;
+
 /** Client trace entry schema version (1.5.0: v2 adds
  * `gatewayResultObserved`, amendment A2). */
 export const CLIENT_TRACE_SCHEMA_VERSION = 2;

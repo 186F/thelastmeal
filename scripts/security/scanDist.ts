@@ -2,20 +2,21 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /**
- * Build-secret scan (milestone 001, section 23.8): after `npm run build`,
- * the browser bundle must contain no path to the model secret and no model
- * SDK. Fails when `dist/` contains:
- *  - the canary test key used by the security suite,
- *  - `OPENAI_API_KEY` as a readable configuration path,
- *  - the OpenAI SDK / API host (the SDK must never be bundled client-side).
+ * Build-secret scan: after `npm run build`, the browser bundle must contain no
+ * path to a model secret and no upstream model host or SDK. Fails when `dist/`
+ * contains either provider's key path, a canary key, or a direct upstream host.
  */
 
 export const CANARY_TEST_KEY = 'sk-test-thelastmeal-canary';
+export const OPENROUTER_CANARY_TEST_KEY = 'sk-or-v1-thelastmeal-canary';
 
 const FORBIDDEN = [
   { token: CANARY_TEST_KEY, code: 'dist-contains-canary-key' },
+  { token: OPENROUTER_CANARY_TEST_KEY, code: 'dist-contains-openrouter-canary-key' },
   { token: 'OPENAI_API_KEY', code: 'dist-references-openai-key' },
+  { token: 'OPENROUTER_API_KEY', code: 'dist-references-openrouter-key' },
   { token: 'api.openai.com', code: 'dist-references-openai-host' },
+  { token: 'openrouter.ai/api/', code: 'dist-references-openrouter-host' },
 ];
 
 export function scanDist(distDir: string): { code: string; file: string }[] {
