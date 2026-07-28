@@ -8,15 +8,25 @@ import {
   type RehearsalCaseName,
   type RehearsalReport,
 } from '../../scripts/model/rehearse';
+import { aggregateSha256, sha256OfFile } from '../../scripts/model/summarize';
+import {
+  bundleManifestSchema,
+  finalizedTraceEntrySchema,
+  FINALIZED_TRACE_SCHEMA_VERSION,
+} from '../../src/shared/modelArtifacts';
 
 /**
- * Rehearsal harness tests (1.5.0 R4, brief §11.8): the exported rehearsal
- * cases run against a throwaway --out directory; all three cases must
- * strict-complete through the REAL pipeline, the reports must parse, a
+ * Rehearsal harness tests (1.5.0 R4, brief §11.8; 1.6.1 T-D): the exported
+ * rehearsal cases run against a throwaway --out directory; all three cases
+ * must strict-complete through the REAL pipeline, the reports must parse, a
  * deliberately induced evidence gap must make the rehearsal fail (the CLI
  * exit-nonzero contract is `report.ok === false` / a thrown case), and every
- * gateway server must be closed after success AND failure. Measured cost is
- * ~3-4s per full rehearsal; timeouts are generous (60s), never load-bearing.
+ * gateway server must be closed after success AND failure. 1.6.1 adds: every
+ * finalized row is schema v3, the latency case surfaces its supersede-set
+ * resolution and late-submission evidence in the report, and the bundle
+ * aggregate hash is verified by RECOMPUTATION from the on-disk bytes — never
+ * against a hand-pinned constant. Measured cost is ~3-4s per full rehearsal;
+ * timeouts are generous (60s), never load-bearing.
  */
 
 const SUITE_TIMEOUT = 60_000;
@@ -66,6 +76,18 @@ describe('model rehearsal harness (R4)', () => {
       report.gatewayStopRun!.externalRequestsEmitted,
     );
     expect(report.latencyRun!.supersededRequests).toBeGreaterThan(0);
+    // 1.6.1 (T-D/E11): the latency case proved — per-row, inside the
+    // rehearsal — that every supersede-set row resolves to its exact
+    // DecisionRequestSuperseded event, and the report surfaces the evidence:
+    // rejected late answers occurred, and >=1 canonical resolution strictly
+    // predates its non-null submission (the one legal strict tick
+    // inequality). The normal run has neither shape: per-tick settlement
+    // means every answer is accepted in its own drain.
+    expect(report.latencyRun!.supersededResolutionRows).toBeGreaterThan(0);
+    expect(report.latencyRun!.lateSubmissionRows).toBeGreaterThan(0);
+    expect(report.latencyRun!.engineRejectionsByReason['superseded-request']).toBeGreaterThan(0);
+    expect(report.normalRun!.supersededResolutionRows).toBe(0);
+    expect(report.normalRun!.lateSubmissionRows).toBe(0);
   });
 
   it('reports parse and the finalize outputs exist in the spec layout', () => {
@@ -93,6 +115,41 @@ describe('model rehearsal harness (R4)', () => {
       ]) {
         expect(existsSync(join(runDir, file)), `${caseName}/${runId}/${file}`).toBe(true);
       }
+    }
+  });
+
+  it('every finalized row is schema v3 and each aggregate hash recomputes from the on-disk bytes', () => {
+    for (const [caseName, runId, run] of [
+      ['normal', 'rehearsal-normal-0001', report.normalRun],
+      ['gateway-stop', 'rehearsal-gateway-stop-0001', report.gatewayStopRun],
+      ['latency', 'rehearsal-latency-0001', report.latencyRun],
+    ] as const) {
+      const runDir = join(outDir, caseName, runId);
+      // 1.6.1: rows must parse against the v3 schema — the literal version
+      // pin, the three event-id fields, and the co-null/verdict refinements
+      // all enforced by finalizedTraceEntrySchema itself.
+      const rows = readFileSync(join(runDir, 'finalized-trace.jsonl'), 'utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => finalizedTraceEntrySchema.parse(JSON.parse(line)));
+      expect(rows.length, `${caseName} finalized rows`).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.finalizedTraceSchemaVersion).toBe(FINALIZED_TRACE_SCHEMA_VERSION);
+      }
+      // The aggregate naturally changed with the v3 trace bytes; it is
+      // verified by RECOMPUTING every per-file sha256 and the aggregate over
+      // the sorted name:hash lines — never against a hand-pinned constant.
+      const manifest = bundleManifestSchema.parse(
+        JSON.parse(readFileSync(join(runDir, 'bundle-manifest.json'), 'utf8')),
+      );
+      if (manifest.producer !== 'model:finalize') {
+        throw new Error(`${caseName} bundle manifest producer is ${manifest.producer}`);
+      }
+      for (const file of manifest.files) {
+        expect(sha256OfFile(join(runDir, file.name)), `${caseName}/${file.name}`).toBe(file.sha256);
+      }
+      expect(aggregateSha256(manifest.files)).toBe(manifest.aggregateSha256);
+      expect(manifest.aggregateSha256).toBe(run!.bundleAggregateSha256);
     }
   });
 

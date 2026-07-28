@@ -12,7 +12,7 @@ The authoritative specification is
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
 version `vs001-1.0.0` — those frozen experiment identifiers never change with the
-package. The implementation itself is at **release 1.6.0**, reached through this
+package. The implementation itself is at **release 1.6.1**, reached through this
 lineage:
 
 - **1.1.0** — audit remediation, per
@@ -38,9 +38,16 @@ lineage:
   one exact provider route, fallbacks disabled, parameter support required,
   and router metadata retained as hash-bound noncanonical evidence (report:
   [`documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md))
+- **1.6.1** — finalized-trace event-semantics remediation: corrects finalized
+  engine lifecycle event provenance (finalized-trace schema v3 with separate
+  submission, verdict, and canonical-resolution event IDs) without changing
+  the frozen simulation, model condition, prompt, or OpenRouter route, per
+  [`documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md)
+  (report, including every recorded amendment to that brief:
+  [`documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md`](documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md))
 
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged across all six
+timelines, weights, the ten action categories — is unchanged across all seven
 releases; the remediations hardened the decision lifecycle, constraint
 enforcement, schemas, hashing, determinism proofs, memory generalization,
 evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,
@@ -55,9 +62,11 @@ merge gate. Nothing in the frozen Vertical Slice moved: configuration version
 hashes remain unchanged. Release 1.6.0 intentionally advances the separate
 model experiment from v1.0.0 to v1.1.0 and changes the registered external
 provider from direct OpenAI access to `openrouter-mara-action-v1`; the prompt
-text and `mara-action-selection-1.0.0` prompt version remain unchanged. **The
-live milestone remains pending** — no live OpenRouter request is claimed by
-this release.
+text and `mara-action-selection-1.0.0` prompt version remain unchanged.
+Release 1.6.1 corrects only the derived finalized-trace event semantics. **The
+live milestone remains pending** — one disposable live smoke request was
+executed on 2026-07-28 and passed; no formal live acceptance run is claimed
+by any release.
 
 **Compatibility break:** ledger exports are now format version 2
 (`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).
@@ -391,7 +400,7 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   provider and opaque routing record are written to `routing/<requestId>.json`
   sidecars; they are noncanonical but recursively covered by the formal bundle
   manifest. The OpenRouter Responses API is beta, so one disposable live smoke
-  request is required before formal data collection.
+  request was executed on 2026-07-28 and passed before formal data collection.
   JSON-Schema structured output over a dynamic offered-ID enum, typed failure
   codes, per-run budget (80 calls) and single-flight concurrency, plus a
   process-wide spend cap across ALL runs (`MODEL_MAX_TOTAL_CALLS`, default
@@ -464,6 +473,25 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   `bundle-manifest.json` with an aggregate bundle hash. Finalized rows point
   at the once-per-source envelopes (gateway sidecar path, client bundle
   index, canonical sha256) rather than embedding another copy.
+- **Finalized-trace event semantics (schema v3, release 1.6.1):** every
+  `finalized-trace.jsonl` row (`finalizedTraceSchemaVersion: 3`) separates
+  the three lifecycle stages the old single field conflated, as three
+  canonical event-ID fields: `engineSubmissionEventId` — the
+  `DecisionResponseReceived` or `DecisionProviderFailed` event that entered
+  the engine, always the same event as `logicalSubmittedTick` and co-null
+  with it; `responseVerdictEventId` — the `DecisionResponseAccepted` or
+  `DecisionResponseRejected` verdict on THIS row's response, keyed by
+  responseId; and `engineResolutionEventId` — the single canonical request
+  resolution (`DecisionResponseAccepted`, `DecisionRequestExpired`, or
+  `DecisionRequestSuperseded`), keyed by requestId — never a Received,
+  ProviderFailed, or Rejected event. In an accepted row, verdict and
+  resolution are the same acceptance event; a rejected row's request may
+  resolve later (expiry), earlier (a late response to an already-superseded
+  request), or through a DIFFERENT response's acceptance — in that last
+  case the row's `engineOutcome` is legitimately null while
+  `engineResolutionEventId` names the other response's acceptance, a legal,
+  non-contradictory combination. The raw gateway trace stays schema v2;
+  only the derived finalized trace advanced.
 - **Strict is the default; degraded is explicit and archival-only:**
   `model:finalize` writes `status: 'completed'` only when every strict
   criterion holds — full ledger validation, client bundle present, every
@@ -526,12 +554,14 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   complete deterministic streams are byte-identical; the 100-run batch never
   starts a gateway; CI uses only the fake adapter and no secret.
 
-**The live milestone is NOT complete.** No live model-backed run has been
-executed; the milestone remains open until
-[`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)
-records actual live runs with their evidence (it is currently a PENDING
-template). Fake-adapter results are infrastructure evidence only and are
-never reported as live results.
+**The live milestone is NOT complete.** No formal live model-backed run has
+been executed; the only live traffic to date is the disposable smoke test of
+2026-07-28 (a failed first attempt, then a pass), recorded as non-formal
+evidence in
+[`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
+The milestone remains open until that report records the formal six-run
+sequence with its evidence. Fake-adapter results are infrastructure evidence
+only and are never reported as live results.
 
 ### Manual setup (live model runs)
 

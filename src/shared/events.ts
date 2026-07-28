@@ -12,7 +12,10 @@ import { SCHEMA_VERSION } from './versions';
  * used by the worker protocol and ledger files.
  */
 export interface EventEnvelope {
-  /** Stable event ID, `evt-<seq>` zero-padded. */
+  /** Stable event ID: `evt-` + the zero-padded width-6 CANONICAL-EVENT
+   * counter, or `evt-op-` + a width-4 counter for the two operator markers.
+   * NOT `evt-<seq>` — the two counters are independent, so the id and the
+   * `seq` below diverge as soon as a run is paused once. */
   id: string;
   /** Position in the append-only ledger, starting at 0. */
   seq: number;

@@ -287,9 +287,9 @@ The live acceptance report must record the requested model, returned model ident
 
 ## Known limitations and next gate
 
-1. OpenRouter's Responses API is beta; one disposable live smoke request is required before formal collection.
+1. OpenRouter's Responses API is beta; one disposable live smoke request is required before formal collection. **Satisfied 2026-07-28:** the disposable smoke test was executed after merge — a first request failed on an upstream 429 shared-pool rate limit, the second passed — and both attempts are recorded as non-formal evidence in [`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
 2. Router metadata is additive and may be absent in some early API-edge or cache/error cases. The integration decodes it permissively and never lets metadata absence affect canonical simulation behavior.
-3. The existing finalized-trace field named `engineResolutionEventId` still carries the pre-1.6.0 semantics identified in the prior audit. That artifact-only correction should be merged before the formal six-run acceptance dataset is collected.
+3. The existing finalized-trace field named `engineResolutionEventId` still carries the pre-1.6.0 semantics identified in the prior audit. That artifact-only correction should be merged before the formal six-run acceptance dataset is collected. **Closed by release 1.6.1:** finalized-trace schema v3 separates the engine submission (`engineSubmissionEventId`), the response verdict (`responseVerdictEventId`), and the canonical request resolution (`engineResolutionEventId`); the implementation PR, commits, CI runs, and schema-version evidence are recorded in [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md).
 4. No live OpenRouter request has been executed by this implementation. The live acceptance report remains `PENDING`.
 
 ## Completion status
@@ -311,4 +311,4 @@ It is ready for a disposable live smoke request after merge. It is not, by itsel
 
 Both CI runs executed the required clean-checkout job, including the full deterministic batch and the keyless formal rehearsal. Local gates at the final PR head: 446 tests across 51 files, eslint and prettier, both typechecks, `validate` with 0 errors and 0 warnings, both builds, the dist secret scan, and the deterministic batch with all fourteen golden hashes byte-identical.
 
-**No live model call has been made at any point in this work.** `documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md` remains fully PENDING.
+**No live model call was made during the 1.6.0 work itself; the formal six-run sequence remains PENDING.** The two disposable smoke requests executed after merge on 2026-07-28 (one failed 429, one pass) are recorded as non-formal evidence in `documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`; its Provenance table and Run log stay fully PENDING.

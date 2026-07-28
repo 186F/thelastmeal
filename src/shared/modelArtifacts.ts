@@ -296,16 +296,39 @@ export const runBundleSchema = z
 
 export type RunBundle = z.infer<typeof runBundleSchema>;
 
-/** Finalized joined trace row version (S3; v2 in 1.5.0): one row per
- * requestId, joining client entry (0..1) + gateway rows + engine lifecycle
- * from the ledger. v2 adds exact-request provenance WITHOUT triplicating the
+/** Finalized joined trace row version (S3; v2 in 1.5.0, v3 in 1.6.1): one row
+ * per requestId, joining client entry (0..1) + gateway rows + engine lifecycle
+ * from the ledger. v2 added exact-request provenance WITHOUT triplicating the
  * envelope bytes (A3): rows point at the once-per-source envelopes (gateway
  * sidecar file / client bundle array index) plus a canonical sha256, and
  * carry the strict-mode disposition taxonomy (A2/V4) and the 'superseded'
- * engine resolution (A1). */
-export const FINALIZED_TRACE_SCHEMA_VERSION = 2;
+ * engine resolution (A1).
+ *
+ * v3 splits the engine lifecycle into the three DISTINCT stages the ledger
+ * actually records — submission (`engineSubmissionEventId`), response verdict
+ * (`responseVerdictEventId`), and canonical request resolution
+ * (`engineResolutionEventId`, whose pre-1.6.1 value was in fact the
+ * submission event). Only this DERIVED artifact advances: the raw gateway
+ * trace, client trace, run bundle, final manifest, and bundle manifest keep
+ * their versions. A v2 row is not reinterpretable as v3 — the supported
+ * upgrade is re-running model:finalize over the retained raw evidence. */
+export const FINALIZED_TRACE_SCHEMA_VERSION = 3;
 
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** Canonical ledger event id (v3): `evt-` + the zero-padded width-6
+ * CANONICAL-EVENT counter of src/sim/events/ledger.ts, which may run past six
+ * digits on a long run. NOT the ledger `seq`: operator markers consume a
+ * separate counter, so id and seq diverge as soon as a run is paused once
+ * (measured: id evt-000002 at seq 3).
+ *
+ * Re-declared here rather than imported because this module is a LEAF — the
+ * canonical copy lives in src/sim/events/eventSchemas.ts, which is not a leaf
+ * (it imports ../config) and does not export it. The envelope regex in that
+ * file, /^evt-(op-)?\d{4,}$/, is deliberately NOT the one mirrored: every
+ * decision-lifecycle event is a canonical event, never an operator marker, so
+ * `evt-op-000001` must be REJECTED in these fields. */
+const canonicalEventId = z.string().regex(/^evt-\d{6,}$/);
 
 export const finalizedTraceEntrySchema = z
   .object({
@@ -321,7 +344,8 @@ export const finalizedTraceEntrySchema = z
     requestedAtLogicalTick: nonNegInt,
     /** Tick of DecisionResponseReceived (responses that entered the engine)
      * or DecisionProviderFailed (explicit failures); null when the result
-     * never reached the engine. */
+     * never reached the engine. Reads off the SAME indexed event as
+     * `engineSubmissionEventId` and is co-null with it (refined below). */
     logicalSubmittedTick: nonNegInt.nullable(),
     /** Which once-per-source exact envelopes exist for this request (A3):
      * 'client' = bundle exactRequestEnvelopes entry, 'gateway' = sidecar. */
@@ -367,13 +391,77 @@ export const finalizedTraceEntrySchema = z
     gatewayOutcome: gatewayOutcome.nullable(),
     /** Engine verdict for this request. 'superseded' is a canonical request
      * resolution (A1): a request whose only resolution is superseded is
-     * COMPLETE evidence, not a failure. */
+     * COMPLETE evidence, not a failure.
+     *
+     * Stays nullable in v3, and null is not the same as "unresolved": when a
+     * request was resolved by an acceptance of a DIFFERENT responseId than
+     * this row's, the shared ladder finds no response-level verdict and no
+     * expiry/supersession, so it returns null while `engineResolutionEventId`
+     * carries that acceptance. That combination is legal and
+     * non-contradictory — the two fields answer different questions. */
     engineOutcome: z.enum(['accepted', 'rejected', 'expired', 'superseded']).nullable(),
     engineRejectionReason: z.enum(DECISION_REJECTION_REASONS).nullable(),
-    /** Event id of the engine's resolving lifecycle event, when one exists. */
-    engineResolutionEventId: z.string().nullable(),
+    /** Event id of the engine SUBMISSION event (v3): the
+     * DecisionResponseReceived carrying this row's response id, else the
+     * DecisionProviderFailed for this requestId; null when nothing entered
+     * the engine. Records that a result ARRIVED — never that the request
+     * resolved. */
+    engineSubmissionEventId: canonicalEventId.nullable(),
+    /** Event id of the engine's verdict on THIS row's submitted response (v3):
+     * DecisionResponseAccepted or DecisionResponseRejected, keyed by RESPONSE
+     * id and never by requestId. Null whenever the row describes no verdicted
+     * response — a provider failure, a pre-dispatch client failure, a request
+     * that merely expired, or one superseded before any answer arrived. */
+    responseVerdictEventId: canonicalEventId.nullable(),
+    /** Event id of the ONE canonical request resolution, keyed by requestId
+     * (v3): DecisionResponseAccepted | DecisionRequestExpired |
+     * DecisionRequestSuperseded.
+     *
+     * NEVER DecisionResponseReceived or DecisionProviderFailed — those record
+     * a submission entering the engine, and holding one here was exactly the
+     * pre-1.6.1 defect this rewrite corrects. NEVER DecisionResponseRejected
+     * either: a rejection is a verdict about one response, and the request
+     * stays pending until it expires, is superseded, or another response is
+     * accepted.
+     *
+     * An accepted row points verdict and resolution at the SAME event. A
+     * resolution may legally PREDATE its submission (a late answer to an
+     * already-superseded request), so no chronological relation between the
+     * two is asserted anywhere. Nullable at schema level because degraded
+     * finalization deliberately preserves unresolved rows; strict
+     * completeness — non-null for every requestId in the ledger's external
+     * DecisionRequested set — is the finalizer's criterion, not the
+     * schema's. */
+    engineResolutionEventId: canonicalEventId.nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    // The tick and the event id are read off ONE indexed submission event, so
+    // one being null while the other is not can only mean the two were
+    // derived independently — precisely the drift this makes unrepresentable.
+    if ((value.logicalSubmittedTick === null) !== (value.engineSubmissionEventId === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'logicalSubmittedTick and engineSubmissionEventId must be co-null: both describe the same submission event',
+        path: ['engineSubmissionEventId'],
+      });
+    }
+    // 'accepted' and 'rejected' are RESPONSE-level verdicts: the shared
+    // ladder can only reach them by finding an Accepted/Rejected event for
+    // this row's response id, so the id of that event must be present.
+    // 'expired', 'superseded', and null carry no such obligation.
+    if (
+      (value.engineOutcome === 'accepted' || value.engineOutcome === 'rejected') &&
+      value.responseVerdictEventId === null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `engineOutcome '${value.engineOutcome}' requires a non-null responseVerdictEventId`,
+        path: ['responseVerdictEventId'],
+      });
+    }
+  });
 
 export type FinalizedTraceEntry = z.infer<typeof finalizedTraceEntrySchema>;
 
