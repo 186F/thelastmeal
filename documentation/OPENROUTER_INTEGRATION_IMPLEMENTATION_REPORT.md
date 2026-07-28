@@ -297,3 +297,18 @@ The live acceptance report must record the requested model, returned model ident
 The OpenRouter migration is code-complete when the PR's required clean-checkout CI job passes, including the full deterministic batch and keyless formal rehearsal.
 
 It is ready for a disposable live smoke request after merge. It is not, by itself, authorization to begin policy-patch work, dialogue, reflection, additional model-backed NPCs, or the intersubjectivity/coping layer.
+
+### Merge evidence
+
+| Item | Value |
+| --- | --- |
+| PR | [#6](https://github.com/186F/thelastmeal/pull/6) — "Pinned OpenRouter model integration (1.6.0)" |
+| Final PR head | `83b45103312098dea0b1c57db35798b87cc8008d` |
+| PR head CI | run `30325998274` — success |
+| Merge commit | `8620ebaacacd563f3be171d46c0054ea699d538d` |
+| Merged-main CI | run `30326306354` — success |
+| Merged at | 2026-07-28T03:34:47Z |
+
+Both CI runs executed the required clean-checkout job, including the full deterministic batch and the keyless formal rehearsal. Local gates at the final PR head: 446 tests across 51 files, eslint and prettier, both typechecks, `validate` with 0 errors and 0 warnings, both builds, the dist secret scan, and the deterministic batch with all fourteen golden hashes byte-identical.
+
+**No live model call has been made at any point in this work.** `documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md` remains fully PENDING.
