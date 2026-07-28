@@ -112,6 +112,32 @@ The sidecar records:
 
 Routing sidecars are noncanonical. They do not influence world state or hashes, but the formal bundle manifest recursively hashes every file in the run directory, including `routing/`, so retained routing evidence is tamper-evident within the finalized bundle.
 
+### Pinned-route enforcement at finalization
+
+Tamper-evidence alone was not enough. As first written, `routing/` was a **write-only** evidence class: the gateway produced it, `walkFiles` hashed it into `bundle-manifest.json`, and no reader ever validated it — `finalize.ts`, `summarize.ts`, and `modelArtifacts.ts` contained zero references to it. Two consequences followed, both of which defeated the point of pinning a route:
+
+- Up to 16,384 characters of verbatim upstream JSON per request entered the hash-bound formal bundle without ever being schema-checked, size-checked on read, or matched to a request the engine actually emitted.
+- The final manifest recorded `requestedModelId` and `returnedModelIds` side by side and **never compared them**, and the provider that actually served each call existed only inside the unread sidecars. A silent model or provider substitution — precisely what `allow_fallbacks: false` and a single `provider.only` entry exist to prevent — could reach a `status: completed` manifest.
+
+The finalizer now reads and enforces this evidence. `routerTraceEntrySchema` lives in `src/shared/modelArtifacts.ts` next to the other artifact contracts (one source for the gateway writer and the finalizer), and `OPENROUTER_ROUTER_METADATA_MAX_CHARS` re-exports the shared bound so the write-side and read-side limits cannot drift.
+
+Severity is assigned deliberately:
+
+| Condition | Class | Rationale |
+| --- | --- | --- |
+| Sidecar fails schema, exceeds the metadata bound, names a mismatched filename, or carries a foreign `runId` | **Contradiction** — fatal in both modes | A present, corrupt artifact is corruption, not missing evidence |
+| Sidecar names a request with no external `DecisionRequested` in the ledger | **Contradiction** — fatal in both modes | Same orphan-fatality rule the gateway trace rows already had |
+| `upstreamProviderId` disagrees with the pinned provider | **Contradiction** — fatal in both modes | Two present sources disagree about who served the call |
+| Upstream reported a model the run did not request (`pinned-model`) | **Strict criterion** | A legitimately variant slug must not destroy an expensive live run's artifacts, but a substitution must never read as `completed` either |
+| An answered request has no routing sidecar (`routing-evidence`) | **Strict criterion** | Absence of evidence, degradable with `--allow-degraded` |
+| A sidecar names no selected provider (`routing-provider-evidence`) | **Strict criterion** | Provenance unproven; the mismatch check can only fire on a provider it can see |
+
+Provider identity is compared **case-insensitively**, and this is load-bearing rather than defensive: the gateway config pins a lowercase slug (`anthropic`) while OpenRouter reports the display-cased name (`Anthropic`). An exact comparison would have failed every live run at finalization — the same class of defect as amendments A1 and A2, caught here by probe before the first paid run rather than during it.
+
+`returnedModelIds` is now computed once and shared between the criterion and the manifest, so two hash-bound facts cannot be derived by two separate expressions.
+
+Runs that are not pinned-route (`adapterKind !== 'openrouter'`) are unaffected: the coverage and provenance criteria do not apply, and no `routing/` directory is expected. Sidecar validation and orphan fatality still apply to any `routing/` directory that exists, whatever the adapter.
+
 The gateway seed manifest also records:
 
 ```text
@@ -199,6 +225,10 @@ New keyless tests cover:
 - Public gateway configuration without secret exposure
 
 Existing provider-plan, gateway-client, bundle and gateway fixtures now import the registered experiment constants instead of hardcoding the previous OpenAI provider identity.
+
+Pinned-route finalization adds ten cases: `routerTraceEntrySchema`'s strict matrix plus an at-the-bound acceptance case in `tests/unit/model-artifact-schemas.test.ts`, and nine finalizer cases in `tests/integration/model-bundle.test.ts` covering the genuine pinned route (which also pins the case-insensitive provider comparison), provider mismatch, orphan sidecar, foreign `runId`, schema-invalid sidecar, over-bound metadata on read, model substitution (strict failure plus explicit degrade), missing routing sidecar, unproven provider, and non-pinned-route runs staying unaffected.
+
+These were verified by **mutation**, not merely by passing: with the routing read and both criteria disabled, all eight negative cases fail and the two positive cases still pass. Each test is load-bearing on the enforcement it names.
 
 No automated test makes a live OpenRouter request.
 

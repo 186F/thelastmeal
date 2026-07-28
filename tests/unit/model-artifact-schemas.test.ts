@@ -6,10 +6,12 @@ import {
   FINALIZED_TRACE_SCHEMA_VERSION,
   FINAL_MANIFEST_SCHEMA_VERSION,
   MODEL_TRACE_SCHEMA_VERSION,
+  ROUTER_METADATA_MAX_CHARS,
   bundleManifestSchema,
   clientTraceEntrySchema,
   finalManifestSchema,
   finalizedTraceEntrySchema,
+  routerTraceEntrySchema,
   runBundleSchema,
 } from '../../src/shared/modelArtifacts';
 
@@ -200,6 +202,56 @@ function validSummarizeBundleManifest(): Record<string, unknown> {
     status: null,
   };
 }
+
+function validRouterEntry(): Record<string, unknown> {
+  return {
+    routingSchemaVersion: 1,
+    runId: 'run-unit-0001',
+    requestId: 'dec-0001',
+    upstreamProviderId: 'Anthropic',
+    metadata: { requested: 'anthropic/claude-sonnet-test', strategy: 'direct', attempt: 1 },
+  };
+}
+
+describe('routerTraceEntrySchema (1.6.0 strict matrix)', () => {
+  it('accepts a valid sidecar and rejects every field-level defect', () => {
+    strictMatrix(routerTraceEntrySchema, validRouterEntry, [
+      ['wrong schema version literal', (f) => (f.routingSchemaVersion = 2)],
+      ['missing schema version', (f) => delete f.routingSchemaVersion],
+      ['missing runId', (f) => delete f.runId],
+      ['missing requestId', (f) => delete f.requestId],
+      ['empty requestId', (f) => (f.requestId = '')],
+      ['missing upstreamProviderId', (f) => delete f.upstreamProviderId],
+      ['mistyped upstreamProviderId', (f) => (f.upstreamProviderId = 7)],
+      ['missing metadata', (f) => delete f.metadata],
+      ['array metadata', (f) => (f.metadata = [])],
+      ['unknown extra field', (f) => (f.extra = 1)],
+      [
+        'metadata past the persisted bound',
+        (f) => (f.metadata = { blob: 'x'.repeat(ROUTER_METADATA_MAX_CHARS + 1) }),
+      ],
+    ]);
+  });
+
+  it('accepts an absent selected provider and absent metadata (absence is not corruption)', () => {
+    const unproven = validRouterEntry();
+    unproven.upstreamProviderId = null;
+    unproven.metadata = null;
+    expect(routerTraceEntrySchema.safeParse(unproven).success).toBe(true);
+  });
+
+  it('accepts opaque unknown router fields at exactly the bound (the router owns this shape)', () => {
+    const opaque = validRouterEntry();
+    opaque.metadata = { somethingNew: { nested: [1, 2, 3] }, futureField: 'ok' };
+    expect(routerTraceEntrySchema.safeParse(opaque).success).toBe(true);
+
+    const atBound = validRouterEntry();
+    const filler = 'x'.repeat(ROUTER_METADATA_MAX_CHARS - JSON.stringify({ blob: '' }).length);
+    atBound.metadata = { blob: filler };
+    expect(JSON.stringify(atBound.metadata).length).toBe(ROUTER_METADATA_MAX_CHARS);
+    expect(routerTraceEntrySchema.safeParse(atBound).success).toBe(true);
+  });
+});
 
 describe('v2 schema version constants', () => {
   it('pin the 1.5.0 versions (gateway trace stays 2 — additive seed fields only)', () => {

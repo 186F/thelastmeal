@@ -1,6 +1,10 @@
 import { appendFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ModelTraceEntry, RunManifestSeed } from '../../src/shared/modelArtifacts';
+import type {
+  ModelTraceEntry,
+  RouterTraceEntry,
+  RunManifestSeed,
+} from '../../src/shared/modelArtifacts';
 
 /**
  * Noncanonical model-run trace. One JSONL entry per gateway request under
@@ -16,16 +20,9 @@ import type { ModelTraceEntry, RunManifestSeed } from '../../src/shared/modelArt
  * cookies, or hidden model reasoning.
  */
 
-export type { ModelTraceEntry, RunManifestSeed };
-
-export interface RouterTraceEntry {
-  routingSchemaVersion: 1;
-  runId: string;
-  requestId: string;
-  upstreamProviderId: string | null;
-  /** Opaque JSON-safe router metadata. Consumers must ignore unknown fields. */
-  metadata: Record<string, unknown> | null;
-}
+/** RouterTraceEntry is defined in src/shared/modelArtifacts alongside its zod
+ * schema — one source for the writer here and the finalizer's validation. */
+export type { ModelTraceEntry, RouterTraceEntry, RunManifestSeed };
 
 export class ModelTraceWriter {
   private readonly seededRuns = new Set<string>();

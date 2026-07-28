@@ -30,7 +30,7 @@ import type { ModelClientTraceEntry } from '../../src/app/modelClientTraceRecord
 import type { ModelGatewayStatus } from '../../src/app/modelGatewayClient';
 import { buildRunBundle } from '../../src/app/runBundle';
 import { ViewStore } from '../../src/app/store';
-import type { RunBundle } from '../../src/shared/modelArtifacts';
+import { ROUTER_METADATA_MAX_CHARS, type RunBundle } from '../../src/shared/modelArtifacts';
 import {
   EXTERNAL_MARA_PROVIDER_ID,
   MODEL_CONDITION_ID,
@@ -1373,5 +1373,229 @@ describe('superseded resolutions strict-complete (A1)', () => {
     expect(manifest.status).toBe('completed');
     expect(manifest.requestsWithGatewayResult).toBe(0);
     expect(manifest.requestsDispatchedToGateway).toBe(requests.length);
+  });
+});
+
+describe('pinned-route enforcement (1.6.0: router evidence is VALIDATED, not merely hashed)', () => {
+  const PINNED_MODEL = 'anthropic/claude-sonnet-test';
+  const PINNED_PROVIDER = 'anthropic';
+
+  interface RawTraceRow {
+    requestId: string;
+    gatewayOutcome: string;
+    modelId: string | null;
+  }
+
+  function readTraceRows(dir: string): RawTraceRow[] {
+    return readFileSync(join(dir, 'model-trace.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as RawTraceRow);
+  }
+
+  function writeTraceRows(dir: string, rows: readonly unknown[]): void {
+    writeFileSync(
+      join(dir, 'model-trace.jsonl'),
+      rows.map((row) => JSON.stringify(row)).join('\n') + '\n',
+      'utf8',
+    );
+  }
+
+  function routingPath(dir: string, requestId: string): string {
+    return join(dir, 'routing', `${requestId}.json`);
+  }
+
+  function routingEntry(requestId: string, upstreamProviderId: string | null): unknown {
+    return {
+      routingSchemaVersion: 1,
+      runId: RUN_ID,
+      requestId,
+      upstreamProviderId,
+      metadata: { requested: PINNED_MODEL, strategy: 'direct', attempt: 1 },
+    };
+  }
+
+  /** Rewrites the fixture as a pinned OpenRouter route: the seed records the
+   * RESOLVED adapter and pinned provider, every trace row reports the pinned
+   * model, and every ANSWERED row carries its routing sidecar. The provider is
+   * recorded DISPLAY-CASED ('Anthropic') exactly as OpenRouter reports it
+   * against a lowercase pinned slug — the control case therefore also pins the
+   * case-insensitive comparison, without which every live run would fail. */
+  function pinnedRouteDir(): string {
+    const dir = freshDir();
+    const manifestPath = join(dir, 'run-manifest.json');
+    const seed = readJson<Record<string, unknown>>(manifestPath);
+    seed.modelId = PINNED_MODEL;
+    seed.modelSettings = {
+      adapter: 'openrouter-responses-adapter-v1',
+      adapterKind: 'openrouter',
+      openRouterProvider: PINNED_PROVIDER,
+      openRouterAllowFallbacks: false,
+      openRouterRequireParameters: true,
+    };
+    writeJson(manifestPath, seed);
+
+    const rows = readTraceRows(dir);
+    writeTraceRows(
+      dir,
+      rows.map((row) => ({ ...row, modelId: row.modelId === null ? null : PINNED_MODEL })),
+    );
+    mkdirSync(join(dir, 'routing'), { recursive: true });
+    for (const row of rows.filter((r) => r.gatewayOutcome === 'response')) {
+      writeJson(routingPath(dir, row.requestId), routingEntry(row.requestId, 'Anthropic'));
+    }
+    return dir;
+  }
+
+  function answeredRequestId(dir: string): string {
+    const row = readTraceRows(dir).find((r) => r.gatewayOutcome === 'response');
+    if (!row) throw new Error('fixture has no answered gateway row');
+    return row.requestId;
+  }
+
+  it('strict-completes a genuine pinned route and binds every routing sidecar into the bundle', () => {
+    const dir = pinnedRouteDir();
+    const result = finalizeRunDirectory(dir, RUN_ID);
+
+    expect(result.failedCriteria).toEqual([]);
+    expect(result.status).toBe('completed');
+
+    const manifest = readJson<{ requestedModelId: string; returnedModelIds: string[] }>(
+      join(dir, 'run-manifest.final.json'),
+    );
+    expect(manifest.requestedModelId).toBe(PINNED_MODEL);
+    expect(manifest.returnedModelIds).toEqual([PINNED_MODEL]);
+
+    // The sidecars were already hashed before 1.6.0; what is new is that
+    // reaching this line required them to validate and to agree with the run.
+    const bundle = readJson<{ files: { name: string }[] }>(join(dir, 'bundle-manifest.json'));
+    const routingFiles = bundle.files.filter((f) => f.name.startsWith('routing/'));
+    expect(routingFiles.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a call served by a provider the run did not pin, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    writeJson(routingPath(dir, requestId), routingEntry(requestId, 'DeepInfra'));
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/served by provider 'DeepInfra'/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
+      /served by provider 'DeepInfra'/,
+    );
+    expectNotFinalized(dir);
+  });
+
+  it('rejects an orphan routing sidecar naming a request the engine never emitted, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    writeJson(routingPath(dir, 'dec-orphan-9999'), routingEntry('dec-orphan-9999', 'Anthropic'));
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/orphan/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(/orphan/);
+    expectNotFinalized(dir);
+  });
+
+  it('rejects a routing sidecar whose runId is not this run, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    writeJson(routingPath(dir, requestId), {
+      ...(routingEntry(requestId, 'Anthropic') as Record<string, unknown>),
+      runId: 'some-other-run-0001',
+    });
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/carries runId 'some-other-run-0001'/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
+      /carries runId 'some-other-run-0001'/,
+    );
+    expectNotFinalized(dir);
+  });
+
+  it('rejects a schema-invalid routing sidecar, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    writeJson(routingPath(dir, requestId), {
+      ...(routingEntry(requestId, 'Anthropic') as Record<string, unknown>),
+      routingSchemaVersion: 2,
+    });
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/failed validation/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
+      /failed validation/,
+    );
+    expectNotFinalized(dir);
+  });
+
+  it('rejects router metadata past the persisted bound on READ, not just on write, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    writeJson(routingPath(dir, requestId), {
+      routingSchemaVersion: 1,
+      runId: RUN_ID,
+      requestId,
+      upstreamProviderId: 'Anthropic',
+      metadata: { requested: PINNED_MODEL, blob: 'x'.repeat(ROUTER_METADATA_MAX_CHARS + 1) },
+    });
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/router metadata exceeds/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
+      /router metadata exceeds/,
+    );
+    expectNotFinalized(dir);
+  });
+
+  it('fails strict when the upstream substituted a model the run did not request, and degrades explicitly', () => {
+    const dir = pinnedRouteDir();
+    const rows = readTraceRows(dir);
+    const target = rows.find((r) => r.gatewayOutcome === 'response')!;
+    writeTraceRows(
+      dir,
+      rows.map((row) =>
+        row.requestId === target.requestId ? { ...row, modelId: 'meta-llama/substituted' } : row,
+      ),
+    );
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/pinned-model/);
+    expectNotFinalized(dir);
+
+    const degraded = finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true });
+    expect(degraded.status).toBe('degraded');
+    expect(degraded.failedCriteria.some((c) => c.startsWith('pinned-model:'))).toBe(true);
+    // The substitution is preserved in the archived manifest, never smoothed
+    // over: degraded output exists so the data survives, not so it looks clean.
+    const manifest = readJson<{ returnedModelIds: string[] }>(join(dir, 'run-manifest.final.json'));
+    expect(manifest.returnedModelIds).toContain('meta-llama/substituted');
+  });
+
+  it('fails strict when an answered request has no routing sidecar at all', () => {
+    const dir = pinnedRouteDir();
+    rmSync(routingPath(dir, answeredRequestId(dir)));
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/routing-evidence/);
+    expectNotFinalized(dir);
+
+    const degraded = finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true });
+    expect(degraded.failedCriteria.some((c) => c.startsWith('routing-evidence:'))).toBe(true);
+  });
+
+  it('fails strict when a routing sidecar names no selected provider (absence, not mismatch)', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    writeJson(routingPath(dir, requestId), routingEntry(requestId, null));
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/routing-provider-evidence/);
+    expectNotFinalized(dir);
+
+    const degraded = finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true });
+    expect(degraded.failedCriteria.some((c) => c.startsWith('routing-provider-evidence:'))).toBe(
+      true,
+    );
+  });
+
+  it('leaves non-pinned-route runs untouched: no routing directory, no routing criteria', () => {
+    const dir = freshDir();
+    const result = finalizeRunDirectory(dir, RUN_ID);
+
+    expect(existsSync(join(dir, 'routing'))).toBe(false);
+    expect(result.failedCriteria).toEqual([]);
+    expect(result.status).toBe('completed');
   });
 });

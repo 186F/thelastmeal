@@ -1,3 +1,4 @@
+import { ROUTER_METADATA_MAX_CHARS } from '../../src/shared/modelArtifacts';
 import {
   AdapterFailure,
   type AdapterInput,
@@ -21,7 +22,10 @@ import {
  */
 
 export const OPENROUTER_RESPONSES_ENDPOINT = 'https://openrouter.ai/api/v1/responses';
-export const OPENROUTER_ROUTER_METADATA_MAX_CHARS = 16_384;
+
+/** Re-exported from the shared artifact contracts so the write-side bound and
+ * the finalizer's read-side bound can never drift apart. */
+export const OPENROUTER_ROUTER_METADATA_MAX_CHARS = ROUTER_METADATA_MAX_CHARS;
 
 export interface OpenRouterResponsesAdapterOptions {
   apiKey: string;
