@@ -1,10 +1,10 @@
 # Model Integration Artifact Event Semantics — Implementation Report (1.6.1)
 
 **Repository:** `186F/thelastmeal`  
-**Pull request:** `<<TO BE FILLED BY ORCHESTRATOR>>` — `agent/artifact-event-semantics-1.6.1` → `main`  
+**Pull request:** [#8](https://github.com/186F/thelastmeal/pull/8) — `agent/artifact-event-semantics-1.6.1` → `main`  
 **Brief:** [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md) (merged as PR #7), as amended below  
 **Base commit:** `6a1ea5cb41bb1342d95a59e03d1a58d14666a5c3` (`main` after PR #7)  
-**Final commit:** `<<TO BE FILLED BY ORCHESTRATOR>>`  
+**Final commit:** `b8b2d775cd5704c3a405661b3234be5eb28c877a` (PR head; merged as `219079be739928ab00c7847ced35987d5e11fdd9`)  
 **Package version:** `1.6.1`  
 **Model experiment:** `model-backed-npc-001` v `1.1.0` — unchanged  
 **Condition:** `mara-model-per-decision-v1` — unchanged  
@@ -212,12 +212,12 @@ hard-coded `test:model:bundle` list — amendment E9).
 
 | Item | Value |
 | --- | --- |
-| PR | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| Final PR head | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| PR head CI (`Required checks (clean checkout)`) | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| Merge commit | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| Merged-main CI | `<<TO BE FILLED BY ORCHESTRATOR>>` |
-| Merged at | `<<TO BE FILLED BY ORCHESTRATOR>>` |
+| PR | [#8](https://github.com/186F/thelastmeal/pull/8) — "Correct finalized-trace engine event provenance (1.6.1, schema v3)" |
+| Final PR head | `b8b2d775cd5704c3a405661b3234be5eb28c877a` |
+| PR head CI (`Required checks (clean checkout)`) | run `30405298109` — success |
+| Merge commit | `219079be739928ab00c7847ced35987d5e11fdd9` |
+| Merged-main CI | run `30405727028` — success |
+| Merged at | 2026-07-28T22:45:44Z |
 
 Both runs must execute the full required job: `npm ci`, both typechecks, lint, validate,
 `test:run`, `test:gateway`, `test:model:bundle`, both builds, the dist secret scan,
