@@ -487,11 +487,16 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   ProviderFailed, or Rejected event. In an accepted row, verdict and
   resolution are the same acceptance event; a rejected row's request may
   resolve later (expiry), earlier (a late response to an already-superseded
-  request), or through a DIFFERENT response's acceptance — in that last
-  case the row's `engineOutcome` is legitimately null while
-  `engineResolutionEventId` names the other response's acceptance, a legal,
-  non-contradictory combination. The raw gateway trace stays schema v2;
-  only the derived finalized trace advanced.
+  request), or through a DIFFERENT response's acceptance — the row keeps
+  `engineOutcome: 'rejected'` in every one of those shapes, because the
+  ladder puts the row's own verdict first, while `engineResolutionEventId`
+  names whichever event terminally resolved the request. A null
+  `engineOutcome` beside a non-null `engineResolutionEventId` is also
+  legal, but only for a row whose own response carries NO verdict at all
+  while the request was resolved by an acceptance of a different
+  responseId (the moot-after-resolution family) — never for a row that was
+  itself rejected. The raw gateway trace stays schema v2; only the derived
+  finalized trace advanced.
 - **Strict is the default; degraded is explicit and archival-only:**
   `model:finalize` writes `status: 'completed'` only when every strict
   criterion holds — full ledger validation, client bundle present, every

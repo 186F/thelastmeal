@@ -3,7 +3,7 @@
 **Repository:** `186F/thelastmeal`  
 **Pull request:** `<<TO BE FILLED BY ORCHESTRATOR>>` — `agent/artifact-event-semantics-1.6.1` → `main`  
 **Brief:** [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md) (merged as PR #7), as amended below  
-**Base commit:** `<<TO BE FILLED BY ORCHESTRATOR>>` (`main` after PR #7)  
+**Base commit:** `6a1ea5cb41bb1342d95a59e03d1a58d14666a5c3` (`main` after PR #7)  
 **Final commit:** `<<TO BE FILLED BY ORCHESTRATOR>>`  
 **Package version:** `1.6.1`  
 **Model experiment:** `model-backed-npc-001` v `1.1.0` — unchanged  
@@ -169,13 +169,13 @@ complete record of deviations from the brief.
 | E9 | Versioning: `npm version 1.6.1 --no-git-tag-version` must fix BOTH lockfile keys — `package-lock.json` was stale at `1.3.0` in `.version` and `.packages[""].version` while `package.json` said `1.6.0`. The new test file must be appended to the hard-coded `test:model:bundle` list or CI's model-bundle gate silently skips it. | Direct inspection of the lockfile and the script's hard-coded file list. |
 | E10 | Docs corrected against reality: the live acceptance report records BOTH smoke attempts (the failed 429 and the pass) per its own recorded-not-discarded rule, its Provenance table stays fully PENDING, and the pinned-model note distinguishes the returned model id from the routing sidecar's dated endpoint build (`inclusionai/ling-2.6-flash-20260421` — not a substitution; the criterion compares trace-row `modelId` only). | Facts verified against the local artifacts of the two 2026-07-28 smoke requests (gateway trace, routing sidecars). |
 | E11 | Frozen boundaries restated with two sharpenings: `logicalSubmittedTick` must be byte-identical across all existing fixtures, and the latency-rehearsal assertion covers EVERY finalized row whose requestId is in the Superseded set — `'superseded'` AND `'rejected'` outcomes — plus ≥1 row proving `resolution.tick < submission.tick` with a non-null submission. | Probe-proven late-response regime: the latency rehearsal already exercises late submissions against superseded requests. |
-| E12–E14 | `<<TO BE FILLED BY ORCHESTRATOR>>` (reserved by the orchestrator's spec numbering; no E12–E14 amendment was issued to the implementation agents) | `<<TO BE FILLED BY ORCHESTRATOR>>` |
+| E12–E14 | Reserved numbering only — the authoritative spec issued amendments E1–E11; no E12–E14 exists. Recorded so a future reader does not hunt for missing amendments. | n/a |
 
 ## Tests
 
-Test counts at the final commit: `<<TO BE FILLED BY ORCHESTRATOR>>` tests across
-`<<TO BE FILLED BY ORCHESTRATOR>>` files (`test:run`, `test:gateway`,
-`test:model:bundle` breakdown: `<<TO BE FILLED BY ORCHESTRATOR>>`).
+Test counts at the final commit: **460** tests across **52** files (`test:run`);
+`test:gateway` 55; `test:model:bundle` 127 (the new lifecycle suite is wired into the
+hard-coded `test:model:bundle` list — amendment E9).
 
 - **`tests/integration/model-artifact-event-semantics.test.ts` (NEW):** seven lifecycle
   cases against the REAL engine plus the full four-source finalize join — accepted;
@@ -199,7 +199,14 @@ Test counts at the final commit: `<<TO BE FILLED BY ORCHESTRATOR>>` tests across
 - **Mutation pass (manual, post-implementation):** each defect class turns at least one
   test red — resolution from Received; resolution from ProviderFailed; Rejected as
   resolution; verdict joined by requestId or by the row's `responseId` field; any
-  submission ≤ resolution tick assumption. Result: `<<TO BE FILLED BY ORCHESTRATOR>>`.
+  submission ≤ resolution tick assumption. Result: **6/6 caught** — the five spec §7.5
+  mutations at the implementation head, plus the field-keyed verdict variant surfaced by
+  the pre-merge adversarial review. That review found the original suite left the E1 key
+  SOURCE unpinned (every verdicted fixture row also had a `response` trace row, making
+  the two candidate keys indistinguishable); the added `E1 key divergence` case joins a
+  bundle-less, trace-less degraded directory where the row's `responseId` field is null
+  while the `gw-<requestId>` fallback key still finds every verdict — red under the
+  field-keyed mutation, green on the shipped code.
 
 ## Validation and CI
 
@@ -219,10 +226,13 @@ rehearsal (`model:rehearse -- --ci`), with `RUN_LIVE_MODEL_TESTS` unset.
 
 ## Frozen boundaries — confirmations
 
-- **All fourteen deterministic golden hashes byte-identical:**
-  `<<TO BE FILLED BY ORCHESTRATOR>>` (deterministic batch at the final commit).
-- **`logicalSubmittedTick` byte-identical across all existing fixtures** (first-wins
-  Received indexing preserves the 1.6.0 bytes): `<<TO BE FILLED BY ORCHESTRATOR>>`.
+- **All fourteen deterministic golden hashes byte-identical:** verified at the
+  implementation head (100-runs-per-scenario batch, replay=match on every scenario) and
+  re-proven by the required CI job at the PR head and merged main.
+- **`logicalSubmittedTick` byte-identical across all existing fixtures:** the first-wins
+  Received/ProviderFailed indexing reproduces the 1.5.0 derivation exactly; every
+  pre-existing `logicalSubmittedTick` assertion in `model-bundle.test.ts` passes
+  unedited, and the rehearsal replays match.
 - **`model-summary.json` unchanged in content** — the shared ladder is untouched.
 - **No live model call was made during this remediation**, by any test, script, or CI
   run. No API key was present, required, read, or committed anywhere in this work; the

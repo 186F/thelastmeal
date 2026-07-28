@@ -942,6 +942,64 @@ describe('finalized-trace v3 lifecycle event IDs (spec E7 T-B, one real run, fou
       ).toContain(byId.get(row.engineResolutionEventId!)!.type);
     }
   });
+
+  it('E1 key divergence: a bundle-less, trace-less degraded join still finds every verdict via the gw- fallback key while the row responseId FIELD is null', () => {
+    // The one REACHABLE shape where the two candidate keys disagree. With
+    // client-bundle.json and model-trace.jsonl both lost, rows enumerate from
+    // the envelope sidecars alone: the row's `responseId` FIELD is null
+    // (client?.responseId with no client, no trace row), while the verdict
+    // lookup still succeeds through gwResponseId's documented `gw-<requestId>`
+    // fallback — the SAME key the shared outcome ladder receives. Keyed on
+    // the FIELD instead, every verdicted row here gets engineOutcome
+    // 'accepted'/'rejected' beside a null responseVerdictEventId, the v3
+    // superRefine refuses the row, and finalize CRASHES instead of degrading
+    // — the reviewer-reproduced production scenario E1 exists to prevent.
+    // Every other case in this suite pairs verdicts with 'response' trace
+    // rows, where the two keys coincide; only this join can catch the
+    // field-keyed regression.
+    const dir = join(mkdtempSync(join(tmpdir(), 'model-evtsem-e1key-')), RUN_ID);
+    mkdirSync(join(dir, 'requests'), { recursive: true });
+    writeJson(join(dir, 'run-manifest.json'), seedManifestFor(RUN_ID));
+    writeFileSync(join(dir, `ledger-A-${RUN_ID}.json`), JSON.stringify(ledger), 'utf8');
+    for (const request of fixtureRequests.filter((r) => r.role !== 'silent')) {
+      writeJson(join(dir, 'requests', `${request.requestId}.json`), envelopeFor(RUN_ID, request));
+    }
+
+    // Strict refuses the join (client bundle absent) and writes nothing.
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/client-bundle-present/);
+
+    const result = finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true });
+    expect(result.status).toBe('degraded');
+
+    const accepted = requestOf('accepted');
+    const rejectedExpired = requestOf('rejected-expired');
+    const rows = readFinalRows(dir);
+    const acceptedEvent = onlyEvent(
+      ledger,
+      'DecisionResponseAccepted',
+      'responseId',
+      `gw-${accepted.requestId}`,
+    );
+    const rejectedEvent = onlyEvent(
+      ledger,
+      'DecisionResponseRejected',
+      'responseId',
+      `gw-${rejectedExpired.requestId}`,
+    );
+
+    const acceptedRow = rows.get(accepted.requestId)!;
+    // THE divergence, both polarities: the reporting field is null, the
+    // verdict is not — and outcome/verdict agree because they share one key.
+    expect(acceptedRow.responseId).toBeNull();
+    expect(acceptedRow.engineOutcome).toBe('accepted');
+    expect(acceptedRow.responseVerdictEventId).toBe(acceptedEvent.id);
+    expect(acceptedRow.engineResolutionEventId).toBe(acceptedEvent.id);
+
+    const rejectedRow = rows.get(rejectedExpired.requestId)!;
+    expect(rejectedRow.responseId).toBeNull();
+    expect(rejectedRow.engineOutcome).toBe('rejected');
+    expect(rejectedRow.responseVerdictEventId).toBe(rejectedEvent.id);
+  });
 });
 
 describe('degraded unresolved row (spec E8)', () => {
