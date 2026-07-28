@@ -13,6 +13,7 @@ import { FakeDecisionAdapter } from '../../gateway/adapters/fakeDecisionAdapter'
 import { ModelTraceWriter } from '../../gateway/tracing/modelTraceWriter';
 import type { GatewayConfig } from '../../gateway/config';
 import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
+import type { EventEnvelope } from '../../src/shared/events';
 import type { LedgerFile } from '../../src/shared/ledgerFile';
 import {
   bundleManifestSchema,
@@ -59,7 +60,14 @@ import { finalizeRunDirectory, type FinalizeResult } from './finalize';
  *                      'superseded-request', tail answers dropped
  *                      post-terminal so their rows join with engineOutcome
  *                      'superseded' (A1) — and strict finalize still writes
- *                      status 'completed'.
+ *                      status 'completed'. 1.6.1 (T-D/E11): every finalized
+ *                      row in the superseded set — the 'rejected' late
+ *                      answers included, the rows the pre-1.6.1 defect got
+ *                      wrong — must carry the exact
+ *                      DecisionRequestSuperseded event id as its
+ *                      engineResolutionEventId, and >=1 row must prove the
+ *                      one legal strict tick inequality:
+ *                      resolution.tick < submission.tick.
  *
  * Layout (finalize hard-requires basename(dir) === runId):
  *   <out>/report.json + report.md
@@ -152,6 +160,14 @@ export interface RehearsalRunReport {
   engineRejectionsByReason: Record<string, number>;
   externalFailuresByCode: Record<string, number>;
   supersededRequests: number;
+  /** Finalized rows whose requestId carries a ledger supersede record; the
+   * latency case asserts EVERY one resolves to that exact supersede event
+   * id, whatever its engineOutcome (1.6.1 T-D/E11). */
+  supersededResolutionRows: number;
+  /** Rows whose canonical resolution tick strictly PRECEDES a non-null
+   * submission tick — late answers to already-superseded requests, the one
+   * legal strict tick inequality in the lifecycle (1.6.1). */
+  lateSubmissionRows: number;
   worldStateHash: string;
   canonicalLedgerHash: string;
   replayMatch: boolean;
@@ -310,22 +326,44 @@ function createHarness(baseUrl: string, runId: string): Harness {
   };
 }
 
+/** Canonical-resolution reference per request (1.6.1 T-D): the ONE accepted |
+ * expired | superseded event's id, TYPE, and tick, so assertions can compare
+ * finalized rows against the exact ledger event, not mere set membership. */
+interface LifecycleEventRef {
+  eventId: string;
+  type: 'DecisionResponseAccepted' | 'DecisionRequestExpired' | 'DecisionRequestSuperseded';
+  tick: number;
+}
+
 /** External-request lifecycle scraped from the VALIDATED ledger: requested
  * ids -> npcId, per-request canonical resolution count (A1: accepted |
- * expired | superseded), and the superseded subset. */
+ * expired | superseded), the resolution EventRef per request (1.6.1), and
+ * the superseded subset. */
 interface ExternalLifecycleIndex {
   requested: Map<string, string>;
   resolutionsByRequest: Map<string, number>;
+  /** First-recorded canonical resolution per request. Write order is moot in
+   * any run this harness accepts: exportAndFinalize asserts EXACTLY one
+   * resolution per request, so a second write is never reached silently. */
+  resolutionEventByRequest: Map<string, LifecycleEventRef>;
   supersededRequestIds: Set<string>;
 }
 
 function indexExternalLifecycle(ledger: LedgerFile, providerId: string): ExternalLifecycleIndex {
   const requested = new Map<string, string>();
   const resolutionsByRequest = new Map<string, number>();
+  const resolutionEventByRequest = new Map<string, LifecycleEventRef>();
   const supersededRequestIds = new Set<string>();
-  const bump = (requestId: string): void => {
+  const record = (
+    requestId: string,
+    event: EventEnvelope,
+    type: LifecycleEventRef['type'],
+  ): void => {
     if (!requested.has(requestId)) return;
     resolutionsByRequest.set(requestId, (resolutionsByRequest.get(requestId) ?? 0) + 1);
+    if (!resolutionEventByRequest.has(requestId)) {
+      resolutionEventByRequest.set(requestId, { eventId: event.id, type, tick: event.tick });
+    }
   };
   for (const event of ledger.events) {
     const payload = event.payload as Record<string, unknown>;
@@ -334,16 +372,16 @@ function indexExternalLifecycle(ledger: LedgerFile, providerId: string): Externa
         requested.set(String(payload.requestId), String(payload.npcId));
       }
     } else if (event.type === 'DecisionResponseAccepted') {
-      bump(String(payload.requestId));
+      record(String(payload.requestId), event, 'DecisionResponseAccepted');
     } else if (event.type === 'DecisionRequestExpired') {
-      bump(String(payload.requestId));
+      record(String(payload.requestId), event, 'DecisionRequestExpired');
     } else if (event.type === 'DecisionRequestSuperseded') {
       const requestId = String(payload.requestId);
       if (requested.has(requestId)) supersededRequestIds.add(requestId);
-      bump(requestId);
+      record(requestId, event, 'DecisionRequestSuperseded');
     }
   }
-  return { requested, resolutionsByRequest, supersededRequestIds };
+  return { requested, resolutionsByRequest, resolutionEventByRequest, supersededRequestIds };
 }
 
 interface PipelineOutcome {
@@ -358,6 +396,9 @@ interface PipelineOutcome {
   currentRunTraceRows: number;
   envelopeRequestIds: Set<string>;
   supersededRequestIds: Set<string>;
+  /** Canonical resolution EventRef per requested id (1.6.1 T-D), so case
+   * assertions can name the exact event a row must resolve to. */
+  resolutionEventByRequest: Map<string, LifecycleEventRef>;
 }
 
 /** The shared terminal pipeline: settle -> snapshot -> real buildRunBundle
@@ -487,6 +528,24 @@ async function exportAndFinalize(args: {
   const currentRunTrace = clientTrace.filter((entry) => entry.runId === runId);
   const envelopeRequestIds = new Set(envelopes.map((envelope) => envelope.request.requestId));
 
+  // 1.6.1 evidence counters, surfaced in the report so the harness tests can
+  // pin the case-defining shapes: rows whose request carries a ledger
+  // supersede record, and rows whose canonical resolution strictly PREDATES
+  // a non-null submission (a late answer to an already-superseded request —
+  // the ONLY legal strict tick inequality; accepted/rejected verdicts share
+  // their submission's tick, and expiry can share the rejection's).
+  const supersededResolutionRows = finalizedRows.filter((row) =>
+    lifecycle.supersededRequestIds.has(row.requestId),
+  ).length;
+  const lateSubmissionRows = finalizedRows.filter((row) => {
+    const resolution = lifecycle.resolutionEventByRequest.get(row.requestId);
+    return (
+      row.logicalSubmittedTick !== null &&
+      resolution !== undefined &&
+      resolution.tick < row.logicalSubmittedTick
+    );
+  }).length;
+
   const report: RehearsalRunReport = {
     caseName,
     runId,
@@ -510,6 +569,8 @@ async function exportAndFinalize(args: {
     engineRejectionsByReason: finalManifest.engineRejectionsByReason,
     externalFailuresByCode: bundle.handoff.failuresByCode,
     supersededRequests: lifecycle.supersededRequestIds.size,
+    supersededResolutionRows,
+    lateSubmissionRows,
     worldStateHash: finalManifest.worldStateHash,
     canonicalLedgerHash: finalManifest.canonicalLedgerHash,
     replayMatch,
@@ -533,6 +594,7 @@ async function exportAndFinalize(args: {
     currentRunTraceRows: currentRunTrace.length,
     envelopeRequestIds,
     supersededRequestIds: lifecycle.supersededRequestIds,
+    resolutionEventByRequest: lifecycle.resolutionEventByRequest,
   };
 }
 
@@ -754,6 +816,41 @@ export async function rehearseLatencyCase(
         `row ${row.requestId} joined superseded without a ledger supersede record`,
       );
     }
+    // 1.6.1 (T-D/E11): EVERY row whose request the ledger superseded must
+    // point its canonical resolution at that exact DecisionRequestSuperseded
+    // event — REGARDLESS of engineOutcome. The engineOutcome 'rejected'
+    // members are the defect-exercising rows: their late answers DID enter
+    // the engine (Received, then Rejected 'superseded-request' in the same
+    // drain), and the pre-1.6.1 finalizer wrote the Received id where the
+    // supersede id belongs.
+    const rowsById = new Map(a.finalizedRows.map((row) => [row.requestId, row]));
+    let rejectedSupersededRows = 0;
+    for (const requestId of a.supersededRequestIds) {
+      const row = rowsById.get(requestId);
+      check(row !== undefined, `superseded request ${requestId} has no finalized row`);
+      const resolution = a.resolutionEventByRequest.get(requestId);
+      check(
+        resolution !== undefined && resolution.type === 'DecisionRequestSuperseded',
+        `superseded request ${requestId} has no scraped supersede resolution event`,
+      );
+      check(
+        row.engineResolutionEventId === resolution.eventId,
+        `row ${requestId} (engineOutcome ${String(row.engineOutcome)}) resolves to ` +
+          `${String(row.engineResolutionEventId)}, not its supersede event ${resolution.eventId}`,
+      );
+      if (row.engineOutcome === 'rejected') rejectedSupersededRows += 1;
+    }
+    check(
+      rejectedSupersededRows >= 1,
+      'no late answer was rejected against a superseded request — the regime lost its defect-exercising rows',
+    );
+    // 1.6.1: >=1 canonical resolution strictly PREDATES its non-null
+    // submission — the standing proof that no submission<=resolution
+    // chronological assumption may ever be introduced.
+    check(
+      a.report.lateSubmissionRows >= 1,
+      'no finalized row has a canonical resolution earlier than its submission',
+    );
     check(a.finalManifest.status === 'completed', 'latency run did not strict-complete');
     check(a.finalize.failedCriteria.length === 0, 'strict criteria failed on the latency run');
     return a.report;

@@ -427,6 +427,14 @@ interface FinalRow {
   /** null == unresolved: no engine lifecycle event for the result. */
   engineOutcome: 'accepted' | 'rejected' | 'expired' | 'superseded' | null;
   engineRejectionReason: string | null;
+  /** v3: id of the DecisionResponseReceived/DecisionProviderFailed SUBMISSION
+   * event — co-null with logicalSubmittedTick (same indexed event). */
+  engineSubmissionEventId: string | null;
+  /** v3: id of the Accepted/Rejected verdict on THIS row's responseId; null
+   * when no submitted response was ever verdicted. */
+  responseVerdictEventId: string | null;
+  /** v3: id of the ONE canonical request resolution (Accepted by requestId |
+   * Expired | Superseded) — never Received, ProviderFailed, or Rejected. */
   engineResolutionEventId: string | null;
 }
 
@@ -436,6 +444,21 @@ function readFinalRows(dir: string): Map<string, FinalRow> {
     .filter((line) => line.trim() !== '')
     .map((line) => JSON.parse(line) as FinalRow);
   return new Map(rows.map((row) => [row.requestId, row]));
+}
+
+/** Finds the fixture ledger's lifecycle event of `type` carrying the given
+ * request/response id — the exact join keys the finalizer uses (requestId for
+ * request-level events, responseId for response-level ones), re-derived here
+ * independently so the v3 event-id assertions check the finalizer's OUTPUT
+ * against the ledger instead of trusting the finalizer's own index. */
+function lifecycleEvent(
+  type: string,
+  key: 'requestId' | 'responseId',
+  id: string,
+): { id: string; tick: number } | undefined {
+  return ledger.events.find(
+    (e) => e.type === type && (e.payload as Record<string, unknown>)[key] === id,
+  );
 }
 
 beforeAll(() => {
@@ -612,15 +635,20 @@ describe('finalize strict success path (S3 + V3/V4)', () => {
       );
     }
 
-    // logicalSubmittedTick and the resolution event id come from the LEDGER,
-    // never from wall-clock: responses join on DecisionResponseReceived …
+    // logicalSubmittedTick and ALL THREE v3 event ids come from the LEDGER,
+    // never from wall-clock: responses join their SUBMISSION on
+    // DecisionResponseReceived, and an accepted row's verdict AND resolution
+    // both name the DecisionResponseAccepted (one event playing both roles) —
+    // which is definitionally a DIFFERENT event than the submission. Before
+    // 1.6.1 the resolution field held the Received id; the strict inequality
+    // below is the trip-wire against that regression returning.
     const responded = fixtureRequests.filter((r) => r.role === 'response');
     let acceptedSeen = 0;
     for (const request of responded) {
-      const received = ledger.events.find(
-        (e) =>
-          e.type === 'DecisionResponseReceived' &&
-          (e.payload as { responseId: string }).responseId === `gw-${request.requestId}`,
+      const received = lifecycleEvent(
+        'DecisionResponseReceived',
+        'responseId',
+        `gw-${request.requestId}`,
       );
       const row = rows.get(request.requestId)!;
       expect(row.gatewayOutcome).toBe('response');
@@ -629,20 +657,37 @@ describe('finalize strict success path (S3 + V3/V4)', () => {
       expect(row.strictDisposition).toBe('gateway-answered');
       if (received) {
         expect(row.logicalSubmittedTick).toBe(received.tick);
-        expect(row.engineResolutionEventId).toBe(received.id);
+        expect(row.engineSubmissionEventId).toBe(received.id);
         expect(row.logicalSubmittedTick).toBe(request.requestedAtTick + 1);
       }
-      if (row.engineOutcome === 'accepted') acceptedSeen += 1;
+      if (row.engineOutcome === 'accepted') {
+        acceptedSeen += 1;
+        const accepted = lifecycleEvent(
+          'DecisionResponseAccepted',
+          'responseId',
+          `gw-${request.requestId}`,
+        )!;
+        expect(row.responseVerdictEventId).toBe(accepted.id);
+        expect(row.engineResolutionEventId).toBe(accepted.id);
+        expect(row.engineSubmissionEventId).not.toBeNull();
+        expect(row.engineSubmissionEventId).not.toBe(row.engineResolutionEventId);
+      }
     }
     expect(acceptedSeen).toBeGreaterThan(0);
 
-    // … explicit failures join on DecisionProviderFailed. A parsed gateway
-    // FAILURE body is gateway evidence (A2): disposition gateway-answered.
+    // … explicit failures join their SUBMISSION on DecisionProviderFailed. A
+    // parsed gateway FAILURE body is gateway evidence (A2): disposition
+    // gateway-answered. A failure is DELIVERY, never a verdict and never a
+    // resolution: the verdict stays null and the resolution is the
+    // external-failure DecisionRequestExpired that terminally resolved the
+    // request (this row turns red if ProviderFailed ever leaks back into the
+    // resolution field — the pre-1.6.1 defect's second face).
     const timeout = fixtureRequests.find((r) => r.role === 'upstream-timeout')!;
-    const failedEvent = ledger.events.find(
-      (e) =>
-        e.type === 'DecisionProviderFailed' &&
-        (e.payload as { requestId: string }).requestId === timeout.requestId,
+    const failedEvent = lifecycleEvent('DecisionProviderFailed', 'requestId', timeout.requestId)!;
+    const timeoutExpired = lifecycleEvent(
+      'DecisionRequestExpired',
+      'requestId',
+      timeout.requestId,
     )!;
     const timeoutRow = rows.get(timeout.requestId)!;
     expect(timeoutRow.gatewayOutcome).toBe('upstream-timeout');
@@ -650,29 +695,59 @@ describe('finalize strict success path (S3 + V3/V4)', () => {
     expect(timeoutRow.engineOutcome).toBe('expired');
     expect(timeoutRow.strictDisposition).toBe('gateway-answered');
     expect(timeoutRow.logicalSubmittedTick).toBe(failedEvent.tick);
-    expect(timeoutRow.engineResolutionEventId).toBe(failedEvent.id);
+    expect(timeoutRow.engineSubmissionEventId).toBe(failedEvent.id);
+    expect(timeoutRow.responseVerdictEventId).toBeNull();
+    expect(timeoutRow.engineResolutionEventId).toBe(timeoutExpired.id);
+    expect(timeoutRow.engineSubmissionEventId).not.toBe(timeoutRow.engineResolutionEventId);
 
     // The client-only death never reached the gateway: no trace row, no
     // sidecar — but the join still covers it via the client entry + archive.
+    // The cf- failure DID enter the engine (failureInbox →
+    // DecisionProviderFailed), so the submission id names that event even
+    // though nothing was ever dispatched; verdict null, resolution = the
+    // external-failure expiry.
     const budget = fixtureRequests.find((r) => r.role === 'client-budget')!;
+    const budgetFailed = lifecycleEvent('DecisionProviderFailed', 'requestId', budget.requestId)!;
+    const budgetExpired = lifecycleEvent('DecisionRequestExpired', 'requestId', budget.requestId)!;
     const budgetRow = rows.get(budget.requestId)!;
     expect(budgetRow.gatewayOutcome).toBeNull();
     expect(budgetRow.clientOutcome).toBe('failure');
     expect(budgetRow.requestEnvelopeFile).toBeNull();
     expect(budgetRow.strictDisposition).toBe('never-dispatched');
     expect(budgetRow.engineOutcome).toBe('expired');
-    expect(budgetRow.logicalSubmittedTick).not.toBeNull();
+    expect(budgetRow.logicalSubmittedTick).toBe(budgetFailed.tick);
+    expect(budgetRow.engineSubmissionEventId).toBe(budgetFailed.id);
+    expect(budgetRow.responseVerdictEventId).toBeNull();
+    expect(budgetRow.engineResolutionEventId).toBe(budgetExpired.id);
+    expect(budgetRow.engineSubmissionEventId).not.toBe(budgetRow.engineResolutionEventId);
 
     // Sidecar-present-but-no-trace-row with a typed client timeout is the
     // LEGAL gateway-interrupted disposition (A2/V4) — strict-complete, never
-    // fatal.
+    // fatal. Same v3 shape as the pre-dispatch row: the client's cf- timeout
+    // entered the engine as DecisionProviderFailed (the submission), no
+    // response was ever verdicted, and the expiry resolved the request.
     const interrupted = fixtureRequests.find((r) => r.role === 'gateway-interrupted')!;
+    const interruptedFailed = lifecycleEvent(
+      'DecisionProviderFailed',
+      'requestId',
+      interrupted.requestId,
+    )!;
+    const interruptedExpired = lifecycleEvent(
+      'DecisionRequestExpired',
+      'requestId',
+      interrupted.requestId,
+    )!;
     const interruptedRow = rows.get(interrupted.requestId)!;
     expect(interruptedRow.gatewayOutcome).toBeNull();
     expect(interruptedRow.clientOutcome).toBe('failure');
     expect(interruptedRow.requestEnvelopeFile).toBe(`requests/${interrupted.requestId}.json`);
     expect(interruptedRow.strictDisposition).toBe('gateway-interrupted');
     expect(interruptedRow.engineOutcome).toBe('expired');
+    expect(interruptedRow.logicalSubmittedTick).toBe(interruptedFailed.tick);
+    expect(interruptedRow.engineSubmissionEventId).toBe(interruptedFailed.id);
+    expect(interruptedRow.responseVerdictEventId).toBeNull();
+    expect(interruptedRow.engineResolutionEventId).toBe(interruptedExpired.id);
+    expect(interruptedRow.engineSubmissionEventId).not.toBe(interruptedRow.engineResolutionEventId);
 
     // Finalized v2 manifest: seed + ledger facts, V5 counters, timestamps.
     const manifest = readJson<{
@@ -1265,12 +1340,15 @@ describe('superseded resolutions strict-complete (A1)', () => {
     const requests = [...run.externalRequests];
     expect(requests.length).toBeGreaterThan(0);
     const lateLedger = buildLedgerFile(run);
-    const supersededIds = new Set(
+    // requestId → the DecisionRequestSuperseded event id: the v3 assertions
+    // below need the EVENT, not mere membership (≤1 per request — the ledger
+    // validator rejects contradictory outcomes).
+    const supersededEvents = new Map(
       lateLedger.events
         .filter((e) => e.type === 'DecisionRequestSuperseded')
-        .map((e) => (e.payload as { requestId: string }).requestId),
+        .map((e) => [(e.payload as { requestId: string }).requestId, e.id] as const),
     );
-    expect(supersededIds.size).toBeGreaterThan(0);
+    expect(supersededEvents.size).toBeGreaterThan(0);
 
     // Client view: every request dispatched and timed out with a cf- id and
     // NO observed gateway result; every failure arrived after its request
@@ -1354,7 +1432,7 @@ describe('superseded resolutions strict-complete (A1)', () => {
       .split('\n')
       .filter((line) => line.trim() !== '')
       .map((line) => JSON.parse(line) as FinalRow);
-    const supersededRows = rows.filter((row) => supersededIds.has(row.requestId));
+    const supersededRows = rows.filter((row) => supersededEvents.has(row.requestId));
     expect(supersededRows.length).toBeGreaterThan(0);
     for (const row of supersededRows) {
       // A1: engineOutcome 'superseded' (no late answer ever landed, so no
@@ -1364,6 +1442,15 @@ describe('superseded resolutions strict-complete (A1)', () => {
       expect(row.exactRequestSources).toEqual(['client']);
       expect(row.requestEnvelopeFile).toBeNull();
       expect(row.envelopeSha256).not.toBeNull();
+      // E3/matrix row 9, BY CONSTRUCTION: the cf- failures arrived after the
+      // requests were already resolved and were dropped moot WITHOUT an
+      // engine event — so submission and verdict are null (and the tick
+      // co-null with the submission id), while the resolution names the
+      // DecisionRequestSuperseded event itself.
+      expect(row.logicalSubmittedTick).toBeNull();
+      expect(row.engineSubmissionEventId).toBeNull();
+      expect(row.responseVerdictEventId).toBeNull();
+      expect(row.engineResolutionEventId).toBe(supersededEvents.get(row.requestId));
     }
     const manifest = readJson<{
       status: string;

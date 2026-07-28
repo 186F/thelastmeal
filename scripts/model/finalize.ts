@@ -61,9 +61,9 @@ import {
  * the pieces describe the SAME run, joins the client trace + client
  * exact-request archive + gateway trace + engine lifecycle per requestId,
  * and writes:
- *   finalized-trace.jsonl    — one joined v2 row per requestId (NEW file;
- *                              the raw model-trace.jsonl is never
- *                              overwritten — deviation D1)
+ *   finalized-trace.jsonl    — one joined v3 row per requestId (NEW file;
+ *                              the raw model-trace.jsonl stays v2 and is
+ *                              never overwritten — deviation D1)
  *   run-manifest.final.json  — finalized v2 manifest (the gateway's
  *                              write-once seed run-manifest.json is never
  *                              mutated)
@@ -120,31 +120,83 @@ function traceRowFailureId(row: ModelTraceEntry): string {
   return v2 ?? `gwf-${row.requestId}`;
 }
 
+/** One canonical ledger event reduced to what a finalized row must cite: the
+ * id it is joined by and the tick it happened at. The pair always travels
+ * together, so a v3 row's event id and its companion tick are read off the
+ * SAME event and can never drift apart (the schema refuses rows where they
+ * did). */
+interface EventRef {
+  eventId: string;
+  tick: number;
+}
+
+/** The finalizer's ledger view. The bare Sets/Map<string,string> below are NOT
+ * redundant with the EventRef maps beside them: they are the structural
+ * contract of summarize.ts's EngineResolutionIndex, which the shared
+ * resolution ladder consumes, and widening them here would fork that contract
+ * (or force a cast at the call site). The EventRef maps are additive — they
+ * answer "WHICH event", which membership tests cannot. */
 interface LedgerIndex {
   /** DecisionRequested for the external provider only. */
   requested: Map<string, { tick: number; npcId: string; providerId: string }>;
-  receivedByResponseId: Map<string, { tick: number; eventId: string }>;
-  providerFailedByRequestId: Map<string, { tick: number; eventId: string; errorCode: string }>;
+  /** Submission events, keyed by response id — FIRST write wins. One response
+   * id can legitimately carry two DecisionResponseReceived events (the engine
+   * emits Received UNCONDITIONALLY, before the duplicate/supersession checks),
+   * and logicalSubmittedTick has always reported the first; first-wins is
+   * therefore the pinned policy, and it keeps every existing finalized trace
+   * byte-identical. */
+  receivedEventByResponseId: Map<string, EventRef>;
+  /** Failure-delivery events for the external provider, keyed by request id —
+   * first-wins, matching receivedEventByResponseId (they feed the same
+   * submission reference). */
+  providerFailedEventByRequestId: Map<string, EventRef & { errorCode: string }>;
   acceptedResponseIds: Set<string>;
+  /** The RESPONSE-level half of an acceptance: this row's verdict, keyed by
+   * response id. */
+  acceptedEventByResponseId: Map<string, EventRef>;
   /** Request ids resolved by a DecisionResponseAccepted (A1 resolution 1/3). */
   acceptedRequestIds: Set<string>;
+  /** The REQUEST-level half of an acceptance, keyed by request id — the same
+   * event as above for an ordinary row, but a DIFFERENT response's acceptance
+   * when this row's response was rejected and a later one resolved the
+   * request. */
+  acceptedEventByRequestId: Map<string, EventRef>;
   rejectedByResponseId: Map<string, string>;
+  /** Rejection verdicts, keyed by response id — LAST write wins, deliberately:
+   * rejectedByResponseId above is also a plain `set`, so the event named here
+   * is exactly the event whose reason becomes engineRejectionReason. (A
+   * duplicated response id yields two Received and two Rejected events, so
+   * first-wins here would report a verdict event from one cycle and its
+   * reason from another.) */
+  rejectedEventByResponseId: Map<string, EventRef>;
   expiredRequestIds: Set<string>;
+  /** Expiry resolutions, keyed by request id — first-wins; a second is
+   * unreachable (the ledger validator rejects contradictory outcomes). */
+  expiredEventByRequestId: Map<string, EventRef>;
   /** A1: superseded is a first-class canonical request resolution — a
    * request whose only resolution is superseded is COMPLETE evidence. */
   supersededRequestIds: Set<string>;
+  /** Supersession resolutions, keyed by request id — first-wins, same
+   * reasoning as expiredEventByRequestId (supersession REPLACES the pending
+   * decision, so superseded ∧ expired is impossible too). */
+  supersededEventByRequestId: Map<string, EventRef>;
 }
 
 function indexLedger(ledger: LedgerFile, externalProviderId: string): LedgerIndex {
   const index: LedgerIndex = {
     requested: new Map(),
-    receivedByResponseId: new Map(),
-    providerFailedByRequestId: new Map(),
+    receivedEventByResponseId: new Map(),
+    providerFailedEventByRequestId: new Map(),
     acceptedResponseIds: new Set(),
+    acceptedEventByResponseId: new Map(),
     acceptedRequestIds: new Set(),
+    acceptedEventByRequestId: new Map(),
     rejectedByResponseId: new Map(),
+    rejectedEventByResponseId: new Map(),
     expiredRequestIds: new Set(),
+    expiredEventByRequestId: new Map(),
     supersededRequestIds: new Set(),
+    supersededEventByRequestId: new Map(),
   };
   for (const event of ledger.events) {
     const payload = event.payload as Record<string, unknown>;
@@ -158,30 +210,44 @@ function indexLedger(ledger: LedgerFile, externalProviderId: string): LedgerInde
       }
     } else if (event.type === 'DecisionResponseReceived') {
       const responseId = String(payload.responseId);
-      if (!index.receivedByResponseId.has(responseId)) {
-        index.receivedByResponseId.set(responseId, { tick: event.tick, eventId: event.id });
+      if (!index.receivedEventByResponseId.has(responseId)) {
+        index.receivedEventByResponseId.set(responseId, { eventId: event.id, tick: event.tick });
       }
     } else if (event.type === 'DecisionProviderFailed') {
       const requestId = String(payload.requestId);
       if (
         payload.providerId === externalProviderId &&
-        !index.providerFailedByRequestId.has(requestId)
+        !index.providerFailedEventByRequestId.has(requestId)
       ) {
-        index.providerFailedByRequestId.set(requestId, {
-          tick: event.tick,
+        index.providerFailedEventByRequestId.set(requestId, {
           eventId: event.id,
+          tick: event.tick,
           errorCode: String(payload.errorCode),
         });
       }
     } else if (event.type === 'DecisionResponseAccepted') {
-      index.acceptedResponseIds.add(String(payload.responseId));
-      index.acceptedRequestIds.add(String(payload.requestId));
+      const responseId = String(payload.responseId);
+      const requestId = String(payload.requestId);
+      index.acceptedResponseIds.add(responseId);
+      index.acceptedRequestIds.add(requestId);
+      index.acceptedEventByResponseId.set(responseId, { eventId: event.id, tick: event.tick });
+      index.acceptedEventByRequestId.set(requestId, { eventId: event.id, tick: event.tick });
     } else if (event.type === 'DecisionResponseRejected') {
-      index.rejectedByResponseId.set(String(payload.responseId), String(payload.rejectionReason));
+      const responseId = String(payload.responseId);
+      index.rejectedByResponseId.set(responseId, String(payload.rejectionReason));
+      index.rejectedEventByResponseId.set(responseId, { eventId: event.id, tick: event.tick });
     } else if (event.type === 'DecisionRequestExpired') {
-      index.expiredRequestIds.add(String(payload.requestId));
+      const requestId = String(payload.requestId);
+      index.expiredRequestIds.add(requestId);
+      if (!index.expiredEventByRequestId.has(requestId)) {
+        index.expiredEventByRequestId.set(requestId, { eventId: event.id, tick: event.tick });
+      }
     } else if (event.type === 'DecisionRequestSuperseded') {
-      index.supersededRequestIds.add(String(payload.requestId));
+      const requestId = String(payload.requestId);
+      index.supersededRequestIds.add(requestId);
+      if (!index.supersededEventByRequestId.has(requestId)) {
+        index.supersededEventByRequestId.set(requestId, { eventId: event.id, tick: event.tick });
+      }
     }
   }
   return index;
@@ -491,7 +557,7 @@ export function finalizeRunDirectory(
    * the three can never drift apart. */
   const ledgerProvenGatewayResult = (requestId: string): boolean =>
     ledgerIndex.acceptedResponseIds.has(`gw-${requestId}`) ||
-    ledgerIndex.receivedByResponseId.has(`gw-${requestId}`) ||
+    ledgerIndex.receivedEventByResponseId.has(`gw-${requestId}`) ||
     ledgerIndex.rejectedByResponseId.has(`gw-${requestId}`);
 
   for (const row of traceRows) {
@@ -994,7 +1060,7 @@ export function finalizeRunDirectory(
       return hasRow && hasSidecar ? 'gateway-answered' : null;
     }
     if (client.clientOutcome === 'failure') {
-      const providerFailed = ledgerIndex.providerFailedByRequestId.has(requestId);
+      const providerFailed = ledgerIndex.providerFailedEventByRequestId.has(requestId);
       const resolutions = resolutionCount(ledgerIndex, requestId);
       // A2/V4 'gateway-interrupted': the POST reached the gateway (sidecar
       // exists), the client minted a typed transport failure and never
@@ -1053,10 +1119,45 @@ export function finalizeRunDirectory(
     const client = clientByRequest.get(requestId) ?? null;
     const clientEnv = clientEnvelopes.get(requestId) ?? null;
 
+    /** The response key for EVERY response-scoped lookup in this loop — the
+     * recorded gateway response id, reconstructed from the documented
+     * `gw-<requestId>` convention only when no trace row survives. Never the
+     * row's `responseId` FIELD: that is null on every non-'response'
+     * gatewayOutcome and falls back to the client when no row exists, so
+     * keying on it would let engineOutcome 'accepted'/'rejected' coexist with
+     * a null responseVerdictEventId — which the v3 schema refuses, turning a
+     * legitimately degraded artifact into a finalizer crash. One key for the
+     * shared ladder AND the verdict lookup means the two can never disagree
+     * about which response they describe. */
     const gwResponseId = row !== null ? traceRowResponseId(row) : `gw-${requestId}`;
-    const received = ledgerIndex.receivedByResponseId.get(gwResponseId) ?? null;
-    const failed = ledgerIndex.providerFailedByRequestId.get(requestId) ?? null;
-    const submission = received ?? failed;
+
+    // The three INDEPENDENT engine references a v3 row exposes. They answer
+    // three different questions under three different join keys, so they are
+    // resolved separately and never aliased to one another:
+    //   submissionRef — did a result ENTER the engine for this row?
+    //   verdictRef    — what did the engine decide about THIS row's response?
+    //   resolutionRef — how did the REQUEST itself terminally resolve?
+    // Before 1.6.1 the third was written from the first, which is why an
+    // accepted row's "resolution" was its DecisionResponseReceived.
+    const submissionRef =
+      ledgerIndex.receivedEventByResponseId.get(gwResponseId) ??
+      ledgerIndex.providerFailedEventByRequestId.get(requestId) ??
+      null;
+    // Acceptance outranks rejection, mirroring the shared ladder's precedence.
+    const verdictRef =
+      ledgerIndex.acceptedEventByResponseId.get(gwResponseId) ??
+      ledgerIndex.rejectedEventByResponseId.get(gwResponseId) ??
+      null;
+    // Rejection is deliberately ABSENT here: it is a verdict about one
+    // response, never a request resolution — a rejected request stays pending
+    // until it expires, is superseded, or another response is accepted. That
+    // last case is exactly why the acceptance is looked up by REQUEST id: the
+    // resolving acceptance may belong to a different response than this row's.
+    const resolutionRef =
+      ledgerIndex.acceptedEventByRequestId.get(requestId) ??
+      ledgerIndex.expiredEventByRequestId.get(requestId) ??
+      ledgerIndex.supersededEventByRequestId.get(requestId) ??
+      null;
     // Engine verdict for the request's model result, from the ladder SHARED
     // with model-summary.json's outcomes join (summarize.ts): the two
     // artifacts are hash-bound into the same bundle manifest and must never
@@ -1108,7 +1209,7 @@ export function finalizeRunDirectory(
           client?.requestedAtTick ??
           ledgerIndex.requested.get(requestId)?.tick ??
           null,
-        logicalSubmittedTick: submission?.tick ?? null,
+        logicalSubmittedTick: submissionRef?.tick ?? null,
         exactRequestSources: [
           ...(clientEnv !== null ? (['client'] as const) : []),
           ...(sidecar !== null ? (['gateway'] as const) : []),
@@ -1155,7 +1256,9 @@ export function finalizeRunDirectory(
         gatewayOutcome: row?.gatewayOutcome ?? null,
         engineOutcome,
         engineRejectionReason: rejection,
-        engineResolutionEventId: submission?.eventId ?? null,
+        engineSubmissionEventId: submissionRef?.eventId ?? null,
+        responseVerdictEventId: verdictRef?.eventId ?? null,
+        engineResolutionEventId: resolutionRef?.eventId ?? null,
       }),
     );
   }

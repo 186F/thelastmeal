@@ -16,12 +16,17 @@ import {
 } from '../../src/shared/modelArtifacts';
 
 /**
- * Strict-matrix tests for the 1.5.0 v2 artifact schemas (spec C5). Every
- * schema is `.strict()`: a valid fixture must parse, and a single missing,
- * extra, mistyped, fractional, or unknown-enum field must fail. The v2
- * version constants are pinned here so a silent downgrade cannot ship, and a
- * v1 bundle must be REJECTED by the v2 schema (A8: no legacy import path —
- * prepareRun/finalize hard-reject version 1 with a re-export message).
+ * Strict-matrix tests for the artifact schemas (spec C5): the 1.5.0 v2
+ * shapes, plus the finalized trace's 1.6.1 advance to v3 (the
+ * event-semantics split — engineSubmissionEventId / responseVerdictEventId /
+ * corrected engineResolutionEventId, spec E5). Every schema is `.strict()`:
+ * a valid fixture must parse, and a single missing, extra, mistyped,
+ * fractional, or unknown-enum field must fail. The version constants are
+ * pinned here so a silent downgrade cannot ship, and a v1 bundle must be
+ * REJECTED by the v2 schema (A8: no legacy import path — prepareRun/finalize
+ * hard-reject version 1 with a re-export message). A v2 finalized row is
+ * likewise rejected by the v3 schema: its engine ids meant the SUBMISSION,
+ * so reinterpretation is impossible — re-run model:finalize instead.
  */
 
 const HASH16 = '0123456789abcdef';
@@ -100,7 +105,7 @@ function validBundle(): Record<string, unknown> {
 
 function validFinalizedRow(): Record<string, unknown> {
   return {
-    finalizedTraceSchemaVersion: 2,
+    finalizedTraceSchemaVersion: 3,
     runId: 'run-unit-0001',
     requestId: 'dec-0001',
     npcId: 'mara',
@@ -131,6 +136,12 @@ function validFinalizedRow(): Record<string, unknown> {
     gatewayOutcome: 'response',
     engineOutcome: 'accepted',
     engineRejectionReason: null,
+    // An accepted row wearing the full v3 shape: the submission (Received)
+    // pairs co-non-null with logicalSubmittedTick above, and the verdict and
+    // resolution both name the SAME DecisionResponseAccepted — a distinct
+    // event from the submission.
+    engineSubmissionEventId: 'evt-000122',
+    responseVerdictEventId: 'evt-000123',
     engineResolutionEventId: 'evt-000123',
   };
 }
@@ -253,10 +264,12 @@ describe('routerTraceEntrySchema (1.6.0 strict matrix)', () => {
   });
 });
 
-describe('v2 schema version constants', () => {
-  it('pin the 1.5.0 versions (gateway trace stays 2 — additive seed fields only)', () => {
+describe('schema version constants', () => {
+  it('pin the finalized trace at v3 (1.6.1 event-semantics split) and every sibling at its 1.5.0 value', () => {
     expect(CLIENT_TRACE_SCHEMA_VERSION).toBe(2);
-    expect(FINALIZED_TRACE_SCHEMA_VERSION).toBe(2);
+    // ONLY the derived finalized trace advances; the raw gateway trace,
+    // client trace, final manifest, and bundle manifest are frozen at 2.
+    expect(FINALIZED_TRACE_SCHEMA_VERSION).toBe(3);
     expect(FINAL_MANIFEST_SCHEMA_VERSION).toBe(2);
     expect(BUNDLE_MANIFEST_SCHEMA_VERSION).toBe(2);
     expect(MODEL_TRACE_SCHEMA_VERSION).toBe(2);
@@ -357,10 +370,13 @@ describe('runBundleSchema v2 (strict matrix)', () => {
   });
 });
 
-describe('finalizedTraceEntrySchema v2 (strict matrix)', () => {
+describe('finalizedTraceEntrySchema v3 (strict matrix)', () => {
   it('accepts a valid row and rejects every field-level defect', () => {
     strictMatrix(finalizedTraceEntrySchema, validFinalizedRow, [
       ['v1 version literal', (f) => (f.finalizedTraceSchemaVersion = 1)],
+      // A v2 row is NOT reinterpretable as v3 — its engine ids meant the
+      // submission. The only upgrade path is re-running model:finalize.
+      ['v2 version literal', (f) => (f.finalizedTraceSchemaVersion = 2)],
       ['missing exactRequestSources', (f) => delete f.exactRequestSources],
       [
         'exactRequestSources beyond max 2',
@@ -378,6 +394,45 @@ describe('finalizedTraceEntrySchema v2 (strict matrix)', () => {
       ['missing requestEnvelopeFile', (f) => delete f.requestEnvelopeFile],
       ['unknown extra field', (f) => (f.extra = 1)],
       ['fractional confidenceBp', (f) => (f.confidenceBp = 0.5)],
+      // Required-key proof for the two 1.6.1 fields: absent is not null.
+      ['missing engineSubmissionEventId', (f) => delete f.engineSubmissionEventId],
+      ['missing responseVerdictEventId', (f) => delete f.responseVerdictEventId],
+      // All three event-id fields pin the CANONICAL form (`evt-` + the
+      // zero-padded width-6 canonical-event counter): `evt-op-` markers
+      // consume a SEPARATE counter and can never name a lifecycle event, an
+      // under-width id catches a ledger-`seq` confusion, and a bare string
+      // catches the field regressing to an unconstrained z.string().
+      ...(
+        ['engineSubmissionEventId', 'responseVerdictEventId', 'engineResolutionEventId'] as const
+      ).flatMap((field): Mutation[] => [
+        [`operator-marker event id in ${field}`, (f) => (f[field] = 'evt-op-000001')],
+        [`under-width event id in ${field}`, (f) => (f[field] = 'evt-12')],
+        [`bare-string event id in ${field}`, (f) => (f[field] = 'accepted')],
+      ]),
+      // Co-null refinement, violated in BOTH directions: the tick and the
+      // submission id are read off ONE indexed event, so exactly one being
+      // null can only mean they were derived independently.
+      [
+        'null logicalSubmittedTick beside a submission event id',
+        (f) => (f.logicalSubmittedTick = null),
+      ],
+      [
+        'null engineSubmissionEventId beside a submitted tick',
+        (f) => (f.engineSubmissionEventId = null),
+      ],
+      // 'accepted'/'rejected' are RESPONSE-level verdicts, reachable only by
+      // finding a verdict event — whose id must therefore be present.
+      [
+        "engineOutcome 'accepted' without a verdict event",
+        (f) => (f.responseVerdictEventId = null),
+      ],
+      [
+        "engineOutcome 'rejected' without a verdict event",
+        (f) => {
+          f.engineOutcome = 'rejected';
+          f.responseVerdictEventId = null;
+        },
+      ],
     ]);
   });
 
@@ -405,6 +460,40 @@ describe('finalizedTraceEntrySchema v2 (strict matrix)', () => {
         `strictDisposition ${String(disposition)}`,
       ).toBe(true);
     }
+  });
+
+  it('accepts a null verdict wherever no response was verdicted — including the E3 null-outcome row', () => {
+    // Provider failures, plain expiries, and pre-answer supersessions have no
+    // verdict event; only 'accepted'/'rejected' obligate one. The null case
+    // is the E3 combination: a request resolved by an acceptance of a
+    // DIFFERENT responseId than this row's, so the shared ladder returns a
+    // null engineOutcome while engineResolutionEventId names that acceptance
+    // — legal and non-contradictory, the two fields answer different
+    // questions.
+    for (const engineOutcome of ['expired', 'superseded', null]) {
+      const row = validFinalizedRow();
+      row.engineOutcome = engineOutcome;
+      row.responseVerdictEventId = null;
+      expect(
+        finalizedTraceEntrySchema.safeParse(row).success,
+        `null verdict under engineOutcome ${String(engineOutcome)}`,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts a degraded unresolved row: null engineResolutionEventId is a finalizer criterion, not a schema bar', () => {
+    // The E8 shape — a ledger missing its terminal expiry, archived under
+    // --allow-degraded: nothing entered the engine and nothing resolved the
+    // request, so all three ids (and the co-null tick) are null. Strict
+    // completeness (non-null resolution for every ledger-requested external
+    // requestId) is enforced by the finalizer, deliberately NOT here.
+    const degraded = validFinalizedRow();
+    degraded.engineOutcome = null;
+    degraded.logicalSubmittedTick = null;
+    degraded.engineSubmissionEventId = null;
+    degraded.responseVerdictEventId = null;
+    degraded.engineResolutionEventId = null;
+    expect(finalizedTraceEntrySchema.safeParse(degraded).success).toBe(true);
   });
 });
 
