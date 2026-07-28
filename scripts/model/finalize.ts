@@ -17,6 +17,7 @@ import {
   bundleManifestSchema,
   finalManifestSchema,
   finalizedTraceEntrySchema,
+  ROUTER_METADATA_MAX_CHARS,
   modelTraceEntrySchema,
   routerTraceEntrySchema,
   runBundleSchema,
@@ -418,9 +419,24 @@ export function finalizeRunDirectory(
   const routerEntries = new Map<string, RouterTraceEntry>();
   if (existsSync(routingDir)) {
     for (const file of readdirSync(routingDir).filter((f) => f.endsWith('.json'))) {
-      const parsed = routerTraceEntrySchema.safeParse(
-        JSON.parse(readFileSync(join(routingDir, file), 'utf8')),
-      );
+      const rawSidecar: unknown = JSON.parse(readFileSync(join(routingDir, file), 'utf8'));
+      // Bound the RAW parsed metadata, before zod sees it. The schema's own
+      // refine measures zod's rebuilt record, which silently drops keys such
+      // as `__proto__` — so a hand-edited sidecar can carry unbounded bytes
+      // past the schema while measuring as tiny (measured: a 60,197-byte file
+      // whose metadata refine saw 17 chars). This is the artifact-integrity
+      // bound, so it must measure the artifact.
+      const rawMetadata = (rawSidecar as { metadata?: unknown } | null)?.metadata;
+      const routingMetadataChars =
+        rawMetadata === null || rawMetadata === undefined ? 0 : JSON.stringify(rawMetadata).length;
+      if (routingMetadataChars > ROUTER_METADATA_MAX_CHARS) {
+        contra(
+          `routing sidecar '${file}' metadata is ${routingMetadataChars} chars, past the ` +
+            `${ROUTER_METADATA_MAX_CHARS}-char bound`,
+        );
+        continue;
+      }
+      const parsed = routerTraceEntrySchema.safeParse(rawSidecar);
       if (!parsed.success) {
         contra(
           `routing sidecar '${file}' failed validation: ${parsed.error.issues
@@ -507,6 +523,17 @@ export function finalizeRunDirectory(
       ? seed.modelSettings.openRouterProvider
       : null;
 
+  /** The pinned provider and the reported provider live in two different
+   * naming namespaces: the config pins the ROUTING SLUG the gateway puts in
+   * `provider.only` ('anthropic', 'amazon-bedrock') while the router reports a
+   * DISPLAY NAME ('Anthropic', 'Amazon Bedrock'). They diverge on case AND on
+   * word separators, so folding case alone is not enough — 'amazon-bedrock'
+   * vs 'Amazon Bedrock' would read as a substitution on a perfectly pinned
+   * run. Normalizing both sides to alphanumerics compares the only part of
+   * the two namespaces that is actually shared. */
+  const normalizeProviderName = (value: string): string =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
   // Pinned-route enforcement (1.6.0). The experiment's premise is one exact
   // model, one exact provider, no fallbacks. All three were CAPTURED by the
   // OpenRouter integration and enforced nowhere: the final manifest recorded
@@ -515,6 +542,7 @@ export function finalizeRunDirectory(
   // routing sidecars this finalizer did not read. Silent substitution is
   // precisely what pinning exists to prevent, so it must not be able to reach
   // a `completed` manifest.
+  const providerMismatches: string[] = [];
   for (const [requestId, entry] of routerEntries) {
     // Orphan fatality, the same rule trace rows get: router evidence naming a
     // request the engine never emitted is unexplainable, not merely extra.
@@ -524,19 +552,15 @@ export function finalizeRunDirectory(
       );
       continue;
     }
-    // Compared CASE-INSENSITIVELY on purpose: the gateway config pins a
-    // lowercase slug ('anthropic') while the router reports the display-cased
-    // name ('Anthropic'), so an exact compare would fail every live run. A
-    // null upstreamProviderId means the metadata named no selected endpoint —
-    // an ABSENCE, handled as a strict criterion below, never as a mismatch.
+    // A null upstreamProviderId means the metadata named no selected endpoint
+    // — an ABSENCE, handled as a strict criterion below, never as a mismatch.
     if (
       pinnedProvider !== null &&
       entry.upstreamProviderId !== null &&
-      entry.upstreamProviderId.toLowerCase() !== pinnedProvider.toLowerCase()
+      normalizeProviderName(entry.upstreamProviderId) !== normalizeProviderName(pinnedProvider)
     ) {
-      contra(
-        `routing sidecar ${requestId} was served by provider '${entry.upstreamProviderId}' ` +
-          `but the run pinned '${pinnedProvider}' with fallbacks disabled`,
+      providerMismatches.push(
+        `${requestId} served by '${entry.upstreamProviderId}' (pinned '${pinnedProvider}')`,
       );
     }
   }
@@ -816,15 +840,36 @@ export function finalizeRunDirectory(
     }
   }
 
+  // A provider that disagrees with the pin is a strict CRITERION, not a
+  // contradiction, for the same reason `pinned-model` is: the comparison
+  // bridges two upstream-owned naming namespaces, so a naming divergence we
+  // failed to anticipate must not destroy an expensive live run's artifacts.
+  // It can still never read as `completed`.
+  if (providerMismatches.length > 0) {
+    failedCriteria.push(
+      `pinned-provider: ${providerMismatches.length} call(s) were served by a provider the run did ` +
+        `not pin with fallbacks disabled (e.g. ${providerMismatches.slice(0, 3).join('; ')})`,
+    );
+  }
+
   if (pinnedRouteRun) {
-    // Every answered call on a pinned-route run carries router evidence: the
-    // gateway writes a sidecar whenever the adapter supplies router fields,
-    // and the OpenRouter adapter supplies them on every response (both keys
-    // are always set, even when their values are null). A missing sidecar is
-    // therefore lost evidence, not an adapter that declined to report.
-    const missingRouting = traceRows
-      .filter((row) => row.gatewayOutcome === 'response' && !routerEntries.has(row.requestId))
-      .map((row) => row.requestId);
+    /** Requests the gateway actually ANSWERED. Both routing criteria below are
+     * scoped to these: the gateway writes a routing sidecar for FAILED calls
+     * too (the OpenRouter adapter builds `meta` before it throws on an HTTP
+     * error, and metaFromPayload always sets both router keys), and such a
+     * sidecar legitimately carries a null provider because nothing was served.
+     * Scoring those as unproven provenance would mean a single upstream 402 or
+     * 5xx anywhere in a run made `completed` permanently unreachable — the
+     * exact failure class this enforcement exists to prevent. */
+    const answeredRequestIds = new Set(
+      traceRows.filter((row) => row.gatewayOutcome === 'response').map((row) => row.requestId),
+    );
+
+    // Every answered call carries router evidence, so a missing sidecar is
+    // lost evidence rather than an adapter that declined to report.
+    const missingRouting = [...answeredRequestIds]
+      .filter((requestId) => !routerEntries.has(requestId))
+      .sort();
     if (missingRouting.length > 0) {
       failedCriteria.push(
         `routing-evidence: ${missingRouting.length} answered request(s) have no routing sidecar ` +
@@ -832,16 +877,18 @@ export function finalizeRunDirectory(
       );
     }
     // A sidecar naming no selected endpoint cannot prove the pinned provider
-    // served the call, and the contradiction check above can only fire on a
-    // provider it can actually see — so unproven provenance is recorded here
-    // rather than passing silently.
+    // served the call, and the mismatch check above can only fire on a provider
+    // it can actually see — so unproven provenance on an ANSWERED call is
+    // recorded here rather than passing silently.
     const providerUnproven = [...routerEntries.values()]
+      .filter((entry) => answeredRequestIds.has(entry.requestId))
       .filter((entry) => entry.upstreamProviderId === null)
-      .map((entry) => entry.requestId);
+      .map((entry) => entry.requestId)
+      .sort();
     if (providerUnproven.length > 0) {
       failedCriteria.push(
-        `routing-provider-evidence: ${providerUnproven.length} routing sidecar(s) name no selected ` +
-          `provider (e.g. ${providerUnproven.slice(0, 3).join(', ')})`,
+        `routing-provider-evidence: ${providerUnproven.length} answered request(s) have a routing ` +
+          `sidecar naming no selected provider (e.g. ${providerUnproven.slice(0, 3).join(', ')})`,
       );
     }
   }

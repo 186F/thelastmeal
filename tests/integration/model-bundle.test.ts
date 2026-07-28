@@ -1417,10 +1417,19 @@ describe('pinned-route enforcement (1.6.0: router evidence is VALIDATED, not mer
 
   /** Rewrites the fixture as a pinned OpenRouter route: the seed records the
    * RESOLVED adapter and pinned provider, every trace row reports the pinned
-   * model, and every ANSWERED row carries its routing sidecar. The provider is
-   * recorded DISPLAY-CASED ('Anthropic') exactly as OpenRouter reports it
-   * against a lowercase pinned slug — the control case therefore also pins the
-   * case-insensitive comparison, without which every live run would fail. */
+   * model, and every trace row carries the routing sidecar the GATEWAY would
+   * actually have written.
+   *
+   * Two details are load-bearing and were both wrong in the first cut of this
+   * fixture. (1) The provider is recorded DISPLAY-CASED ('Anthropic') exactly
+   * as OpenRouter reports it against a lowercase pinned slug, so the control
+   * case pins the normalized comparison — without which every live run would
+   * fail at finalization. (2) FAILED calls get a sidecar too, with a null
+   * provider: the adapter builds `meta` before it throws on an HTTP error and
+   * metaFromPayload always sets both router keys, so the gateway's guard fires
+   * and writes routing evidence for a call nothing served. A fixture that
+   * synthesized sidecars only for answered rows hid a defect that would have
+   * made `completed` unreachable for any run containing one upstream 402. */
   function pinnedRouteDir(): string {
     const dir = freshDir();
     const manifestPath = join(dir, 'run-manifest.json');
@@ -1441,8 +1450,11 @@ describe('pinned-route enforcement (1.6.0: router evidence is VALIDATED, not mer
       rows.map((row) => ({ ...row, modelId: row.modelId === null ? null : PINNED_MODEL })),
     );
     mkdirSync(join(dir, 'routing'), { recursive: true });
-    for (const row of rows.filter((r) => r.gatewayOutcome === 'response')) {
-      writeJson(routingPath(dir, row.requestId), routingEntry(row.requestId, 'Anthropic'));
+    for (const row of rows) {
+      writeJson(
+        routingPath(dir, row.requestId),
+        routingEntry(row.requestId, row.gatewayOutcome === 'response' ? 'Anthropic' : null),
+      );
     }
     return dir;
   }
@@ -1471,16 +1483,87 @@ describe('pinned-route enforcement (1.6.0: router evidence is VALIDATED, not mer
     const bundle = readJson<{ files: { name: string }[] }>(join(dir, 'bundle-manifest.json'));
     const routingFiles = bundle.files.filter((f) => f.name.startsWith('routing/'));
     expect(routingFiles.length).toBeGreaterThan(0);
+
+    // Regression: the fixture contains a FAILED call whose sidecar carries a
+    // null provider, exactly as the gateway writes it when the adapter throws
+    // on an upstream HTTP error. Scoring that as unproven provenance would
+    // make `completed` unreachable for any run containing a single 402 or 5xx.
+    const failedWithSidecar = readTraceRows(dir).filter(
+      (r) => r.gatewayOutcome !== 'response' && existsSync(routingPath(dir, r.requestId)),
+    );
+    expect(failedWithSidecar.length).toBeGreaterThan(0);
   });
 
-  it('rejects a call served by a provider the run did not pin, in BOTH modes', () => {
+  it('strict-completes when the pinned slug and the reported display name differ only by separators', () => {
+    const dir = pinnedRouteDir();
+    const manifestPath = join(dir, 'run-manifest.json');
+    const seed = readJson<Record<string, unknown>>(manifestPath);
+    seed.modelSettings = {
+      ...(seed.modelSettings as Record<string, unknown>),
+      openRouterProvider: 'amazon-bedrock',
+    };
+    writeJson(manifestPath, seed);
+    for (const row of readTraceRows(dir).filter((r) => r.gatewayOutcome === 'response')) {
+      writeJson(routingPath(dir, row.requestId), routingEntry(row.requestId, 'Amazon Bedrock'));
+    }
+
+    // The pin is a ROUTING SLUG; the router reports a DISPLAY NAME. Folding
+    // case alone would read this perfectly pinned run as a substitution.
+    const result = finalizeRunDirectory(dir, RUN_ID);
+    expect(result.failedCriteria).toEqual([]);
+    expect(result.status).toBe('completed');
+  });
+
+  it('fails strict when a call was served by a provider the run did not pin, and degrades explicitly', () => {
     const dir = pinnedRouteDir();
     const requestId = answeredRequestId(dir);
     writeJson(routingPath(dir, requestId), routingEntry(requestId, 'DeepInfra'));
 
-    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/served by provider 'DeepInfra'/);
+    // A strict CRITERION rather than a contradiction: the comparison bridges
+    // two upstream-owned namespaces, so an unanticipated naming divergence
+    // must not destroy an expensive live run's artifacts. It still can never
+    // read as `completed`.
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/pinned-provider/);
+    expectNotFinalized(dir);
+
+    const degraded = finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true });
+    expect(degraded.status).toBe('degraded');
+    expect(degraded.failedCriteria.some((c) => c.startsWith('pinned-provider:'))).toBe(true);
+    expect(degraded.failedCriteria.some((c) => c.includes('DeepInfra'))).toBe(true);
+  });
+
+  it('rejects a routing sidecar whose filename disagrees with the requestId it swears to, in BOTH modes', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    // The file is named for one request while its content names another; the
+    // filename is consulted nowhere else, so this branch is the only guard.
+    writeJson(routingPath(dir, 'dec-mislabelled-0001'), routingEntry(requestId, 'Anthropic'));
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/names request/);
     expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
-      /served by provider 'DeepInfra'/,
+      /names request/,
+    );
+    expectNotFinalized(dir);
+  });
+
+  it('bounds router metadata by the bytes ON DISK, not by what the schema rebuilds', () => {
+    const dir = pinnedRouteDir();
+    const requestId = answeredRequestId(dir);
+    // zod's record parse drops `__proto__`, so a refine over the PARSED value
+    // measures almost nothing while the artifact itself is unbounded. The
+    // finalizer must measure the raw JSON.
+    const smuggled = `{
+      "routingSchemaVersion": 1,
+      "runId": ${JSON.stringify(RUN_ID)},
+      "requestId": ${JSON.stringify(requestId)},
+      "upstreamProviderId": "Anthropic",
+      "metadata": { "__proto__": { "blob": ${JSON.stringify('x'.repeat(ROUTER_METADATA_MAX_CHARS + 1))} } }
+    }`;
+    writeFileSync(routingPath(dir, requestId), smuggled, 'utf8');
+
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/past the .*-char bound/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
+      /past the .*-char bound/,
     );
     expectNotFinalized(dir);
   });
@@ -1535,9 +1618,9 @@ describe('pinned-route enforcement (1.6.0: router evidence is VALIDATED, not mer
       metadata: { requested: PINNED_MODEL, blob: 'x'.repeat(ROUTER_METADATA_MAX_CHARS + 1) },
     });
 
-    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/router metadata exceeds/);
+    expect(() => finalizeRunDirectory(dir, RUN_ID)).toThrow(/past the .*-char bound/);
     expect(() => finalizeRunDirectory(dir, RUN_ID, { allowDegraded: true })).toThrow(
-      /router metadata exceeds/,
+      /past the .*-char bound/,
     );
     expectNotFinalized(dir);
   });

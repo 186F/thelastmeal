@@ -127,12 +127,20 @@ Severity is assigned deliberately:
 | --- | --- | --- |
 | Sidecar fails schema, exceeds the metadata bound, names a mismatched filename, or carries a foreign `runId` | **Contradiction** — fatal in both modes | A present, corrupt artifact is corruption, not missing evidence |
 | Sidecar names a request with no external `DecisionRequested` in the ledger | **Contradiction** — fatal in both modes | Same orphan-fatality rule the gateway trace rows already had |
-| `upstreamProviderId` disagrees with the pinned provider | **Contradiction** — fatal in both modes | Two present sources disagree about who served the call |
+| `upstreamProviderId` disagrees with the pinned provider (`pinned-provider`) | **Strict criterion** | The comparison bridges two upstream-owned naming namespaces; an unanticipated divergence must not destroy an expensive run, but it can never read as `completed` |
 | Upstream reported a model the run did not request (`pinned-model`) | **Strict criterion** | A legitimately variant slug must not destroy an expensive live run's artifacts, but a substitution must never read as `completed` either |
-| An answered request has no routing sidecar (`routing-evidence`) | **Strict criterion** | Absence of evidence, degradable with `--allow-degraded` |
-| A sidecar names no selected provider (`routing-provider-evidence`) | **Strict criterion** | Provenance unproven; the mismatch check can only fire on a provider it can see |
+| An **answered** request has no routing sidecar (`routing-evidence`) | **Strict criterion** | Absence of evidence, degradable with `--allow-degraded` |
+| An **answered** request's sidecar names no selected provider (`routing-provider-evidence`) | **Strict criterion** | Provenance unproven; the mismatch check can only fire on a provider it can see |
 
-Provider identity is compared **case-insensitively**, and this is load-bearing rather than defensive: the gateway config pins a lowercase slug (`anthropic`) while OpenRouter reports the display-cased name (`Anthropic`). An exact comparison would have failed every live run at finalization — the same class of defect as amendments A1 and A2, caught here by probe before the first paid run rather than during it.
+Two scoping rules are load-bearing rather than defensive, and both would have broken live runs if written the obvious way.
+
+**Provider names are normalized, not merely case-folded.** The config pins a *routing slug* (`anthropic`, `amazon-bedrock`) while the router reports a *display name* (`Anthropic`, `Amazon Bedrock`). These namespaces diverge on case *and* on word separators, so both sides are reduced to alphanumerics before comparison. An exact compare — or even a case-only fold — would have reported a perfectly pinned run as a substitution.
+
+**Both routing criteria are scoped to answered requests.** The gateway writes a routing sidecar for *failed* calls too: the adapter builds `meta` before it throws on an upstream HTTP error, and `metaFromPayload` always sets both router keys, so the write guard fires for a call nothing served — with a null provider, because no generation happened. Scoring those as unproven provenance would mean a single upstream 402 or 5xx anywhere in a run made `status: completed` permanently unreachable, which is the mirror image of the defect this enforcement exists to prevent.
+
+Provenance also survives truncation: `upstreamProviderId` is derived from the **raw** router metadata rather than the bounded copy, whose truncation fallback carries neither `endpoints` nor `attempts`. Deriving it post-bound would have nulled the provider on exactly the large-metadata responses where routing is most worth proving — and a null provider skips the substitution check entirely.
+
+The metadata bound is enforced on the **bytes on disk**. The schema's `refine` measures zod's rebuilt record, which drops keys such as `__proto__`, so a hand-edited sidecar could carry unbounded bytes while measuring as trivially small. The finalizer therefore measures the raw parsed JSON before schema validation; the refine remains as a shape-level guard for other callers. The write side was also made genuinely bounded — its truncation fallback previously copied upstream strings uncapped and could emit a "truncated" record *larger* than its input (measured: 20,085 chars in, 20,101 out), which the new read-side bound would then have rejected as corruption.
 
 `returnedModelIds` is now computed once and shared between the criterion and the manifest, so two hash-bound facts cannot be derived by two separate expressions.
 
@@ -229,6 +237,12 @@ Existing provider-plan, gateway-client, bundle and gateway fixtures now import t
 Pinned-route finalization adds ten cases: `routerTraceEntrySchema`'s strict matrix plus an at-the-bound acceptance case in `tests/unit/model-artifact-schemas.test.ts`, and nine finalizer cases in `tests/integration/model-bundle.test.ts` covering the genuine pinned route (which also pins the case-insensitive provider comparison), provider mismatch, orphan sidecar, foreign `runId`, schema-invalid sidecar, over-bound metadata on read, model substitution (strict failure plus explicit degrade), missing routing sidecar, unproven provider, and non-pinned-route runs staying unaffected.
 
 These were verified by **mutation**, not merely by passing: with the routing read and both criteria disabled, all eight negative cases fail and the two positive cases still pass. Each test is load-bearing on the enforcement it names.
+
+### Pre-merge review
+
+The enforcement commit was itself reviewed adversarially before merge — five dimension-scoped finders plus two independent refuters per finding, all Opus 5 at xhigh, 23 agents. Nine findings were raised and **eight survived refutation**, including a high-severity defect found independently by three dimensions and reproduced end to end by both refuters: `routing-provider-evidence` scanned every sidecar with no outcome filter, so one upstream HTTP error anywhere in a pinned run would have made `completed` unreachable. The first cut of the test fixture concealed it by synthesizing sidecars only for answered rows — which is not what the gateway does. Every surviving finding is fixed above, the fixture now mirrors real gateway behaviour, and the write-side behaviour it depends on is pinned by a gateway-level test (`tests/gateway/openrouter-routing-trace.test.ts`) so the integration fixture cannot drift back to a prettier version of reality.
+
+The one refuted finding — that `pinned-model` is not gated on `pinnedRouteRun` and would therefore change finalization for `adapterKind: 'openai'` — was correctly refuted: the criterion is degradable, and no OpenAI run is planned.
 
 No automated test makes a live OpenRouter request.
 

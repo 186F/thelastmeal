@@ -50,6 +50,17 @@ function nullableInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
+function boundedString(value: unknown, max: number): string | null {
+  return typeof value === 'string' ? value.slice(0, max) : null;
+}
+
+/** Reduces router metadata to at most OPENROUTER_ROUTER_METADATA_MAX_CHARS of
+ * serialized JSON. Every string the fallback copies is itself capped: an
+ * uncapped passthrough could produce a "truncated" record LARGER than the
+ * input it was meant to shrink (measured: 20,085 chars in, 20,101 out), which
+ * the finalizer's read-side bound would then reject as a corrupt sidecar —
+ * turning an oversize-but-honest upstream payload into a fatal contradiction.
+ * The final guard makes the postcondition unconditional rather than inferred. */
 function boundedRouterMetadata(value: unknown): Record<string, unknown> | null {
   const record = asRecord(value);
   if (record === null) return null;
@@ -57,14 +68,18 @@ function boundedRouterMetadata(value: unknown): Record<string, unknown> | null {
   if (serialized.length <= OPENROUTER_ROUTER_METADATA_MAX_CHARS) {
     return record;
   }
-  return {
+  const reduced: Record<string, unknown> = {
     truncated: true,
     originalChars: serialized.length,
-    requested: typeof record.requested === 'string' ? record.requested : null,
-    strategy: typeof record.strategy === 'string' ? record.strategy : null,
+    requested: boundedString(record.requested, 512),
+    strategy: boundedString(record.strategy, 512),
     attempt: nullableInteger(record.attempt),
-    summary: typeof record.summary === 'string' ? record.summary.slice(0, 1_000) : null,
+    summary: boundedString(record.summary, 1_000),
   };
+  if (JSON.stringify(reduced).length <= OPENROUTER_ROUTER_METADATA_MAX_CHARS) {
+    return reduced;
+  }
+  return { truncated: true, originalChars: serialized.length };
 }
 
 function selectedProvider(metadata: Record<string, unknown> | null): string | null {
@@ -141,6 +156,12 @@ function metaFromPayload(
   configuredModel: string,
 ): ModelChoiceMeta {
   const usage = asRecord(payload.usage);
+  // Selected provider is read from the RAW metadata, never from the bounded
+  // copy: the truncation fallback carries neither `endpoints` nor `attempts`,
+  // so deriving it post-bound would silently null the provider on exactly the
+  // large-metadata responses where routing is most worth proving — and a null
+  // provider skips the finalizer's substitution check entirely.
+  const rawRouterMetadata = asRecord(payload.openrouter_metadata);
   const routerMetadata = boundedRouterMetadata(payload.openrouter_metadata);
   return {
     modelId: typeof payload.model === 'string' ? payload.model : configuredModel,
@@ -151,7 +172,7 @@ function metaFromPayload(
     inputTokens: nullableInteger(usage?.input_tokens),
     outputTokens: nullableInteger(usage?.output_tokens),
     totalTokens: nullableInteger(usage?.total_tokens),
-    upstreamProviderId: selectedProvider(routerMetadata),
+    upstreamProviderId: selectedProvider(rawRouterMetadata),
     routerMetadata,
   };
 }

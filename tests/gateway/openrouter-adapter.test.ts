@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   OPENROUTER_RESPONSES_ENDPOINT,
+  OPENROUTER_ROUTER_METADATA_MAX_CHARS,
   OpenRouterResponsesDecisionAdapter,
 } from '../../gateway/adapters/openRouterResponsesAdapter';
 import type { AdapterFailure, AdapterInput } from '../../gateway/adapters/modelDecisionAdapter';
@@ -181,6 +182,47 @@ describe('OpenRouterResponsesDecisionAdapter', () => {
       failureCode: 'upstream-refusal',
       rawOutput: 'I cannot do that.',
     } satisfies Partial<AdapterFailure>);
+  });
+
+  it('keeps oversize router metadata within the persisted bound, including its own fallback', async () => {
+    // The truncation fallback copies upstream strings. Uncapped, it could
+    // produce a "truncated" record LARGER than the input it was shrinking,
+    // which the finalizer's read-side bound then rejects as corruption —
+    // turning an honest oversize payload into a fatal contradiction.
+    const huge = 'y'.repeat(OPENROUTER_ROUTER_METADATA_MAX_CHARS + 5_000);
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          ...successPayload(),
+          openrouter_metadata: {
+            requested: huge,
+            strategy: huge,
+            summary: huge,
+            attempt: 1,
+            endpoints: { available: [{ provider: 'Anthropic', selected: true }] },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    const adapter = new OpenRouterResponsesDecisionAdapter({
+      apiKey: 'test-openrouter-key',
+      model: 'anthropic/claude-sonnet-test',
+      provider: 'anthropic',
+      maxOutputTokens: 300,
+      fetchImpl,
+    });
+
+    const result = await adapter.decide(adapterInput(), new AbortController().signal);
+
+    expect(JSON.stringify(result.meta.routerMetadata).length).toBeLessThanOrEqual(
+      OPENROUTER_ROUTER_METADATA_MAX_CHARS,
+    );
+    expect(result.meta.routerMetadata).toMatchObject({ truncated: true });
+    // Provenance must survive truncation: the selected provider is read from
+    // the RAW metadata, not the bounded copy, whose fallback carries neither
+    // `endpoints` nor `attempts`. A null here would silently skip the
+    // finalizer's substitution check on exactly the largest payloads.
+    expect(result.meta.upstreamProviderId).toBe('Anthropic');
   });
 
   it('rejects an incomplete response even when its partial text parses as a valid choice', async () => {

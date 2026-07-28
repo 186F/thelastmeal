@@ -183,7 +183,14 @@ export const routerTraceEntrySchema = z
     upstreamProviderId: z.string().nullable(),
     /** Opaque JSON-safe router metadata; consumers must ignore unknown
      * fields. Bounded by total serialized size rather than by shape, because
-     * the router owns this payload's schema and we refuse to pin it. */
+     * the router owns this payload's schema and we refuse to pin it.
+     *
+     * This refine is a SHAPE-LEVEL guard, not the authoritative bound: zod
+     * rebuilds a record during parsing and drops keys it refuses to copy
+     * (notably `__proto__`), so the value measured here can be smaller than
+     * the bytes actually on disk. Readers that must bound the ARTIFACT — the
+     * finalizer above all — measure the raw parsed JSON before schema
+     * validation. See routingMetadataChars in scripts/model/finalize.ts. */
     metadata: z
       .record(z.string(), z.unknown())
       .nullable()
