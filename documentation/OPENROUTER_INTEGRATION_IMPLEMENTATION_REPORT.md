@@ -384,12 +384,19 @@ under another.
 
 | Item | Value |
 | --- | --- |
-| PR | recorded post-merge |
-| Final PR head | recorded post-merge |
-| PR head CI | recorded post-merge |
-| Merge commit | recorded post-merge |
-| Merged-main CI | recorded post-merge |
-| Merged at | recorded post-merge |
+| PR | [#9](https://github.com/186F/thelastmeal/pull/9) — "Advance model experiment to 1.2.0 (treatment change; release 1.6.2)" |
+| Final PR head | `e8ba73ed36f8e80ba0ba256f7fe1dfb1e32c42a2` |
+| PR head CI (`Required checks (clean checkout)`) | run `30479408820` — success |
+| Merge commit | `38026cc986f59e8526053417666c921826dd34e9` |
+| Merged-main CI | run `30479857279` — success |
+| Merged at | 2026-07-29T18:25:33Z |
+
+Both runs executed the full required clean-checkout job, including the
+100-runs-per-scenario deterministic batch and the keyless formal rehearsal,
+with `RUN_LIVE_MODEL_TESTS` unset. The same job was additionally executed in a
+local clean checkout at the implementation head before the PR: all fourteen
+golden hashes byte-identical, replay=match on every scenario, and all three
+rehearsal cases completed with replay match.
 
 No live model call is made by the 1.6.2 work itself. The formal six-run
 sequence restarts from Run 1 under experiment v1.2.0 at a freshly frozen SHA.
