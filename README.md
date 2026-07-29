@@ -12,7 +12,7 @@ The authoritative specification is
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
 version `vs001-1.0.0` — those frozen experiment identifiers never change with the
-package. The implementation itself is at **release 1.6.1**, reached through this
+package. The implementation itself is at **release 1.6.2**, reached through this
 lineage:
 
 - **1.1.0** — audit remediation, per
@@ -45,9 +45,18 @@ lineage:
   [`documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md)
   (report, including every recorded amendment to that brief:
   [`documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md`](documentation/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md))
+- **1.6.2** — model-experiment treatment change: advances the model experiment
+  from v1.1.0 to v1.2.0 because the formal treatment changes from
+  `inclusionai/ling-2.6-flash` via `novita` to `google/gemini-2.5-flash-lite`
+  via `google-ai-studio`, after the v1.1.0 live acceptance attempt was aborted
+  when its single-endpoint route degraded under sustained upstream rate
+  limiting (addendum in
+  [`documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md);
+  attempt record in
+  [`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md))
 
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged across all seven
+timelines, weights, the ten action categories — is unchanged across all eight
 releases; the remediations hardened the decision lifecycle, constraint
 enforcement, schemas, hashing, determinism proofs, memory generalization,
 evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,
@@ -63,10 +72,17 @@ hashes remain unchanged. Release 1.6.0 intentionally advances the separate
 model experiment from v1.0.0 to v1.1.0 and changes the registered external
 provider from direct OpenAI access to `openrouter-mara-action-v1`; the prompt
 text and `mara-action-selection-1.0.0` prompt version remain unchanged.
-Release 1.6.1 corrects only the derived finalized-trace event semantics. **The
-live milestone remains pending** — one disposable live smoke request was
-executed on 2026-07-28 and passed; no formal live acceptance run is claimed
-by any release.
+Release 1.6.1 corrects only the derived finalized-trace event semantics.
+Release 1.6.2 advances the model experiment from v1.1.0 to v1.2.0 — the formal
+treatment (the pinned upstream model and provider endpoint, which live only in
+git-ignored gateway configuration) changes; the prompt, provider identity,
+condition, scenarios, thresholds, action system, and gateway behavior do not.
+**The live milestone remains pending** — one disposable live smoke request was
+executed on 2026-07-28 and passed, and one formal acceptance sequence under
+experiment v1.1.0 was started on 2026-07-29 and aborted after Run 2 (a valid,
+strict-finalized artifact that fell below the pre-registered thresholds under
+sustained upstream rate limiting); no formal live acceptance is claimed by any
+release.
 
 **Compatibility break:** ledger exports are now format version 2
 (`worldStateHash` + `canonicalLedgerHash`, event schema 2, worker protocol 3).
@@ -559,14 +575,18 @@ model-backed ledger replays to the same `worldStateHash` without the model.
   complete deterministic streams are byte-identical; the 100-run batch never
   starts a gateway; CI uses only the fake adapter and no secret.
 
-**The live milestone is NOT complete.** No formal live model-backed run has
-been executed; the only live traffic to date is the disposable smoke test of
-2026-07-28 (a failed first attempt, then a pass), recorded as non-formal
-evidence in
+**The live milestone is NOT complete.** The live traffic to date is the
+disposable smoke test of 2026-07-28 (a failed first attempt, then a pass) and
+the aborted formal sequence of 2026-07-29 under experiment v1.1.0 — Run 1
+(deterministic baseline) passed, and Run 2 produced a valid, strict-finalized
+artifact that fell below the pre-registered acceptance thresholds under
+sustained upstream rate limiting, so the sequence was aborted per the freeze
+protocol. Both are recorded — the attempt is not deleted or rewritten — as
+non-acceptance evidence in
 [`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
-The milestone remains open until that report records the formal six-run
-sequence with its evidence. Fake-adapter results are infrastructure evidence
-only and are never reported as live results.
+The milestone remains open until that report records a complete formal six-run
+sequence with its evidence, now under experiment v1.2.0. Fake-adapter results
+are infrastructure evidence only and are never reported as live results.
 
 ### Manual setup (live model runs)
 
