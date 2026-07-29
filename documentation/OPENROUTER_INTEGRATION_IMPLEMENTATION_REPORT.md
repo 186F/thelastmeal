@@ -312,3 +312,82 @@ It is ready for a disposable live smoke request after merge. It is not, by itsel
 Both CI runs executed the required clean-checkout job, including the full deterministic batch and the keyless formal rehearsal. Local gates at the final PR head: 446 tests across 51 files, eslint and prettier, both typechecks, `validate` with 0 errors and 0 warnings, both builds, the dist secret scan, and the deterministic batch with all fourteen golden hashes byte-identical.
 
 **No live model call was made during the 1.6.0 work itself; the formal six-run sequence remains PENDING.** The two disposable smoke requests executed after merge on 2026-07-28 (one failed 429, one pass) are recorded as non-formal evidence in `documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`; its Provenance table and Run log stay fully PENDING.
+
+---
+
+## Addendum — release 1.6.2: model-experiment treatment change (experiment v1.2.0)
+
+Everything above this line is the 1.6.0 implementation record and is preserved
+unchanged. This addendum records the one subsequent change to the registered
+live route.
+
+### What changed and why
+
+The first formal live acceptance sequence, run at v1.6.1 under model experiment
+v1.1.0 on 2026-07-29, was aborted after Run 2. The run itself completed to
+terminal state and strict-finalized with `status: completed`, zero notes and
+zero failed criteria — but 12 of its 54 upstream calls failed as
+`upstream-error`, putting upstream completion and accepted-model coverage at
+77.8% against the pre-registered ≥ 90% / ≥ 80% thresholds. Diagnosis (recorded
+with the attempt in
+[`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)):
+`inclusionai/ling-2.6-flash` is served by exactly one OpenRouter endpoint
+(`novita`), and because this integration pins the route with
+`allow_fallbacks: false`, exhausting that single shared-pool allocation leaves
+no path — the final ~10 minutes of the run degraded into near-total upstream
+failure. That is a capacity property of the chosen treatment, not an
+implementation defect: all 42 answered calls were gate-accepted with zero
+engine rejections, and every pinned-route and artifact criterion held.
+
+The formal treatment therefore changes:
+
+```text
+OPENROUTER_MODEL:    inclusionai/ling-2.6-flash → google/gemini-2.5-flash-lite
+OPENROUTER_PROVIDER: novita                     → google-ai-studio
+model-backed-npc-001: 1.1.0 → 1.2.0
+package: 1.6.1 → 1.6.2
+```
+
+The replacement was selected for capacity: five independent serving endpoints,
+all supporting strict JSON-schema structured output, with first-party
+`google-ai-studio` capacity rather than a shared aggregator allocation.
+
+The experiment version advances on the same precedent that created v1.1.0:
+that version moved because "the upstream routing layer is a material
+experimental change" — and changing the model that actually answers Mara's
+decisions is at least as material. The slug and endpoint themselves live only
+in git-ignored gateway configuration (`.env.gateway`);
+`MODEL_EXPERIMENT_VERSION` in `src/shared/modelExperiment.ts` is the
+source-side record of the treatment change.
+
+### Unchanged
+
+- Adapter code, request contract, and gateway behavior — every enforcement
+  described in this report (exact slug, exact provider allowlist,
+  `require_parameters: true`, fallbacks disabled, router metadata, no retries)
+  applies to the new route verbatim
+- Prompt text and `mara-action-selection-1.0.0` prompt version
+- Provider identity `openrouter-mara-action-v1` and condition
+  `mara-model-per-decision-v1`
+- Scenarios, seeds, thresholds, action system, and all fourteen frozen golden
+  hashes
+- The frozen Vertical Slice v1.0 / `vs001-1.0.0`
+
+Artifacts are not interchangeable across experiment versions: v1.0.0, v1.1.0
+(including the aborted 2026-07-29 Run 2 attempt), and v1.2.0 are three
+distinct treatments, and no run recorded under one may be counted as evidence
+under another.
+
+### Merge evidence (1.6.2)
+
+| Item | Value |
+| --- | --- |
+| PR | recorded post-merge |
+| Final PR head | recorded post-merge |
+| PR head CI | recorded post-merge |
+| Merge commit | recorded post-merge |
+| Merged-main CI | recorded post-merge |
+| Merged at | recorded post-merge |
+
+No live model call is made by the 1.6.2 work itself. The formal six-run
+sequence restarts from Run 1 under experiment v1.2.0 at a freshly frozen SHA.

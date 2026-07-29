@@ -1,8 +1,8 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.6.1",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0)",
+  "version": "1.6.2",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0; finalized-trace event semantics at 1.6.1; model-experiment treatment change to v1.2.0 at 1.6.2)",
   "type": "module",
   "scripts": {
     "dev": "vite",

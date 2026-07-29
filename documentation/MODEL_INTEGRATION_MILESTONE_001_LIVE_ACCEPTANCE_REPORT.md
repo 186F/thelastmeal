@@ -1,6 +1,9 @@
 # Model Integration Milestone 001 — Live Acceptance Report
 
-**Status: PENDING — disposable smoke test passed; formal six-run sequence not yet executed**
+**Status: PENDING — disposable smoke test passed; one formal sequence
+(experiment v1.1.0, 2026-07-29) aborted after Run 2 on a valid but
+threshold-failing artifact; the six-run sequence restarts under experiment
+v1.2.0 and has not been executed**
 
 The Provenance table and Run log below are a TEMPLATE. Every evidence field
 in them is literally `PENDING` until the live acceptance sequence (re-audit
@@ -8,7 +11,9 @@ remediation brief §16) has actually
 been performed against the live OpenRouter Responses API. Do not mark any run or criterion
 passed on the basis of fake-adapter or fixture evidence; fake results are
 infrastructure evidence only and must never be transcribed here as live
-results. Failed or surprising live runs are recorded, not discarded.
+results. Failed or surprising live runs are recorded, not discarded — the
+aborted 2026-07-29 attempt is recorded in its own section below and its
+evidence is retained in full.
 
 Never record an API key, `.env.gateway` contents, or any other secret in this
 file.
@@ -18,7 +23,11 @@ file.
 The release 1.5.0 artifact-integrity work and its CI gates passed — see
 [`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
 The registered live route was subsequently migrated in release 1.6.0 to
-OpenRouter Responses under model experiment version 1.1.0. Formal runs must use
+OpenRouter Responses under model experiment version 1.1.0; release 1.6.2
+advanced the experiment to version 1.2.0 when the formal treatment changed
+from `inclusionai/ling-2.6-flash` via `novita` to
+`google/gemini-2.5-flash-lite` via `google-ai-studio` after the aborted
+2026-07-29 attempt recorded below. Formal runs must use
 one exact `OPENROUTER_MODEL`, one exact `OPENROUTER_PROVIDER`, fallbacks disabled,
 and router metadata enabled; see
 [`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
@@ -36,8 +45,10 @@ CI job. Two consequences bind this sequence:
   hashes, or verdicts may ever be transcribed into the fields below.
 
 **This prerequisite does not advance the live milestone.** No formal live
-acceptance run has been executed; the only live traffic to date is the two
-disposable smoke requests recorded below. Every evidence field in the
+acceptance sequence has been completed; the live traffic to date is the two
+disposable smoke requests and the 54 upstream calls of the aborted v1.1.0
+attempt's Run 2 (its Run 1 baseline made zero), all recorded below. Every
+evidence field in the
 Provenance table and Run log remains `PENDING` and the overall verdict
 remains PENDING.
 
@@ -50,7 +61,8 @@ request and a passed second request — and both are recorded here because this
 report's own rule applies to smoke traffic too: failed or surprising live
 runs are recorded, not discarded.
 
-**Total live requests to date: 2** (one failed, one passed). Each attempt was
+**Smoke requests: 2** (one failed, one passed); together with the aborted
+attempt below, total live requests to date are **56**. Each smoke attempt was
 one HTTP request; the router metadata's `attempt` field on the passed request
 is OpenRouter's per-call routing-attempt counter, not a request count.
 
@@ -101,6 +113,64 @@ finalization criterion compares the trace-row `modelId` only
 (`scripts/model/finalize.ts`), so the dated build is endpoint metadata about
 the serving deployment, **not** a model substitution.
 
+## Aborted formal sequence of 2026-07-29 — experiment v1.1.0 — NOT acceptance evidence
+
+One formal six-run sequence was started on 2026-07-29 at frozen SHA
+`b446ca7ac96bf5c7d28851d9aee4e2b3cb533123` (v1.6.1, tag
+`model-live-acceptance-001`) under model experiment v1.1.0, with the treatment
+`inclusionai/ling-2.6-flash` pinned to provider `novita`, caps 120/120,
+concurrency 1, timeout 20 s, and pre-registered thresholds fixed before Run 1:
+zero budget-exhausted failures, ≥ 90% upstream completion, ≥ 80%
+accepted-model coverage for Runs 2–5.
+
+**The sequence was aborted after Run 2 and none of it is acceptance
+evidence.** It is recorded here because failed or surprising live runs are
+recorded, not discarded. Its numbers are never transcribed into the Provenance
+table or Run log below, which belong to the v1.2.0 sequence.
+
+### Attempt Run 1 — Scenario A, deterministic baseline: passed
+
+Gateway deliberately stopped; the ledger proves **zero** external requests
+(all 134 decisions via `deterministic-utility-v1`). `worldStateHash`
+`8bf6de492261aa78` and `canonicalLedgerHash` `2b37e828af8d8b30` match the
+frozen goldens exactly; full ledger validation passed with replay match
+(5,715 events, `TaskCompleted` at tick 2700).
+
+### Attempt Run 2 — Scenario A, live Mara model condition: valid artifact, below thresholds — sequence aborted
+
+| Field | Value |
+| --- | --- |
+| Run ID | `43478d34-85e5-4e7b-b642-626aa3ea7a6d` |
+| Result | **valid but threshold-failing; aborted** — caused by sustained upstream rate limiting |
+| `model:finalize` | strict `status: completed` — 54 requests joined, sources `gateway+ledger+client`, 0 notes, 0 failed criteria |
+| Requested / returned model | `inclusionai/ling-2.6-flash` / `inclusionai/ling-2.6-flash`; provider `Novita` on all 42 answered calls |
+| Upstream calls attempted / completed | 54 / 42 (**77.8%** vs ≥ 90% required — FAIL) |
+| Accepted model responses | 42 of 54 (**77.8%** coverage vs ≥ 80% required — FAIL); zero engine rejections |
+| `callsFailedByCategory` | `{"upstream-error": 12}`; zero `budget-exhausted` (that criterion passed) |
+| `worldStateHash` / `canonicalLedgerHash` | `71626dab64b7d002` / `ccf56b898beac682`, replay match |
+| Tokens in / out | 100,309 / 3,694 |
+| Bundle aggregate SHA-256 | `330bd4e1452cd572f38a934db7bd3e6c6f37a04672fd6688ae4968e6494e6a54` (115 files) |
+
+**Cause.** The 12 failures were immediate upstream rejections (mean 346 ms vs
+2,342 ms for successes) clustering in the final ~10 minutes — the signature of
+a shared-pool quota depleting under sustained use, matching the smoke test's
+explicit `limit_source: upstream_provider_shared_pool`. The pinned model had
+exactly one serving endpoint, and with fallbacks correctly disabled its
+exhaustion left no route. The implementation behaved to specification
+throughout: every answered call was gate-accepted, every routing sidecar was
+written, and the artifact strict-finalized.
+
+**Disposition.** Under the freeze protocol a treatment change is a
+configuration change, so the sequence was aborted rather than continued, the
+treatment was changed for capacity (five independent structured-output
+endpoints, first-party `google-ai-studio`), and release 1.6.2 advanced the
+model experiment to v1.2.0. The v1.2.0 sequence restarts from Run 1 at a
+freshly frozen SHA. The attempt's complete evidence — both ledgers, the
+finalized run bundle, provenance, and the sequence log — is retained
+unmodified in the operator's evidence archive outside the tracked repository
+(`thelastmeal-live-acceptance-001/`), per the operator's evidence-folder
+protocol; nothing from it was deleted or rewritten.
+
 ## Provenance
 
 | Field | Value |
@@ -109,7 +179,7 @@ the serving deployment, **not** a model substitution.
 | Operator | PENDING |
 | Repository commit (exact SHA, fixed for the whole sequence) | PENDING |
 | Package version | PENDING |
-| Experiment | `model-backed-npc-001` v `1.1.0` |
+| Experiment | `model-backed-npc-001` v `1.2.0` |
 | Condition | `mara-model-per-decision-v1` |
 | External provider | `openrouter-mara-action-v1` |
 | Prompt version | `mara-action-selection-1.0.0` |
