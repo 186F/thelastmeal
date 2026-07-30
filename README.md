@@ -12,7 +12,7 @@ The authoritative specification is
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
 version `vs001-1.0.0` — those frozen experiment identifiers never change with the
-package. The implementation itself is at **release 1.7.0**, reached through this
+package. The implementation itself is at **release 1.8.0**, reached through this
 lineage:
 
 - **1.1.0** — audit remediation, per
@@ -64,9 +64,20 @@ lineage:
   VS001 known-gap registry, blinded reviewer packages for validated live
   ledgers, and the `liveSmoke.ts` shutdown-race repair (report:
   [`documentation/MILESTONE_002_PHASE2_LABORATORY_REPORT.md`](documentation/MILESTONE_002_PHASE2_LABORATORY_REPORT.md))
+- **1.8.0** — Milestone 2 Phase 3: the repository-native unattended
+  orchestrator (brief §19). One command runs a complete planned sequence —
+  strict fixed ports, a fresh gateway child process and fresh browser context
+  per attempt, paced runs through the real operator surface, automatic
+  downloads, in-browser replay gates, strict finalization with Phase 2
+  evidence enrichment, atomic resumable sequence state, failed-attempt
+  preservation, secret scanning, and portable evidence packaging.
+  `npm run m2:rehearse` self-verifies the whole pipeline keylessly, including
+  the gateway-stop drill (`m2:resume` is `m2:orchestrate -- --resume`;
+  report:
+  [`documentation/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](documentation/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md))
 
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged across all nine
+timelines, weights, the ten action categories — is unchanged across all ten
 releases; the remediations hardened the decision lifecycle, constraint
 enforcement, schemas, hashing, determinism proofs, memory generalization,
 evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,

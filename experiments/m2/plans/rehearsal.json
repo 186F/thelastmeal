@@ -1,0 +1,44 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.0.0",
+  "sequenceId": "m2-orchestrator-rehearsal",
+  "description": "Keyless unattended-orchestrator rehearsal (M2 brief §19.16 precursor): deterministic baseline, fake-gateway per-decision run, and the fake-gateway mid-run stop drill, all through the real Vite + Chromium + gateway-child pipeline. Non-evidentiary: accelerated 20× pacing per §19.17.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/rehearsal",
+  "attempts": [
+    {
+      "attemptId": "a-deterministic",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 20,
+      "gatewayMode": "off"
+    },
+    {
+      "attemptId": "a-model-fake",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-v1",
+      "speed": 20,
+      "gatewayMode": "fake",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120
+    },
+    {
+      "attemptId": "a-model-fake-gateway-stop",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-v1",
+      "speed": 20,
+      "gatewayMode": "fake",
+      "gatewayStopAtTick": 900,
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120
+    }
+  ],
+  "replacementPolicy": { "maxReplacementAttempts": 1 },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 600000,
+    "stallTimeoutMs": 60000,
+    "stallGraceMs": 10000,
+    "heartbeatIntervalMs": 10000
+  },
+  "postSequenceBatch": false
+}

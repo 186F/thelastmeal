@@ -17,7 +17,9 @@ jobs:
   checks:
     name: Required checks (clean checkout)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45 minutes: the Phase 3 keyless orchestrator rehearsal drives three
+    # complete paced browser runs (~8 minutes) on top of the frozen gates.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +80,30 @@ jobs:
       # limitations; any unregistered finding fails.
       - name: Affordance and interruption-contract audit (known-gap registry)
         run: npm run audit:affordances
+
+      # Phase 3 unattended-orchestrator gates (M2 brief §19), after the
+      # audit per the A10 ordering rule. test:m2 is the fast logic suite;
+      # m2:rehearse drives the COMPLETE keyless unattended pipeline —
+      # Vite + Chromium + fresh fake-gateway children — and self-verifies
+      # the §19 properties including the gateway-stop drill, idempotent
+      # resume, identity-refused resume, and preserved-failure drill.
+      - name: Orchestrator unit and integration tests
+        run: npm run test:m2
+
+      - name: Keyless unattended-orchestrator rehearsal
+        run: npm run m2:rehearse -- --ci
+
+      - name: Upload m2 rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-orchestrator-rehearsal
+          path: |
+            artifacts/m2-rehearsal/m2-rehearsal-report.json
+            artifacts/m2-sequences/rehearsal/sequence-report.json
+            artifacts/m2-sequences/rehearsal/sequence-report.md
+            artifacts/m2-sequences/rehearsal/sequence-state.json
+          if-no-files-found: ignore
 
       - name: Upload model-rehearsal report
         if: always()

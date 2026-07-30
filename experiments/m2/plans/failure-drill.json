@@ -1,0 +1,25 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.0.0",
+  "sequenceId": "m2-orchestrator-failure-drill",
+  "description": "Failure-preservation drill (M2 brief §19.9–§19.10): a deterministic attempt with an intentionally impossible wall-clock timeout. The rehearsal EXPECTS this sequence to fail, preserving the attempt directory, diagnostics, and sequence state — proving timeouts create preserved failed attempts, never deleted evidence.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/failure-drill",
+  "attempts": [
+    {
+      "attemptId": "a-timeout-drill",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 20,
+      "gatewayMode": "off"
+    }
+  ],
+  "replacementPolicy": { "maxReplacementAttempts": 0 },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 20000,
+    "stallTimeoutMs": 60000,
+    "stallGraceMs": 5000,
+    "heartbeatIntervalMs": 5000
+  },
+  "postSequenceBatch": false
+}
