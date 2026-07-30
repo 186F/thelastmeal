@@ -806,10 +806,11 @@ In every Milestone 2 evaluator and report, describe the commitment field as:
 > The mechanical commitment terminal status produced under VS001 rules.
 
 Do not present it as a validated attribution of moral responsibility or
-realistic blame — Milestone 1 documented that VS001's breach attribution can
-invert proximate cause (see §7.3). It may remain a behavioral-similarity
-component because both compared Milestone 2 conditions operate under the same
-frozen rules.
+realistic blame: VS001's mechanical attribution has not been validated as
+realistic blame assignment, and whether it inverts proximate cause is part of
+the deferred Vertical Slice 002 question (§7.3). It may remain a
+behavioral-similarity component because both compared Milestone 2 conditions
+operate under the same frozen rules.
 
 ## 10.12 Blinded reviewer packages for live runs
 
@@ -1798,6 +1799,11 @@ estimated maximum input/output tokens when calculable
 ```
 
 Never print or persist the API key.
+
+The orchestrator must **refuse to start** when the plan's worst-case call
+budget (planned live attempts × per-run cap, bounded by the process cap)
+exceeds the acknowledged live-call budget declared in the plan or registered
+study file.
 
 ## 19.15 Secret boundary
 
