@@ -12,7 +12,7 @@ The authoritative specification is
 (placed under `documentation/` rather than the repo root; content unchanged). This
 implementation is experiment version **Vertical Slice 001 — v1.0**, configuration
 version `vs001-1.0.0` — those frozen experiment identifiers never change with the
-package. The implementation itself is at **release 1.6.2**, reached through this
+package. The implementation itself is at **release 1.7.0**, reached through this
 lineage:
 
 - **1.1.0** — audit remediation, per
@@ -54,9 +54,19 @@ lineage:
   [`documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](documentation/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md);
   attempt record in
   [`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md))
+- **1.7.0** — Milestone 2 (sparse cognition) in progress, per
+  [`documentation/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md`](documentation/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md)
+  and the authoritative
+  [`documentation/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](documentation/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md).
+  Phase 2 (laboratory foundation) landed first: versioned behavioral
+  fingerprints and deterministic similarity, the general study registry with
+  study-local freezes, the affordance/interruption-contract auditors with the
+  VS001 known-gap registry, blinded reviewer packages for validated live
+  ledgers, and the `liveSmoke.ts` shutdown-race repair (report:
+  [`documentation/MILESTONE_002_PHASE2_LABORATORY_REPORT.md`](documentation/MILESTONE_002_PHASE2_LABORATORY_REPORT.md))
 
 The frozen experiment data — scenarios, seeds, identities, needs, rates,
-timelines, weights, the ten action categories — is unchanged across all eight
+timelines, weights, the ten action categories — is unchanged across all nine
 releases; the remediations hardened the decision lifecycle, constraint
 enforcement, schemas, hashing, determinism proofs, memory generalization,
 evaluation blinding, and (1.3.0/1.4.0) the model-integration transport,

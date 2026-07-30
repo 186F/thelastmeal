@@ -1,14 +1,15 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { SCENARIO_IDS, NPC_IDS, type NpcId, type ScenarioId } from '../../src/shared/ids';
-import type { BlindingAnswerKey, BlindingMap } from '../../src/shared/traces';
+import { SCENARIO_IDS, NPC_IDS, type ScenarioId } from '../../src/shared/ids';
+import type { BlindingAnswerKey } from '../../src/shared/traces';
 import { buildBehaviorOnlyTraces } from '../../src/sim/traces';
 import {
   INDIVIDUALITY_EVAL_VERSION,
   roleBalance,
   runRoleCounterbalancedEval,
 } from '../../src/sim/evaluation/individuality';
+import { hasFlag, readOption } from '../cli/args';
+import { makeBlinding } from './blinding';
 
 /**
  * Individuality-evaluation package generator (remediation 7).
@@ -27,53 +28,16 @@ import {
  * simulation state or hashes, and these runs never enter the v1.0 report.
  *
  * Usage:
- *   npm run eval:individuality -- [--scenarios=A,C,D] [--answer-key]
+ *   npm run eval:individuality -- [--scenarios A,C,D] [--answer-key]
+ *   (both `--name value` and `--name=value` spellings are accepted)
  */
-
-function token(bytes: number): string {
-  return randomBytes(bytes).toString('hex');
-}
-
-function cryptoShuffle<T>(items: readonly T[]): T[] {
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    // Rejection sampling for an unbiased index from crypto bytes.
-    let j = 0;
-    for (;;) {
-      const byte = randomBytes(1)[0]!;
-      const limit = 256 - (256 % (i + 1));
-      if (byte < limit) {
-        j = byte % (i + 1);
-        break;
-      }
-    }
-    const swap = out[i]!;
-    out[i] = out[j]!;
-    out[j] = swap;
-  }
-  return out;
-}
-
-function makeBlinding(): BlindingMap {
-  const labels = cryptoShuffle(['agent-A', 'agent-B', 'agent-C']);
-  const labelByNpc = {} as Record<NpcId, string>;
-  NPC_IDS.forEach((npcId, index) => {
-    labelByNpc[npcId] = labels[index]!;
-  });
-  return { sessionLabel: `session-${token(6)}`, labelByNpc };
-}
 
 function main(): void {
   const args = process.argv.slice(2);
-  const scenarioArg = args.find((a) => a.startsWith('--scenarios='));
-  const withAnswerKey = args.includes('--answer-key');
+  const scenarioArg = readOption(args, 'scenarios');
+  const withAnswerKey = hasFlag(args, 'answer-key');
   const scenarioIds = (
-    scenarioArg
-      ? scenarioArg
-          .slice('--scenarios='.length)
-          .split(',')
-          .map((s) => s.trim())
-      : [...SCENARIO_IDS]
+    scenarioArg ? scenarioArg.split(',').map((s) => s.trim()) : [...SCENARIO_IDS]
   ) as ScenarioId[];
   for (const id of scenarioIds) {
     if (!(SCENARIO_IDS as readonly string[]).includes(id)) {

@@ -1,0 +1,98 @@
+{
+  "formatVersion": 1,
+  "fixtureId": "kg-vs001-renegotiation-response-window",
+  "scenarioId": "C",
+  "description": "Committed synthetic event-stream fixture (Phase 2 audit finding 2): deterministically reproduces the exact KG-VS001-RENEGOTIATION-RESPONSE-WINDOW finding through the real auditEventStream code. A relieve-at-bench commitment gains a renegotiation proposal from the debtor; the responder (creditor) is consulted twice while the proposal is pending and is never offered accept-renegotiation or reject-renegotiation; the commitment then resolves. Models the v1.2.0 live Run 5 occurrence whose raw evidence is retained outside the Git tree. SYNTHETIC: this is not an exported ledger and carries no hashes; it exists solely so CI proves the detector still observes the registered gap.",
+  "events": [
+    {
+      "id": "evt-fixture-000001",
+      "seq": 0,
+      "type": "CommitmentCreated",
+      "tick": 10,
+      "schemaVersion": 1,
+      "actorId": "mara",
+      "targetId": "cmt-fixture-1",
+      "causationId": null,
+      "correlationId": null,
+      "payload": {
+        "commitmentId": "cmt-fixture-1",
+        "kind": "relieve-at-bench",
+        "debtorId": "mara",
+        "creditorId": "jonas",
+        "termsCode": "relieve-by-tick",
+        "dueTick": 600
+      }
+    },
+    {
+      "id": "evt-fixture-000002",
+      "seq": 1,
+      "type": "CommitmentRenegotiationProposed",
+      "tick": 20,
+      "schemaVersion": 1,
+      "actorId": "mara",
+      "targetId": "cmt-fixture-1",
+      "causationId": null,
+      "correlationId": null,
+      "payload": {
+        "proposalId": "prop-fixture-1",
+        "commitmentId": "cmt-fixture-1",
+        "proposedByNpcId": "mara",
+        "proposedTerms": { "termsCode": "relieve-by-tick", "dueTick": 900 }
+      }
+    },
+    {
+      "id": "evt-fixture-000003",
+      "seq": 2,
+      "type": "DecisionRequested",
+      "tick": 25,
+      "schemaVersion": 1,
+      "actorId": "jonas",
+      "targetId": null,
+      "causationId": null,
+      "correlationId": null,
+      "payload": {
+        "npcId": "jonas",
+        "requestId": "req-fixture-1",
+        "providerId": "deterministic-utility-v1",
+        "offeredAffordances": [
+          { "id": "aff-fixture-wait-1", "mode": "wait", "interruptible": true, "proposalId": null },
+          { "id": "aff-fixture-rest-1", "mode": "rest", "interruptible": true, "proposalId": null }
+        ]
+      }
+    },
+    {
+      "id": "evt-fixture-000004",
+      "seq": 3,
+      "type": "DecisionRequested",
+      "tick": 30,
+      "schemaVersion": 1,
+      "actorId": "jonas",
+      "targetId": null,
+      "causationId": null,
+      "correlationId": null,
+      "payload": {
+        "npcId": "jonas",
+        "requestId": "req-fixture-2",
+        "providerId": "deterministic-utility-v1",
+        "offeredAffordances": [
+          { "id": "aff-fixture-wait-2", "mode": "wait", "interruptible": true, "proposalId": null }
+        ]
+      }
+    },
+    {
+      "id": "evt-fixture-000005",
+      "seq": 4,
+      "type": "CommitmentFulfilled",
+      "tick": 40,
+      "schemaVersion": 1,
+      "actorId": "mara",
+      "targetId": "cmt-fixture-1",
+      "causationId": null,
+      "correlationId": null,
+      "payload": {
+        "commitmentId": "cmt-fixture-1",
+        "fulfilledByNpcId": "mara"
+      }
+    }
+  ]
+}

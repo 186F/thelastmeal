@@ -1,8 +1,8 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.6.2",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0; finalized-trace event semantics at 1.6.1; model-experiment treatment change to v1.2.0 at 1.6.2)",
+  "version": "1.7.0",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0; finalized-trace event semantics at 1.6.1; model-experiment treatment change to v1.2.0 at 1.6.2; Milestone 2 sparse-cognition laboratory foundation at 1.7.0)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,6 +22,12 @@
     "validate": "tsx scripts/validate/run.ts",
     "batch": "tsx scripts/batch/run.ts",
     "eval:individuality": "tsx scripts/evaluation/individuality.ts",
+    "eval:behavior": "tsx scripts/evaluation/behavior.ts",
+    "eval:compare": "tsx scripts/evaluation/compare.ts",
+    "eval:reviewer-package": "tsx scripts/evaluation/reviewerPackages.ts",
+    "eval:score-reviews": "tsx scripts/evaluation/reviewerPackages.ts --score-mode",
+    "study:validate": "tsx scripts/experiments/m2/studyRegistry.ts",
+    "audit:affordances": "tsx scripts/audit/affordances.ts",
     "gateway:dev": "tsx gateway/main.ts",
     "gateway:dev:fake": "tsx gateway/main.ts --fake",
     "build:gateway": "vite build --config gateway/vite.config.ts",
