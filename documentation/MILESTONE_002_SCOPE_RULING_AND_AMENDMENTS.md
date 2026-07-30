@@ -148,17 +148,39 @@ Accelerated execution may be used for:
 
 No accelerated live run may enter a behavioral study until a separately pre-registered pacing-comparability study demonstrates that the alternate pace preserves the relevant race, latency, supersession, and fallback semantics.
 
-## 3.5 Initial unattended acceptance test
+## 3.5 Initial unattended acceptance test (staged)
 
-Before using the harness for R2 or the formal M2 sequence, it must complete this three-run unattended acceptance:
+*(Staged per the Advisor's sequencing correction of 2026-07-30, which resolves
+the contradiction between the original three-run gate and the phase in which
+the policy-patch condition first exists.)*
+
+The unattended acceptance is a **staged gate**:
 
 ```text
+Stage A — before the R2 variance-calibration study
+
 1. Scenario A — deterministic baseline — gateway off
-2. Scenario A — M2 per-decision condition — live gateway
-3. Scenario A — M2 policy-patch condition — live gateway
+2. Scenario A — M2 per-decision — live gateway
+
+Both must pass before R2 begins.
 ```
 
-The two model-backed runs must:
+```text
+Stage B — after the policy system exists
+
+Prerequisites:
+- Phase 5 policy implementation complete
+- Phase 6 adversarial audit complete
+- policy path passes keyless rehearsal
+
+3. Scenario A — M2 policy-patch — live gateway
+
+This completes the full three-run acceptance and gates:
+- further policy-condition live studies
+- the formal Milestone 2 sequence
+```
+
+Every model-backed acceptance run (Stage A run 2 and Stage B run 3) must:
 
 - strict-finalize as `completed`,
 - replay exactly,
@@ -166,6 +188,12 @@ The two model-backed runs must:
 - record the pinned model and provider,
 - use no manual browser interaction after launch,
 - create no secret-bearing artifact.
+
+The policy-patch half of the paired live pilot may also satisfy Run 3,
+provided it meets every acceptance requirement above. The per-decision half of
+that final pilot must still run on the same final candidate SHA, because
+shared gateway, automation, artifact, or evaluation code may have changed
+since Stage A.
 
 The gateway-stop path must first be demonstrated keylessly and then included in the formal M2 sequence.
 
@@ -804,7 +832,8 @@ Prove:
 ## Phase 4 — M2 per-decision comparator
 
 - Implement the new M2 action prompt and condition.
-- Run the three-run unattended harness acceptance.
+- Run **Stage A** of the staged unattended harness acceptance (§3.5): the
+  deterministic-baseline and per-decision runs.
 - Execute the R2 variance calibration study.
 
 ## Phase 5 — Sparse policy system
@@ -828,6 +857,12 @@ Run one unattended live attempt for each M2 condition:
 mara-model-per-decision-m2-v1
 mara-policy-patch-m2-v1
 ```
+
+The policy-patch pilot attempt may satisfy **Stage B** (Run 3) of the staged
+acceptance (§3.5) provided it meets every acceptance requirement; its
+prerequisites (policy implementation, adversarial audit, keyless rehearsal of
+the policy path) must be complete first. The per-decision pilot half must run
+on the same final candidate SHA.
 
 After the pilot, any material prompt, schema, metric, threshold, model, or provider change requires new versioning and a repeated pilot.
 

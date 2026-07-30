@@ -1801,9 +1801,25 @@ estimated maximum input/output tokens when calculable
 Never print or persist the API key.
 
 The orchestrator must **refuse to start** when the plan's worst-case call
-budget (planned live attempts × per-run cap, bounded by the process cap)
-exceeds the acknowledged live-call budget declared in the plan or registered
-study file.
+budget exceeds the acknowledged live-call budget declared in the plan or
+registered study file. Because every attempt starts a fresh gateway process
+(so the process-wide cap resets per attempt), the worst case is:
+
+```text
+worstCaseStudyCalls =
+  sum over every planned primary and maximum permitted replacement attempt of:
+    min(attempt.maxCallsPerRun, attempt.maxTotalCalls)
+```
+
+For uniform limits:
+
+```text
+worstCaseStudyCalls =
+  maximumPossibleLiveAttempts × min(maxCallsPerRun, maxTotalCalls)
+```
+
+`maximumPossibleLiveAttempts` must include all replacements authorized by the
+registered study plan.
 
 ## 19.15 Secret boundary
 
@@ -1813,22 +1829,45 @@ state. It may only spawn the gateway process, which remains the sole component
 responsible for reading live credentials through its existing configuration
 loader.
 
-## 19.16 Initial unattended acceptance test
+## 19.16 Initial unattended acceptance test (staged)
 
-Before the harness may be used for the variance calibration study (§22.6) or
-the formal Milestone 2 sequence, it must complete this three-run unattended
-acceptance:
+The unattended acceptance is a **staged gate** (per the Advisor's sequencing
+correction of 2026-07-30):
 
 ```text
+Stage A — before the R2 variance-calibration study (§22.6)
+
 1. Scenario A — deterministic baseline — gateway off
-2. Scenario A — M2 per-decision condition — live gateway
-3. Scenario A — M2 policy-patch condition — live gateway
+2. Scenario A — M2 per-decision — live gateway
+
+Both must pass before R2 begins.
 ```
 
-The two model-backed runs must strict-finalize as `completed`, replay exactly,
-produce complete evidence bundles, record the pinned model and provider, use
-no manual browser interaction after launch, and create no secret-bearing
-artifact.
+```text
+Stage B — after the policy system exists
+
+Prerequisites:
+- Phase 5 policy implementation complete
+- Phase 6 adversarial audit complete
+- policy path passes keyless rehearsal
+
+3. Scenario A — M2 policy-patch — live gateway
+
+This completes the full three-run acceptance and gates:
+- further policy-condition live studies
+- the formal Milestone 2 sequence
+```
+
+Every model-backed acceptance run (Stage A run 2 and Stage B run 3) must
+strict-finalize as `completed`, replay exactly, produce complete evidence
+bundles, record the pinned model and provider, use no manual browser
+interaction after launch, and create no secret-bearing artifact.
+
+The policy-patch half of the §22.2 paired live pilot may satisfy Run 3,
+provided it meets every acceptance requirement above. The per-decision half of
+that final pilot must still run on the same final candidate SHA, because
+shared gateway, automation, artifact, or evaluation code may have changed
+since Stage A.
 
 The gateway-stop path must first be demonstrated **keylessly** (fake adapter)
 before any live spend, and again inside the formal Milestone 2 sequence.
@@ -2049,6 +2088,12 @@ The pilot validates:
 
 Pilot evidence is not formal evidence and must be stored separately.
 
+The policy-patch pilot attempt may satisfy **Stage B** (Run 3) of the §19.16
+staged acceptance, provided it meets every acceptance requirement and its
+prerequisites (Phase 5 policy implementation, Phase 6 adversarial audit,
+keyless rehearsal of the policy path) are complete. The per-decision pilot
+half must run on the same final candidate SHA.
+
 ## 22.3 Formal sequence
 
 Primary scenarios:
@@ -2104,8 +2149,9 @@ All primary live runs use 1× speed and may not be paused while awaiting inferen
 
 ## 22.6 Repeat-run variance calibration study
 
-The **first live study** executed through the unattended harness (after the
-§19.16 acceptance test) is a registered calibration study measuring how
+The **first live study** executed through the unattended harness (after
+**Stage A** of the §19.16 staged acceptance) is a registered calibration study
+measuring how
 behaviorally different Mara is from herself under identical observable
 configuration:
 
@@ -2731,7 +2777,8 @@ possible.
 ## Phase 4 — M2 per-decision comparator
 
 - Implement the new M2 action prompt and condition.
-- Run the §19.16 three-run unattended acceptance test.
+- Run **Stage A** of the §19.16 staged unattended acceptance (the
+  deterministic-baseline and per-decision runs).
 - Execute the §22.6 variance calibration study
   (`m2-calibration-variance-a-001`).
 
@@ -2753,9 +2800,13 @@ regression test.
 ## Phase 7 — Keyless rehearsal and live pilot
 
 Run all clean-checkout gates. Then perform the two-run live pilot (one
-unattended attempt per M2 condition) and inspect artifacts. After the pilot,
-any material prompt, schema, metric, threshold, model, or provider change
-requires new versioning and a repeated pilot.
+unattended attempt per M2 condition) and inspect artifacts. The policy-patch
+pilot attempt may satisfy **Stage B** (Run 3) of the §19.16 staged acceptance
+if it meets every acceptance requirement; the per-decision pilot half must run
+on the same final candidate SHA. Stage B must be complete before further
+policy-condition live studies or the formal sequence. After the pilot, any
+material prompt, schema, metric, threshold, model, or provider change requires
+new versioning and a repeated pilot.
 
 ## Phase 8 — Freeze and formal sequence
 
@@ -2909,7 +2960,7 @@ Milestone 2 is complete only when all of the following are true.
 ## Automation
 
 - [ ] The formal plan runs with one command and no browser clicks by the user.
-- [ ] The §19.16 three-run unattended acceptance test passed before any live study.
+- [ ] §19.16 Stage A (baseline + per-decision) passed before any live study; Stage B (policy-patch) passed before policy-condition live studies and the formal sequence.
 - [ ] Fresh gateway and browser context are used per attempt.
 - [ ] The orchestrator never reads `.env.gateway` or the API key (§19.15).
 - [ ] Downloads, replay, finalization, evaluation, and packaging are automatic.
