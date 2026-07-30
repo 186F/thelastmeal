@@ -10,7 +10,8 @@ import { EXTERNAL_MARA_PROVIDER_ID } from './modelExperiment';
  * requests while the stopped gateway completed only 10 upstream calls, and
  * the Milestone 2 policy executor (`mara-policy-patch-executor-v1`) is a
  * deterministic LOCAL provider whose decisions must never count as external
- * calls — the 25% call-reduction claim (brief §12) depends on it.
+ * calls — the 25% call-reduction target (brief §2, restated as RQ1 in §3)
+ * depends on it.
  */
 
 export const PROVIDER_SOURCE_CLASSES = [
@@ -38,13 +39,18 @@ export const M2_POLICY_COMPILER_PROVIDER_ID = 'openrouter-mara-policy-compiler-v
  * (`fallback-continue-or-wait-v2`) is deliberately absent: it serves
  * RESPONSES for an existing request (flagged `usedFallback`), it is never the
  * authority a request is addressed to.
+ *
+ * A `Map`, not an object literal: provider IDs come from evidence files, and
+ * an object index would resolve `Object.prototype` member names
+ * (`constructor`, `toString`, `__proto__`, ...) to inherited values instead
+ * of `undefined`, silently bypassing the unknown-ID error below.
  */
-export const PROVIDER_SOURCE_TAXONOMY: Readonly<Record<string, ProviderSourceClass>> = {
-  'deterministic-utility-v1': 'deterministic-utility',
-  [EXTERNAL_MARA_PROVIDER_ID]: 'external-action-request',
-  [M2_POLICY_EXECUTOR_PROVIDER_ID]: 'local-policy-executor',
-  [M2_POLICY_COMPILER_PROVIDER_ID]: 'external-policy-compilation',
-};
+export const PROVIDER_SOURCE_TAXONOMY: ReadonlyMap<string, ProviderSourceClass> = new Map([
+  ['deterministic-utility-v1', 'deterministic-utility'],
+  [EXTERNAL_MARA_PROVIDER_ID, 'external-action-request'],
+  [M2_POLICY_EXECUTOR_PROVIDER_ID, 'local-policy-executor'],
+  [M2_POLICY_COMPILER_PROVIDER_ID, 'external-policy-compilation'],
+]);
 
 /** Provider IDs whose requests can legally reach an upstream model service.
  * Everything else is local by construction. */
@@ -65,7 +71,7 @@ export class ProviderClassificationError extends Error {
 }
 
 export function classifyProviderId(providerId: string): ProviderSourceClass {
-  const sourceClass = PROVIDER_SOURCE_TAXONOMY[providerId];
+  const sourceClass = PROVIDER_SOURCE_TAXONOMY.get(providerId);
   if (sourceClass === undefined) throw new ProviderClassificationError(providerId);
   return sourceClass;
 }

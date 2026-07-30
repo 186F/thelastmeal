@@ -8,6 +8,7 @@ import {
   roleBalance,
   runRoleCounterbalancedEval,
 } from '../../src/sim/evaluation/individuality';
+import { hasFlag, readOption } from '../cli/args';
 import { makeBlinding } from './blinding';
 
 /**
@@ -27,20 +28,16 @@ import { makeBlinding } from './blinding';
  * simulation state or hashes, and these runs never enter the v1.0 report.
  *
  * Usage:
- *   npm run eval:individuality -- [--scenarios=A,C,D] [--answer-key]
+ *   npm run eval:individuality -- [--scenarios A,C,D] [--answer-key]
+ *   (both `--name value` and `--name=value` spellings are accepted)
  */
 
 function main(): void {
   const args = process.argv.slice(2);
-  const scenarioArg = args.find((a) => a.startsWith('--scenarios='));
-  const withAnswerKey = args.includes('--answer-key');
+  const scenarioArg = readOption(args, 'scenarios');
+  const withAnswerKey = hasFlag(args, 'answer-key');
   const scenarioIds = (
-    scenarioArg
-      ? scenarioArg
-          .slice('--scenarios='.length)
-          .split(',')
-          .map((s) => s.trim())
-      : [...SCENARIO_IDS]
+    scenarioArg ? scenarioArg.split(',').map((s) => s.trim()) : [...SCENARIO_IDS]
   ) as ScenarioId[];
   for (const id of scenarioIds) {
     if (!(SCENARIO_IDS as readonly string[]).includes(id)) {

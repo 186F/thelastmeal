@@ -20,6 +20,7 @@ import {
 } from '../../scripts/audit/affordances';
 import { exportedFile } from '../ledgerCorruption';
 import { freshState } from '../helpers';
+import { REQUEST_REFUSAL_COOLDOWN_TICKS } from '../../src/sim/config';
 import { ACTION_MODES } from '../../src/shared/ids';
 import type { EventEnvelope } from '../../src/shared/events';
 import type { AuditFinding } from '../../src/sim/audit/findings';
@@ -315,6 +316,95 @@ describe('event-stream audit over deterministic exports', () => {
     const mismatch = findings.find((f) => f.checkId === 'contract-advertisement-mismatch');
     expect(mismatch).toBeDefined();
     expect(matchKnownGap(mismatch!)).toBeNull();
+  });
+
+  describe('dilemma state-satisfaction arithmetic (synthetic streams through the real auditor)', () => {
+    // Minimal synthetic event streams: the auditor reads type/tick/payload
+    // only, so these test the detector's transfer-lifecycle state machine
+    // directly — including boundaries no frozen scenario reaches.
+    let seq = 0;
+    function evt(type: string, tick: number, payload: Record<string, unknown>): EventEnvelope {
+      seq += 1;
+      return { id: `evt-dlm-${seq}`, seq, type, tick, schemaVersion: 1, payload } as EventEnvelope;
+    }
+    function triggeringSet(tick: number, npcId = 'mara'): EventEnvelope {
+      return evt('DecisionRequested', tick, {
+        npcId,
+        requestId: `req-dlm-${tick}`,
+        providerId: 'deterministic-utility-v1',
+        offeredAffordances: [
+          { id: `aff-ev-${tick}`, mode: 'eat-violation', interruptible: false, proposalId: null },
+          { id: `aff-w-${tick}`, mode: 'wait', interruptible: true, proposalId: null },
+        ],
+      });
+    }
+    const requested = (tick: number, requestId: string) =>
+      evt('ReservationTransferRequested', tick, {
+        requestId,
+        resourceId: 'meal-1',
+        requesterNpcId: 'mara',
+        ownerNpcId: 'rin',
+      });
+    const refused = (tick: number, requestId: string) =>
+      evt('ReservationTransferRefused', tick, {
+        requestId,
+        resourceId: 'meal-1',
+        ownerNpcId: 'rin',
+        requesterNpcId: 'mara',
+        reasonCode: 'owner-declined',
+      });
+    const transferred = (tick: number, requestId: string) =>
+      evt('ReservationTransferred', tick, {
+        resourceId: 'meal-1',
+        fromNpcId: 'rin',
+        toNpcId: 'mara',
+        requestId,
+      });
+
+    it('a pending own request satisfies lawful acquisition', () => {
+      const result = auditEventStreamDetailed('D', [requested(50, 'tr-1'), triggeringSet(60)]);
+      expect(result.findings).toEqual([]);
+      expect(result.dilemmaStats[0]!.satisfiedByPendingRequest).toBe(1);
+      expect(result.dilemmaStats[0]!.satisfiedByRefusalCooldown).toBe(0);
+    });
+
+    it('a resolved (transferred) request clears the pending state — withholding afterwards is a finding', () => {
+      const result = auditEventStreamDetailed('D', [
+        requested(50, 'tr-1'),
+        transferred(70, 'tr-1'),
+        triggeringSet(80),
+      ]);
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0]!.checkId).toBe('dilemma-missing-lawful-exits');
+      expect(matchKnownGap(result.findings[0]!)).toBeNull();
+    });
+
+    it('the refusal cooldown satisfies lawful acquisition on its last active tick', () => {
+      const result = auditEventStreamDetailed('D', [
+        requested(50, 'tr-1'),
+        refused(100, 'tr-1'),
+        triggeringSet(100 + REQUEST_REFUSAL_COOLDOWN_TICKS - 1),
+      ]);
+      expect(result.findings).toEqual([]);
+      expect(result.dilemmaStats[0]!.satisfiedByRefusalCooldown).toBe(1);
+      expect(result.dilemmaStats[0]!.satisfiedByPendingRequest).toBe(0);
+    });
+
+    it('an expired cooldown no longer excuses a withheld request-transfer (boundary = engine re-offer tick)', () => {
+      // The engine re-offers request-transfer at exactly refusalTick +
+      // REQUEST_REFUSAL_COOLDOWN_TICKS; withholding at that tick is a
+      // generation-invariant violation, so a never-expiring cooldown in the
+      // detector would wrongly pass this stream.
+      const result = auditEventStreamDetailed('D', [
+        requested(50, 'tr-1'),
+        refused(100, 'tr-1'),
+        triggeringSet(100 + REQUEST_REFUSAL_COOLDOWN_TICKS),
+      ]);
+      expect(result.findings.length).toBe(1);
+      expect(result.findings[0]!.checkId).toBe('dilemma-missing-lawful-exits');
+      expect(result.findings[0]!.key.missingClasses).toBe('lawful-acquisition');
+      expect(matchKnownGap(result.findings[0]!)).toBeNull();
+    });
   });
 
   it('MUTATION GUARD: withholding request-transfer with no pending request and no cooldown is an unregistered finding', () => {

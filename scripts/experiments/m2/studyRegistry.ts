@@ -8,9 +8,11 @@ import {
 } from '../../../src/shared/studyRegistry';
 import { canonicalSerialize } from '../../../src/sim/replay/serialize';
 import { fnv1a64Hex } from '../../../src/sim/replay/hash';
+import { hasFlag, readOption } from '../../cli/args';
 
 /**
  * `npm run study:validate -- --study <path> [--write-hash]`
+ * (both `--name value` and `--name=value` spellings are accepted)
  *
  * Validates a registered study declaration (M2 brief §21.1), then prints the
  * two study-local freeze artifacts (§21.2):
@@ -54,10 +56,10 @@ export function validateStudyFile(path: string): {
 }
 
 export function runStudyRegistryCli(argv: readonly string[]): number {
-  const studyArg = argv.find((a) => a.startsWith('--study='))?.slice('--study='.length);
-  const writeHash = argv.includes('--write-hash');
+  const studyArg = readOption(argv, 'study');
+  const writeHash = hasFlag(argv, 'write-hash');
   if (!studyArg) {
-    console.error('usage: study:validate -- --study=<path> [--write-hash]');
+    console.error('usage: study:validate -- --study <path> [--write-hash]');
     return 1;
   }
   const { study, freeze } = validateStudyFile(studyArg);

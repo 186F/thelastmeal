@@ -459,6 +459,27 @@ describe('provider-source taxonomy (audit finding 1)', () => {
     );
   });
 
+  it('Object.prototype member names are unknown IDs, never inherited classifications', () => {
+    // Provider IDs come from evidence files; an object-literal registry would
+    // resolve these to inherited values instead of throwing.
+    for (const hostile of [
+      'constructor',
+      'toString',
+      'valueOf',
+      'hasOwnProperty',
+      'isPrototypeOf',
+      '__proto__',
+    ]) {
+      expect(() => classifyProviderId(hostile), hostile).toThrow(ProviderClassificationError);
+    }
+    const mutated = JSON.parse(JSON.stringify(exportedFile('A'))) as LedgerFile;
+    for (const event of mutated.events) {
+      const p = event.payload as Record<string, unknown>;
+      if (event.type === 'DecisionRequested') p.providerId = 'constructor';
+    }
+    expect(() => fingerprintOf(mutated)).toThrow(ProviderClassificationError);
+  });
+
   it('registers exactly the OpenRouter action and compiler authorities as upstream-capable', () => {
     expect([...UPSTREAM_CAPABLE_PROVIDER_IDS].sort()).toEqual(
       [EXTERNAL_MARA_PROVIDER_ID, M2_POLICY_COMPILER_PROVIDER_ID].sort(),
