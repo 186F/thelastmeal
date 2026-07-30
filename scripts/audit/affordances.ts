@@ -291,13 +291,13 @@ export function renderAuditMarkdown(report: AuditReport): string {
   lines.push('## Dilemma checkpoint evaluations');
   lines.push('');
   lines.push(
-    '| source | dilemma | triggering sets | by offered modes | by pending request | by refusal cooldown | missing-exit findings |',
+    '| source | dilemma | triggering sets | by offered modes | by pending request | resolved by refusal cooldown | missing-exit findings |',
   );
   lines.push('| --- | --- | --- | --- | --- | --- | --- |');
   for (const s of report.dilemmaStats) {
     lines.push(
       `| ${s.source} | ${s.dilemmaId} | ${s.triggeringOfferSets} | ${s.satisfiedByOfferedModes} | ` +
-        `${s.satisfiedByPendingRequest} | ${s.satisfiedByRefusalCooldown} | ${s.missingExitFindings} |`,
+        `${s.satisfiedByPendingRequest} | ${s.resolvedByRefusalCooldown} | ${s.missingExitFindings} |`,
     );
   }
   lines.push('');

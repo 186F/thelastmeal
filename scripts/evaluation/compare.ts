@@ -3,21 +3,26 @@ import { pathToFileURL } from 'node:url';
 import { buildBehaviorFingerprints } from '../../src/sim/evaluation/behaviorFingerprint';
 import { compareBehaviorFingerprintSets } from '../../src/sim/evaluation/behaviorSimilarity';
 import { readOption } from '../cli/args';
-import {
-  loadValidatedLedger,
-  renderComparisonMarkdown,
-  writeCanonicalJson,
-  writeText,
-} from './behaviorIo';
+import { enrichFingerprintSet, loadEvaluationEvidence, type EvaluationEvidence } from './evidence';
+import { renderComparisonMarkdown, writeCanonicalJson, writeText } from './behaviorIo';
 
 /**
  * `npm run eval:compare -- --left <path> --right <path> [--out <dir>] [--name <stem>]`
  * (both `--name value` and `--name=value` spellings are accepted)
  *
- * Validates both inputs, builds fingerprints, and computes the versioned
- * behavioral similarity (M2 brief §10.6–10.7). Refuses non-comparable
- * pairings (same scenario+seed, or the registered B1/B2 ablation pair only).
+ * Validates both inputs, builds fingerprints (enriched with proven condition
+ * and upstream-call evidence for strict-finalized run directories), and
+ * computes the versioned behavioral similarity (M2 brief §10.6–10.7).
+ * Refuses non-comparable pairings (same scenario+seed, or the registered
+ * B1/B2 ablation pair only).
  */
+
+function fingerprintsFor(evidence: EvaluationEvidence) {
+  const set = buildBehaviorFingerprints(evidence.file);
+  return evidence.kind === 'strict-finalized-run'
+    ? enrichFingerprintSet(set, evidence.enrichment)
+    : set;
+}
 
 export function runCompareCli(argv: readonly string[]): number {
   const leftArg = readOption(argv, 'left');
@@ -31,11 +36,9 @@ export function runCompareCli(argv: readonly string[]): number {
     return 1;
   }
   const outDir = outArg ?? join('artifacts', 'behavior-eval');
-  const left = loadValidatedLedger(leftArg);
-  const right = loadValidatedLedger(rightArg);
   const comparison = compareBehaviorFingerprintSets(
-    buildBehaviorFingerprints(left.file),
-    buildBehaviorFingerprints(right.file),
+    fingerprintsFor(loadEvaluationEvidence(leftArg)),
+    fingerprintsFor(loadEvaluationEvidence(rightArg)),
   );
   const mara = comparison.npcs.mara;
   const stem =

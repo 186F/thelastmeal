@@ -1,7 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
-import type { LedgerFile } from '../../src/shared/ledgerFile';
 import { canonicalSerialize } from '../../src/sim/replay/serialize';
 import { NPC_IDS } from '../../src/shared/ids';
 import type {
@@ -15,43 +13,9 @@ import type {
  * only loads, validates, renders, and writes.
  */
 
-export interface LoadedLedger {
-  sourcePath: string;
-  ledgerPath: string;
-  file: LedgerFile;
-}
-
-/**
- * Accepts either a ledger JSON file or a run directory containing exactly one
- * `ledger-*.json` (a finalized model-run directory qualifies). The ledger is
- * fully validated — schema, semantics, isolated replay, recomputed hashes —
- * before any evaluation runs.
- */
-export function loadValidatedLedger(inputPath: string): LoadedLedger {
-  if (!existsSync(inputPath)) throw new Error(`input-not-found: ${inputPath}`);
-  let ledgerPath = inputPath;
-  if (statSync(inputPath).isDirectory()) {
-    const candidates = readdirSync(inputPath).filter(
-      (name) => name.startsWith('ledger-') && name.endsWith('.json'),
-    );
-    if (candidates.length !== 1) {
-      throw new Error(
-        `run-directory-needs-exactly-one-ledger: found ${candidates.length} in ${inputPath}`,
-      );
-    }
-    ledgerPath = join(inputPath, candidates[0]!);
-  }
-  const validation = validateLedgerFile(readFileSync(ledgerPath, 'utf8'));
-  if (!validation.ok || !validation.file) {
-    const firstErrors = validation.issues
-      .filter((issue) => issue.severity === 'error')
-      .slice(0, 5)
-      .map((issue) => `${issue.code} (${issue.where ?? 'unknown'})`)
-      .join('; ');
-    throw new Error(`ledger-validation-failed: ${ledgerPath}: ${firstErrors}`);
-  }
-  return { sourcePath: inputPath, ledgerPath, file: validation.file };
-}
+// Evidence loading — bare ledger files versus strict-finalized run
+// directories with validated enrichment — lives in `evidence.ts` (re-audit
+// blocker 2); this module keeps only rendering and writing.
 
 export function writeCanonicalJson(path: string, value: unknown): void {
   mkdirSync(join(path, '..'), { recursive: true });

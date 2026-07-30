@@ -92,9 +92,13 @@ export interface DilemmaEvaluationStats {
   /** Sets where lawful acquisition was satisfied only by the actor's own
    * pending transfer request (acquisition in progress). */
   satisfiedByPendingRequest: number;
-  /** Sets where lawful acquisition was satisfied only by the post-refusal
-   * cooldown (acquisition exercised and lawfully refused). */
-  satisfiedByRefusalCooldown: number;
+  /** Sets where the acquisition class was RESOLVED by the post-refusal
+   * cooldown: the actor exercised the lawful path and the owner lawfully
+   * refused it. Per the re-audit §3.3 ruling this is not a currently
+   * available acquisition exit — the checkpoint's acquisition requirement is
+   * inapplicable after that resolution, and the state is reported
+   * separately, never merged with the pending sub-state. */
+  resolvedByRefusalCooldown: number;
   /** Sets that produced a missing-lawful-exits finding. */
   missingExitFindings: number;
 }
@@ -154,7 +158,7 @@ export function auditEventStreamDetailed(
         triggeringOfferSets: 0,
         satisfiedByOfferedModes: 0,
         satisfiedByPendingRequest: 0,
-        satisfiedByRefusalCooldown: 0,
+        resolvedByRefusalCooldown: 0,
         missingExitFindings: 0,
       },
     ]),
@@ -237,7 +241,7 @@ export function auditEventStreamDetailed(
             stats.satisfiedByOfferedModes += 1;
           } else {
             if (usedPendingRequest) stats.satisfiedByPendingRequest += 1;
-            if (usedRefusalCooldown) stats.satisfiedByRefusalCooldown += 1;
+            if (usedRefusalCooldown) stats.resolvedByRefusalCooldown += 1;
           }
         }
         // 3. Renegotiation response opportunity: an offer of a required

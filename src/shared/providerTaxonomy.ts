@@ -1,4 +1,9 @@
 import { EXTERNAL_MARA_PROVIDER_ID } from './modelExperiment';
+import {
+  M2_ACTION_PROVIDER_ID,
+  M2_POLICY_COMPILER_PROVIDER_ID,
+  M2_POLICY_EXECUTOR_PROVIDER_ID,
+} from './m2Experiment';
 
 /**
  * Explicit provider-source taxonomy for behavioral evidence (Phase 2 audit,
@@ -27,15 +32,12 @@ export const PROVIDER_SOURCE_CLASSES = [
 ] as const;
 export type ProviderSourceClass = (typeof PROVIDER_SOURCE_CLASSES)[number];
 
-/** Reserved Milestone 2 provider IDs (brief §6.3). Declared here so the
- * taxonomy is complete BEFORE any M2 condition exists; the condition wiring
- * itself is out of Phase 2 scope. */
-export const M2_POLICY_EXECUTOR_PROVIDER_ID = 'mara-policy-patch-executor-v1';
-export const M2_POLICY_COMPILER_PROVIDER_ID = 'openrouter-mara-policy-compiler-v1';
-
 /**
  * The complete classification registry for provider IDs that may appear on
- * `DecisionRequested.providerId`. The fallback provider
+ * `DecisionRequested.providerId`, spanning the Milestone 1 legacy action
+ * authority (retained for historical evidence) and the full Milestone 2
+ * identity vocabulary imported from the central `m2Experiment.ts` module
+ * (never redeclared here). The fallback provider
  * (`fallback-continue-or-wait-v2`) is deliberately absent: it serves
  * RESPONSES for an existing request (flagged `usedFallback`), it is never the
  * authority a request is addressed to.
@@ -48,14 +50,17 @@ export const M2_POLICY_COMPILER_PROVIDER_ID = 'openrouter-mara-policy-compiler-v
 export const PROVIDER_SOURCE_TAXONOMY: ReadonlyMap<string, ProviderSourceClass> = new Map([
   ['deterministic-utility-v1', 'deterministic-utility'],
   [EXTERNAL_MARA_PROVIDER_ID, 'external-action-request'],
+  [M2_ACTION_PROVIDER_ID, 'external-action-request'],
   [M2_POLICY_EXECUTOR_PROVIDER_ID, 'local-policy-executor'],
   [M2_POLICY_COMPILER_PROVIDER_ID, 'external-policy-compilation'],
 ]);
 
-/** Provider IDs whose requests can legally reach an upstream model service.
- * Everything else is local by construction. */
+/** Provider IDs whose requests can legally reach an upstream model service —
+ * exactly the M1 and M2 action authorities plus the M2 compiler. Everything
+ * else is local by construction. */
 export const UPSTREAM_CAPABLE_PROVIDER_IDS: readonly string[] = [
   EXTERNAL_MARA_PROVIDER_ID,
+  M2_ACTION_PROVIDER_ID,
   M2_POLICY_COMPILER_PROVIDER_ID,
 ];
 
@@ -80,4 +85,9 @@ export function isUpstreamCapableProviderId(providerId: string): boolean {
   return UPSTREAM_CAPABLE_PROVIDER_IDS.includes(providerId);
 }
 
-export { EXTERNAL_MARA_PROVIDER_ID };
+export {
+  EXTERNAL_MARA_PROVIDER_ID,
+  M2_ACTION_PROVIDER_ID,
+  M2_POLICY_COMPILER_PROVIDER_ID,
+  M2_POLICY_EXECUTOR_PROVIDER_ID,
+};

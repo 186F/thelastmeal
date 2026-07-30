@@ -2,13 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { buildBehaviorFingerprints } from '../../src/sim/evaluation/behaviorFingerprint';
 import { behaviorFingerprintSetSchema } from '../../src/shared/behaviorArtifacts';
 import {
-  M2_POLICY_COMPILER_PROVIDER_ID,
-  M2_POLICY_EXECUTOR_PROVIDER_ID,
   ProviderClassificationError,
   UPSTREAM_CAPABLE_PROVIDER_IDS,
   classifyProviderId,
 } from '../../src/shared/providerTaxonomy';
 import { EXTERNAL_MARA_PROVIDER_ID } from '../../src/shared/modelExperiment';
+// The full M2 identity vocabulary comes from the CENTRAL module (re-audit
+// blocker 1) — the taxonomy imports it from there, never redeclares it.
+import {
+  M2_ACTION_PROMPT_VERSION,
+  M2_ACTION_PROVIDER_ID,
+  M2_EXPERIMENT_ID,
+  M2_EXPERIMENT_VERSION,
+  M2_PER_DECISION_CONDITION_ID,
+  M2_POLICY_COMPILER_PROVIDER_ID,
+  M2_POLICY_EXECUTOR_PROVIDER_ID,
+  M2_POLICY_PATCH_CONDITION_ID,
+  M2_POLICY_PROMPT_VERSION,
+} from '../../src/shared/m2Experiment';
 import { canonicalSerialize } from '../../src/sim/replay/serialize';
 import { buildNpcStats } from '../../src/sim/reporting';
 import { createRun, runToCompletion } from '../../src/sim/runtime/engine';
@@ -447,16 +458,46 @@ describe('movement-inclusive active time (audit finding 3)', () => {
   });
 });
 
-describe('provider-source taxonomy (audit finding 1)', () => {
+describe('provider-source taxonomy (audit finding 1, re-audit blocker 1)', () => {
+  it('the central M2 identity module carries the complete brief §6.3 vocabulary', () => {
+    expect(M2_EXPERIMENT_ID).toBe('sparse-cognition-policy-001');
+    expect(M2_EXPERIMENT_VERSION).toBe('1.0.0');
+    expect(M2_PER_DECISION_CONDITION_ID).toBe('mara-model-per-decision-m2-v1');
+    expect(M2_POLICY_PATCH_CONDITION_ID).toBe('mara-policy-patch-m2-v1');
+    expect(M2_ACTION_PROVIDER_ID).toBe('openrouter-mara-action-m2-v1');
+    expect(M2_POLICY_COMPILER_PROVIDER_ID).toBe('openrouter-mara-policy-compiler-v1');
+    expect(M2_POLICY_EXECUTOR_PROVIDER_ID).toBe('mara-policy-patch-executor-v1');
+    expect(M2_ACTION_PROMPT_VERSION).toBe('mara-action-selection-m2-1.0.0');
+    expect(M2_POLICY_PROMPT_VERSION).toBe('mara-policy-compiler-1.0.0');
+  });
+
   it('classifies the complete registered vocabulary and nothing else', () => {
     expect(classifyProviderId('deterministic-utility-v1')).toBe('deterministic-utility');
     expect(classifyProviderId(EXTERNAL_MARA_PROVIDER_ID)).toBe('external-action-request');
+    // The exact M2 per-decision action authority (re-audit §4.5).
+    expect(classifyProviderId(M2_ACTION_PROVIDER_ID)).toBe('external-action-request');
     expect(classifyProviderId(M2_POLICY_EXECUTOR_PROVIDER_ID)).toBe('local-policy-executor');
     expect(classifyProviderId(M2_POLICY_COMPILER_PROVIDER_ID)).toBe('external-policy-compilation');
     expect(() => classifyProviderId('mystery-provider-9')).toThrow(ProviderClassificationError);
     expect(() => classifyProviderId('mystery-provider-9')).toThrow(
       'provider-id-not-in-taxonomy:mystery-provider-9',
     );
+  });
+
+  it('M2 per-decision action requests count as external and never as executor decisions', () => {
+    const mutated = JSON.parse(JSON.stringify(exportedFile('A'))) as LedgerFile;
+    let rewritten = 0;
+    for (const event of mutated.events) {
+      const p = event.payload as Record<string, unknown>;
+      if (event.type === 'DecisionRequested' && p.npcId === 'mara') {
+        p.providerId = M2_ACTION_PROVIDER_ID;
+        rewritten += 1;
+      }
+    }
+    expect(rewritten).toBeGreaterThan(0);
+    const set = fingerprintOf(mutated);
+    expect(set.npcs.mara.externalActionRequestsEmitted).toBe(rewritten);
+    expect(set.npcs.mara.policyExecutorDecisions).toBe(0);
   });
 
   it('Object.prototype member names are unknown IDs, never inherited classifications', () => {
@@ -480,9 +521,9 @@ describe('provider-source taxonomy (audit finding 1)', () => {
     expect(() => fingerprintOf(mutated)).toThrow(ProviderClassificationError);
   });
 
-  it('registers exactly the OpenRouter action and compiler authorities as upstream-capable', () => {
+  it('upstream-capable = exactly the M1 action, M2 action, and M2 compiler authorities', () => {
     expect([...UPSTREAM_CAPABLE_PROVIDER_IDS].sort()).toEqual(
-      [EXTERNAL_MARA_PROVIDER_ID, M2_POLICY_COMPILER_PROVIDER_ID].sort(),
+      [EXTERNAL_MARA_PROVIDER_ID, M2_ACTION_PROVIDER_ID, M2_POLICY_COMPILER_PROVIDER_ID].sort(),
     );
     expect(UPSTREAM_CAPABLE_PROVIDER_IDS).not.toContain(M2_POLICY_EXECUTOR_PROVIDER_ID);
     expect(UPSTREAM_CAPABLE_PROVIDER_IDS).not.toContain('deterministic-utility-v1');

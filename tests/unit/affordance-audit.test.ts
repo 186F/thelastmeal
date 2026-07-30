@@ -278,7 +278,7 @@ describe('event-stream audit over deterministic exports', () => {
     const stats = result.dilemmaStats.find((s) => s.dilemmaId === 'meal-scarcity-violation-choice');
     expect(stats).toBeDefined();
     expect(stats!.satisfiedByPendingRequest).toBe(2);
-    expect(stats!.satisfiedByRefusalCooldown).toBe(4);
+    expect(stats!.resolvedByRefusalCooldown).toBe(4);
     expect(stats!.missingExitFindings).toBe(0);
     expect(stats!.triggeringOfferSets).toBe(stats!.satisfiedByOfferedModes + 6);
   });
@@ -365,7 +365,7 @@ describe('event-stream audit over deterministic exports', () => {
       const result = auditEventStreamDetailed('D', [requested(50, 'tr-1'), triggeringSet(60)]);
       expect(result.findings).toEqual([]);
       expect(result.dilemmaStats[0]!.satisfiedByPendingRequest).toBe(1);
-      expect(result.dilemmaStats[0]!.satisfiedByRefusalCooldown).toBe(0);
+      expect(result.dilemmaStats[0]!.resolvedByRefusalCooldown).toBe(0);
     });
 
     it('a resolved (transferred) request clears the pending state — withholding afterwards is a finding', () => {
@@ -386,7 +386,7 @@ describe('event-stream audit over deterministic exports', () => {
         triggeringSet(100 + REQUEST_REFUSAL_COOLDOWN_TICKS - 1),
       ]);
       expect(result.findings).toEqual([]);
-      expect(result.dilemmaStats[0]!.satisfiedByRefusalCooldown).toBe(1);
+      expect(result.dilemmaStats[0]!.resolvedByRefusalCooldown).toBe(1);
       expect(result.dilemmaStats[0]!.satisfiedByPendingRequest).toBe(0);
     });
 
@@ -454,6 +454,6 @@ describe('full audit run (CI shape)', () => {
     const dStats = report.dilemmaStats.find((s) => s.source === 'scenario-D');
     expect(dStats).toBeDefined();
     expect(dStats!.satisfiedByPendingRequest).toBe(2);
-    expect(dStats!.satisfiedByRefusalCooldown).toBe(4);
+    expect(dStats!.resolvedByRefusalCooldown).toBe(4);
   });
 });

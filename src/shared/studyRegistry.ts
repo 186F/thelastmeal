@@ -23,6 +23,32 @@ export type StudyStatus = (typeof STUDY_STATUSES)[number];
 const nonEmpty = z.string().min(1);
 const gitSha = z.string().regex(/^[0-9a-f]{40}$/);
 
+/**
+ * Execution settings a study binds into its freeze (Phase 2 re-audit
+ * blocker 3). `speed` is the simulation pacing multiplier: formal live
+ * evidence is constrained to 1× (brief §19.15), and a study may declare a
+ * non-1× live pace ONLY by citing a separately registered
+ * pacing-comparability study. Speeds are positive integers — the exact
+ * multipliers the runtime offers — keeping the freeze projection inside the
+ * project's integer discipline. Optional fields bind other nonsecret runtime
+ * settings when the study kind makes them meaningful; deterministic, fake,
+ * and blinded-review studies are never forced to invent model settings.
+ */
+export const executionSettingsSchema = z
+  .object({
+    speed: z.number().int().positive(),
+    requestTimeoutMs: z.number().int().positive().optional(),
+    maxConcurrency: z.number().int().positive().optional(),
+    maxCallsPerRun: z.number().int().positive().optional(),
+    maxTotalCalls: z.number().int().positive().optional(),
+    /** `studyId@studyVersion` of the registered pacing-comparability study
+     * authorizing a non-1× live pace. */
+    pacingComparabilityAuthorization: nonEmpty.optional(),
+  })
+  .strict();
+
+export type ExecutionSettings = z.infer<typeof executionSettingsSchema>;
+
 export const studyDeclarationSchema = z
   .object({
     registryVersion: z.literal(STUDY_REGISTRY_VERSION),
@@ -64,6 +90,9 @@ export const studyDeclarationSchema = z
       .strict(),
     stopRule: nonEmpty,
     liveCallBudget: z.number().int().nonnegative(),
+    /** Required for every live-model study (liveCallBudget > 0); optional
+     * otherwise so non-live studies never invent irrelevant settings. */
+    executionSettings: executionSettingsSchema.optional(),
     outputRoot: nonEmpty,
     evidenceRetentionPolicy: nonEmpty,
   })
@@ -74,6 +103,25 @@ export const studyDeclarationSchema = z
         code: z.ZodIssueCode.custom,
         message: 'confirmatory-study-requires-thresholds',
       });
+    }
+    // Pacing rules (re-audit blocker 3): a live study must declare and
+    // freeze its execution settings, and formal live evidence runs at 1×
+    // unless a registered pacing-comparability study authorizes otherwise.
+    if (study.liveCallBudget > 0) {
+      if (study.executionSettings === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'live-study-requires-execution-settings',
+        });
+      } else if (
+        study.executionSettings.speed !== 1 &&
+        study.executionSettings.pacingComparabilityAuthorization === undefined
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'live-study-non-1x-pace-requires-pacing-comparability-authorization',
+        });
+      }
     }
   });
 
@@ -111,5 +159,8 @@ export function studyFreezeProjection(study: StudyDeclaration): Record<string, u
     replacementPolicy: study.replacementPolicy,
     stopRule: study.stopRule,
     liveCallBudget: study.liveCallBudget,
+    // Execution settings are freeze-bound (re-audit blocker 3): a pacing or
+    // runtime-setting change moves the configuration fingerprint.
+    executionSettings: study.executionSettings ?? null,
   };
 }

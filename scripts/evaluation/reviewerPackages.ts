@@ -8,9 +8,9 @@ import type { BehaviorOnlyTraceExport } from '../../src/shared/traces';
 import { SCENARIOS } from '../../src/sim/scenarios/definitions';
 import { buildBehaviorOnlyTraces } from '../../src/sim/traces';
 import { buildBehaviorFingerprints } from '../../src/sim/evaluation/behaviorFingerprint';
-import type { BehaviorFingerprintSet } from '../../src/shared/behaviorArtifacts';
+import { behaviorFingerprintSetSchema, notObservable } from '../../src/shared/behaviorArtifacts';
 import { cryptoShuffle, makeBlinding, token } from './blinding';
-import { loadValidatedLedger } from './behaviorIo';
+import { enrichFingerprintSet, loadEvaluationEvidence } from './evidence';
 
 /**
  * Blinded reviewer packages for VALIDATED LIVE LEDGERS (M2 brief §10.12,
@@ -36,38 +36,69 @@ import { loadValidatedLedger } from './behaviorIo';
  * model-discrimination claims.
  */
 
-interface ReviewerRun {
-  runLabel: string;
-  traces: BehaviorOnlyTraceExport;
-}
+/**
+ * Strict runtime schemas for the reviewer package and answer key (re-audit
+ * §7.3): both documents are validated on WRITE by the builder and the answer
+ * key is validated again on READ by the scorer — never cast. The reviewer
+ * schema deliberately has no field that could carry scenario, seed,
+ * condition, plan, hash, or NPC identity.
+ */
+const opaqueLabel = z.string().min(1);
 
-interface ReviewerPackage {
-  formatVersion: 1;
-  packageId: string;
-  note: string;
-  runs: ReviewerRun[];
-}
+export const reviewerPackageSchema = z
+  .object({
+    formatVersion: z.literal(1),
+    packageId: opaqueLabel,
+    note: z.string().min(1),
+    runs: z
+      .array(
+        z
+          .object({
+            runLabel: opaqueLabel,
+            // The behavior-only trace export is validated in depth by its
+            // producer (buildBehaviorOnlyTraces); here it is shape-guarded
+            // while keeping its full static type.
+            traces: z.custom<BehaviorOnlyTraceExport>(
+              (value) =>
+                typeof value === 'object' &&
+                value !== null &&
+                (value as { mode?: unknown }).mode === 'behavior-only' &&
+                Array.isArray((value as { traces?: unknown }).traces),
+            ),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
 
-interface AnswerKeyRun {
-  runLabel: string;
-  sourcePath: string;
-  scenarioId: string;
-  seed: number;
-  /** The ledger-proven provider plan (audit finding 4): never a condition. */
-  providerPlanId: string;
-  /** A registered condition only when a manifest or study plan proves it;
-   * `not-observable` for ledger-only evidence. */
-  registeredConditionId: string;
-  canonicalLedgerHash: string;
-  labelByNpc: Record<NpcId, string>;
-  fingerprints: BehaviorFingerprintSet;
-}
+export const answerKeyRunSchema = z
+  .object({
+    runLabel: opaqueLabel,
+    sourcePath: z.string().min(1),
+    scenarioId: z.string().min(1),
+    seed: z.number().int(),
+    /** The ledger-proven provider plan (audit finding 4): never a condition. */
+    providerPlanId: z.string().min(1),
+    /** Manifest-proven registered condition for strict-finalized run
+     * evidence; `not-observable` for bare-ledger inputs. */
+    registeredConditionId: z.union([z.string().min(1), notObservable]),
+    canonicalLedgerHash: z.string().regex(/^[0-9a-f]{16}$/),
+    labelByNpc: z.object({ mara: opaqueLabel, jonas: opaqueLabel, rin: opaqueLabel }).strict(),
+    fingerprints: behaviorFingerprintSetSchema,
+  })
+  .strict();
 
-interface AnswerKey {
-  formatVersion: 1;
-  packageId: string;
-  runs: AnswerKeyRun[];
-}
+export const answerKeySchema = z
+  .object({
+    formatVersion: z.literal(1),
+    packageId: opaqueLabel,
+    runs: z.array(answerKeyRunSchema).min(1),
+  })
+  .strict();
+
+type ReviewerPackage = z.infer<typeof reviewerPackageSchema>;
+type AnswerKey = z.infer<typeof answerKeySchema>;
 
 const REVIEWER_NOTE =
   'Blinded behavior-only traces from validated live ledgers. Run labels, actor ' +
@@ -82,34 +113,49 @@ export function buildReviewerPackage(
 ): { reviewer: ReviewerPackage; answerKey: AnswerKey } {
   if (inputPaths.length === 0) throw new Error('reviewer-package-needs-inputs');
   const prepared = inputPaths.map((inputPath) => {
-    const loaded = loadValidatedLedger(inputPath);
-    const scenario = SCENARIOS[loaded.file.scenario.id];
+    // Strict-finalized run directories prove their registered condition
+    // (re-audit blocker 2), which lands ONLY in the answer key — the blinded
+    // reviewer document never carries it.
+    const evidence = loadEvaluationEvidence(inputPath);
+    const scenario = SCENARIOS[evidence.file.scenario.id];
     const blinding = makeBlinding();
-    const traces = buildBehaviorOnlyTraces(scenario, loaded.file.events, blinding);
-    const fingerprints = buildBehaviorFingerprints(loaded.file);
-    return { loaded, blinding, traces, fingerprints };
+    const traces = buildBehaviorOnlyTraces(scenario, evidence.file.events, blinding);
+    const ledgerOnly = buildBehaviorFingerprints(evidence.file);
+    const fingerprints =
+      evidence.kind === 'strict-finalized-run'
+        ? enrichFingerprintSet(ledgerOnly, evidence.enrichment)
+        : ledgerOnly;
+    return { evidence, blinding, traces, fingerprints };
   });
   const shuffled = cryptoShuffle(prepared);
-  const reviewerRuns: ReviewerRun[] = [];
-  const answerRuns: AnswerKeyRun[] = [];
+  const reviewerRuns: ReviewerPackage['runs'] = [];
+  const answerRuns: AnswerKey['runs'] = [];
   shuffled.forEach((entry, index) => {
     const runLabel = `run-${String(index + 1).padStart(2, '0')}`;
     reviewerRuns.push({ runLabel, traces: entry.traces });
     answerRuns.push({
       runLabel,
-      sourcePath: entry.loaded.ledgerPath,
-      scenarioId: entry.loaded.file.scenario.id,
-      seed: entry.loaded.file.scenario.seed,
-      providerPlanId: entry.loaded.file.providerId,
-      registeredConditionId: 'not-observable',
-      canonicalLedgerHash: entry.loaded.file.canonicalLedgerHash,
+      sourcePath: entry.evidence.ledgerPath,
+      scenarioId: entry.evidence.file.scenario.id,
+      seed: entry.evidence.file.scenario.seed,
+      providerPlanId: entry.evidence.file.providerId,
+      registeredConditionId:
+        entry.evidence.kind === 'strict-finalized-run'
+          ? entry.evidence.enrichment.registeredConditionId
+          : 'not-observable',
+      canonicalLedgerHash: entry.evidence.file.canonicalLedgerHash,
       labelByNpc: entry.blinding.labelByNpc,
       fingerprints: entry.fingerprints,
     });
   });
   return {
-    reviewer: { formatVersion: 1, packageId, note: REVIEWER_NOTE, runs: reviewerRuns },
-    answerKey: { formatVersion: 1, packageId, runs: answerRuns },
+    reviewer: reviewerPackageSchema.parse({
+      formatVersion: 1,
+      packageId,
+      note: REVIEWER_NOTE,
+      runs: reviewerRuns,
+    }),
+    answerKey: answerKeySchema.parse({ formatVersion: 1, packageId, runs: answerRuns }),
   };
 }
 
@@ -131,21 +177,41 @@ export const reviewerScoreRowSchema = z
 export const reviewerScoreFileSchema = z.array(reviewerScoreRowSchema);
 export type ReviewerScoreRow = z.infer<typeof reviewerScoreRowSchema>;
 
-export interface ScoreReport {
-  packageId: string;
-  reviewerCount: number;
-  /** Judgments a complete submission contains: runs × actors per run. */
-  expectedJudgmentsPerReviewer: number;
-  receivedJudgments: number;
-  /** received / (reviewerCount × expectedJudgmentsPerReviewer), basis points. */
-  completionCoverageBp: number;
-  correctGuesses: number;
-  pooledIdentificationRateBp: number;
-  chanceBaselineBp: number;
-  perReviewer: Record<string, { judgments: number; correct: number; accuracyBp: number }>;
-  perNpc: Record<NpcId, { guesses: number; correct: number }>;
-  note: string;
-}
+const bpInt = z.number().int().min(0).max(10_000);
+export const scoreReportSchema = z
+  .object({
+    packageId: opaqueLabel,
+    reviewerCount: z.number().int().nonnegative(),
+    /** Judgments a complete submission contains: runs × actors per run. */
+    expectedJudgmentsPerReviewer: z.number().int().nonnegative(),
+    receivedJudgments: z.number().int().nonnegative(),
+    /** received / (reviewerCount × expectedJudgmentsPerReviewer), basis points. */
+    completionCoverageBp: bpInt,
+    correctGuesses: z.number().int().nonnegative(),
+    pooledIdentificationRateBp: bpInt,
+    chanceBaselineBp: bpInt,
+    perReviewer: z.record(
+      z.string(),
+      z
+        .object({
+          judgments: z.number().int().nonnegative(),
+          correct: z.number().int().nonnegative(),
+          accuracyBp: bpInt,
+        })
+        .strict(),
+    ),
+    perNpc: z
+      .object({
+        mara: z.object({ guesses: z.number().int(), correct: z.number().int() }).strict(),
+        jonas: z.object({ guesses: z.number().int(), correct: z.number().int() }).strict(),
+        rin: z.object({ guesses: z.number().int(), correct: z.number().int() }).strict(),
+      })
+      .strict(),
+    note: z.string().min(1),
+  })
+  .strict();
+
+export type ScoreReport = z.infer<typeof scoreReportSchema>;
 
 export function scoreReviews(answerKey: AnswerKey, scoresInput: unknown): ScoreReport {
   const scores = reviewerScoreFileSchema.parse(scoresInput);
@@ -248,10 +314,13 @@ export function runScoreCli(argv: readonly string[]): number {
     );
     return 1;
   }
-  const answerKey = JSON.parse(readFileSync(answersPath, 'utf8')) as AnswerKey;
-  // Score rows are validated by the strict schema inside scoreReviews —
-  // never cast (Phase 2 audit §7.1).
-  const report = scoreReviews(answerKey, JSON.parse(readFileSync(scoresPath, 'utf8')));
+  // Both inputs are schema-validated on read — never cast (re-audit §7.3):
+  // the answer key against its strict schema here, the score rows inside
+  // scoreReviews. The produced report is parsed once more as a self-check.
+  const answerKey = answerKeySchema.parse(JSON.parse(readFileSync(answersPath, 'utf8')));
+  const report = scoreReportSchema.parse(
+    scoreReviews(answerKey, JSON.parse(readFileSync(scoresPath, 'utf8'))),
+  );
   console.log(JSON.stringify(report, null, 2));
   return 0;
 }
