@@ -73,6 +73,12 @@ jobs:
       - name: Keyless formal model-run rehearsal
         run: npm run model:rehearse -- --ci
 
+      # Affordance and interruption-contract audit with the VS001 known-gap
+      # registry (M2 brief §27.6–§27.7): registered gaps report as known
+      # limitations; any unregistered finding fails.
+      - name: Affordance and interruption-contract audit (known-gap registry)
+        run: npm run audit:affordances
+
       - name: Upload model-rehearsal report
         if: always()
         uses: actions/upload-artifact@v4
