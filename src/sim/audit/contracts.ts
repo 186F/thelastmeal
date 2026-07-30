@@ -191,37 +191,71 @@ export function commitmentContractFor(kind: string): CommitmentLifecycleContract
   return contract;
 }
 
+/**
+ * World states that satisfy a dilemma exit class WITHOUT a fresh offer in the
+ * triggering set (Phase 2 audit §4.4 refinement):
+ *
+ *  - `own-transfer-request-pending`: the actor's own meal-transfer request is
+ *    pending — lawful acquisition is already IN PROGRESS, and the engine
+ *    correctly withholds a duplicate request affordance.
+ *  - `own-request-refusal-cooldown`: the actor's request was lawfully REFUSED
+ *    by the owner and the re-request cooldown is running. The acquisition
+ *    path was exercised and consequentially resolved by the counterparty;
+ *    the cooldown is the modeled social consequence of that resolution, not
+ *    a missing affordance. The stream auditor evaluates and reports this
+ *    sub-state separately from the pending sub-state.
+ *
+ * Under the frozen affordance rules, `request-transfer` is withheld exactly
+ * when one of these two states holds — so a missing-lawful-exit finding
+ * survives only when the engine's own generation invariant is broken.
+ */
+export type DilemmaStateSatisfaction =
+  'own-transfer-request-pending' | 'own-request-refusal-cooldown';
+
 export interface DilemmaCheckpoint {
   id: string;
   description: string;
   /** The offered mode whose presence marks the dilemma. */
   triggerMode: ActionMode;
   /**
-   * Exit classes, each a set of modes. A triggering offer set must contain
-   * modes from at least two DISTINCT classes ("consequentially distinct
-   * lawful exits" — syntactic wait variants share one class).
+   * Exit classes, each a set of modes plus the declared world states that
+   * satisfy the class without a fresh offer. A triggering offer set must
+   * satisfy at least two DISTINCT classes ("consequentially distinct lawful
+   * exits" — syntactic wait variants share one class).
    */
-  exitClasses: ReadonlyArray<{ classId: string; modes: readonly ActionMode[] }>;
+  exitClasses: ReadonlyArray<{
+    classId: string;
+    modes: readonly ActionMode[];
+    stateSatisfactions: readonly DilemmaStateSatisfaction[];
+  }>;
 }
 
 /**
  * Registered dilemma checkpoints (per the R4 ruling, the two-lawful-exits
  * rule applies only to registered checkpoints). VS001 registers the meal
  * scarcity dilemma: whenever the reservation-violating grab is on the table,
- * a lawful acquisition path and a forgo path must both be available.
+ * a lawful acquisition path and a forgo path must both be available — where
+ * the acquisition path counts as available when it is offered, already in
+ * progress, or consequentially resolved by a refusal whose cooldown runs.
  */
 export const DILEMMA_CHECKPOINTS: readonly DilemmaCheckpoint[] = [
   {
     id: 'meal-scarcity-violation-choice',
     description:
-      'When eat-violation is offered, the offer set must also contain a lawful ' +
-      'acquisition path and a forgo path — two consequentially distinct lawful exits.',
+      'When eat-violation is offered, the offer set must also satisfy a lawful ' +
+      'acquisition class (offered, in progress, or refusal-cooldown) and a forgo ' +
+      'class — two consequentially distinct lawful exits.',
     triggerMode: 'eat-violation',
     exitClasses: [
-      { classId: 'lawful-acquisition', modes: ['request-transfer'] },
+      {
+        classId: 'lawful-acquisition',
+        modes: ['request-transfer'],
+        stateSatisfactions: ['own-transfer-request-pending', 'own-request-refusal-cooldown'],
+      },
       {
         classId: 'forgo',
         modes: ['work', 'relieve', 'rest', 'routine-work', 'wait', 'request-break'],
+        stateSatisfactions: [],
       },
     ],
   },

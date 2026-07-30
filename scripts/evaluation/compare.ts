@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildBehaviorFingerprints } from '../../src/sim/evaluation/behaviorFingerprint';
 import { compareBehaviorFingerprintSets } from '../../src/sim/evaluation/behaviorSimilarity';
+import { readOption } from '../cli/args';
 import {
   loadValidatedLedger,
   renderComparisonMarkdown,
@@ -11,6 +12,7 @@ import {
 
 /**
  * `npm run eval:compare -- --left <path> --right <path> [--out <dir>] [--name <stem>]`
+ * (both `--name value` and `--name=value` spellings are accepted)
  *
  * Validates both inputs, builds fingerprints, and computes the versioned
  * behavioral similarity (M2 brief §10.6–10.7). Refuses non-comparable
@@ -18,13 +20,13 @@ import {
  */
 
 export function runCompareCli(argv: readonly string[]): number {
-  const leftArg = argv.find((a) => a.startsWith('--left='))?.slice('--left='.length);
-  const rightArg = argv.find((a) => a.startsWith('--right='))?.slice('--right='.length);
-  const outArg = argv.find((a) => a.startsWith('--out='))?.slice('--out='.length);
-  const nameArg = argv.find((a) => a.startsWith('--name='))?.slice('--name='.length);
+  const leftArg = readOption(argv, 'left');
+  const rightArg = readOption(argv, 'right');
+  const outArg = readOption(argv, 'out');
+  const nameArg = readOption(argv, 'name');
   if (!leftArg || !rightArg) {
     console.error(
-      'usage: eval:compare -- --left=<ledger|run-dir> --right=<ledger|run-dir> [--out=<dir>] [--name=<stem>]',
+      'usage: eval:compare -- --left <ledger|run-dir> --right <ledger|run-dir> [--out <dir>] [--name <stem>]',
     );
     return 1;
   }
@@ -38,7 +40,7 @@ export function runCompareCli(argv: readonly string[]): number {
   const mara = comparison.npcs.mara;
   const stem =
     nameArg ??
-    `compare-${mara.left.scenarioId}-${mara.left.conditionId}-vs-${mara.right.scenarioId}-${mara.right.conditionId}-seed${mara.left.seed}`;
+    `compare-${mara.left.scenarioId}-${mara.left.providerPlanId}-vs-${mara.right.scenarioId}-${mara.right.providerPlanId}-seed${mara.left.seed}`;
   const jsonPath = join(outDir, `${stem}.behavior-similarity.json`);
   const mdPath = join(outDir, `${stem}.behavior-similarity.md`);
   writeCanonicalJson(jsonPath, comparison);

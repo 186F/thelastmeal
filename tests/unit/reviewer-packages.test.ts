@@ -14,7 +14,8 @@ import { NPC_IDS, type NpcId } from '../../src/shared/ids';
  * Blinded reviewer packages for validated live ledgers (M2 brief §10.12,
  * R6 ruling): the reviewer document must leak no identity, scenario,
  * condition, or seed information; the answer key alone resolves labels and
- * carries fingerprints; scores import separately and remain diagnostic.
+ * carries fingerprints; scores import separately under the strict schema
+ * (Phase 2 audit §7.1) and remain diagnostic.
  */
 
 function writeLedgerFixtures(): { dir: string; paths: string[] } {
@@ -44,7 +45,7 @@ describe('buildReviewerPackage', () => {
     }
   });
 
-  it('leaks no NPC names, scenario ids, seeds, or condition ids to reviewers', () => {
+  it('leaks no NPC names, scenario ids, seeds, plans, or condition ids to reviewers', () => {
     const text = JSON.stringify(reviewer);
     for (const npcId of NPC_IDS) expect(text).not.toContain(`"${npcId}"`);
     expect(text).not.toContain('deterministic-utility-v1');
@@ -53,13 +54,17 @@ describe('buildReviewerPackage', () => {
     expect(text).not.toContain('"scenarioId"');
     expect(text).not.toContain('"seed"');
     expect(text).not.toContain('"canonicalLedgerHash"');
-    expect(text).not.toContain('"conditionId"');
+    expect(text).not.toContain('"providerPlanId"');
+    expect(text).not.toContain('"registeredConditionId"');
   });
 
-  it('the answer key alone resolves everything and carries versioned fingerprints', () => {
+  it('the answer key alone resolves everything and separates plan from condition provenance', () => {
     expect(answerKey.runs.length).toBe(2);
     for (const run of answerKey.runs) {
-      expect(run.conditionId).toBe('deterministic-utility-v1');
+      expect(run.providerPlanId).toBe('deterministic-utility-v1');
+      // Ledger-only evidence proves the provider plan, never a registered
+      // condition (Phase 2 audit finding 4).
+      expect(run.registeredConditionId).toBe('not-observable');
       expect(['A', 'C']).toContain(run.scenarioId);
       expect(run.fingerprints.fingerprintVersion).toBe('behavior-fingerprint-1.0.0');
       const labels = Object.values(run.labelByNpc).sort();
@@ -68,42 +73,86 @@ describe('buildReviewerPackage', () => {
   });
 });
 
-describe('scoreReviews', () => {
+describe('scoreReviews (strict §7.1 contract)', () => {
   const { paths } = writeLedgerFixtures();
   const { answerKey } = buildReviewerPackage(paths, 'package-test02');
 
-  it('scores perfect identification at 10_000bp against the 3_333bp chance baseline', () => {
-    const scores: ReviewerScoreRow[] = [];
-    for (const run of answerKey.runs) {
-      for (const npcId of NPC_IDS) {
-        scores.push({
-          runLabel: run.runLabel,
-          actorLabel: run.labelByNpc[npcId],
-          guessedNpcId: npcId,
-        });
-      }
-    }
-    const report = scoreReviews(answerKey, scores);
-    expect(report.totalGuesses).toBe(6);
-    expect(report.identificationRateBp).toBe(10_000);
+  function completeScoresFor(reviewerId: string): ReviewerScoreRow[] {
+    return answerKey.runs.flatMap((run) =>
+      NPC_IDS.map((npcId) => ({
+        reviewerId,
+        runLabel: run.runLabel,
+        actorLabel: run.labelByNpc[npcId],
+        guessedNpcId: npcId,
+      })),
+    );
+  }
+
+  it('scores perfect identification at 10_000bp with full completion coverage', () => {
+    const report = scoreReviews(answerKey, completeScoresFor('reviewer-1'));
+    expect(report.reviewerCount).toBe(1);
+    expect(report.expectedJudgmentsPerReviewer).toBe(6);
+    expect(report.receivedJudgments).toBe(6);
+    expect(report.completionCoverageBp).toBe(10_000);
+    expect(report.pooledIdentificationRateBp).toBe(10_000);
+    expect(report.perReviewer['reviewer-1']!.accuracyBp).toBe(10_000);
     expect(report.chanceBaselineBp).toBe(3_333);
     expect(report.note).toContain('Diagnostic only');
   });
 
-  it('scores systematically wrong guesses at 0 and rejects unknown labels', () => {
+  it('reports per-reviewer accuracy and declares partial submissions via coverage', () => {
+    const perfect = completeScoresFor('reviewer-1');
     const wrongGuess: Record<NpcId, NpcId> = { mara: 'jonas', jonas: 'rin', rin: 'mara' };
-    const scores: ReviewerScoreRow[] = answerKey.runs.flatMap((run) =>
-      NPC_IDS.map((npcId) => ({
-        runLabel: run.runLabel,
-        actorLabel: run.labelByNpc[npcId],
-        guessedNpcId: wrongGuess[npcId],
-      })),
+    const run = answerKey.runs[0]!;
+    // reviewer-2 submits only one run's judgments, all wrong: partial + 0%.
+    const partialWrong: ReviewerScoreRow[] = NPC_IDS.map((npcId) => ({
+      reviewerId: 'reviewer-2',
+      runLabel: run.runLabel,
+      actorLabel: run.labelByNpc[npcId],
+      guessedNpcId: wrongGuess[npcId],
+    }));
+    const report = scoreReviews(answerKey, [...perfect, ...partialWrong]);
+    expect(report.reviewerCount).toBe(2);
+    expect(report.receivedJudgments).toBe(9);
+    expect(report.completionCoverageBp).toBe(7_500); // 9 of 12 expected
+    expect(report.perReviewer['reviewer-1']!.accuracyBp).toBe(10_000);
+    expect(report.perReviewer['reviewer-2']!.accuracyBp).toBe(0);
+    expect(report.pooledIdentificationRateBp).toBe(6_667); // 6 of 9
+  });
+
+  it('rejects duplicate judgments for the same (reviewer, run, actor)', () => {
+    const scores = completeScoresFor('reviewer-1');
+    expect(() => scoreReviews(answerKey, [...scores, scores[0]!])).toThrow(
+      'score-duplicate-judgment',
     );
-    expect(scoreReviews(answerKey, scores).identificationRateBp).toBe(0);
+    // Repeating a correct row can no longer inflate the aggregate rate.
+  });
+
+  it('rejects rows missing a reviewer identity or carrying unknown fields', () => {
+    const valid = completeScoresFor('reviewer-1')[0]!;
+    const missingReviewer = { ...valid } as Record<string, unknown>;
+    delete missingReviewer.reviewerId;
+    expect(() => scoreReviews(answerKey, [missingReviewer])).toThrow();
+    expect(() => scoreReviews(answerKey, [{ ...valid, extraField: 'x' }])).toThrow();
+    expect(() => scoreReviews(answerKey, [{ ...valid, guessedNpcId: 'nobody' }])).toThrow();
+    expect(() => scoreReviews(answerKey, 'not-an-array')).toThrow();
+  });
+
+  it('rejects unknown run and actor labels with typed errors', () => {
     expect(() =>
       scoreReviews(answerKey, [
-        { runLabel: 'run-99', actorLabel: 'agent-A', guessedNpcId: 'mara' },
+        { reviewerId: 'r', runLabel: 'run-99', actorLabel: 'agent-A', guessedNpcId: 'mara' },
       ]),
     ).toThrow('score-unknown-run-label');
+    expect(() =>
+      scoreReviews(answerKey, [
+        {
+          reviewerId: 'r',
+          runLabel: answerKey.runs[0]!.runLabel,
+          actorLabel: 'agent-Z',
+          guessedNpcId: 'mara',
+        },
+      ]),
+    ).toThrow('score-unknown-actor-label');
   });
 });

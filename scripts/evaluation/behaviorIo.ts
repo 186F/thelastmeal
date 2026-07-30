@@ -77,7 +77,13 @@ export function renderFingerprintMarkdown(set: BehaviorFingerprintSet): string {
   lines.push(`# Behavior fingerprints — ${set.scenarioId} seed ${set.seed}`);
   lines.push('');
   lines.push(`- fingerprintVersion: \`${set.fingerprintVersion}\``);
-  lines.push(`- condition: \`${set.conditionId}\``);
+  lines.push(`- provider plan: \`${set.providerPlanId}\``);
+  lines.push(
+    `- registered condition: \`${set.registeredConditionId}\`` +
+      (set.registeredConditionId === 'not-observable'
+        ? ' (a bare ledger proves the provider plan, not a registered condition)'
+        : ''),
+  );
   lines.push(`- scenario: ${set.scenarioId} v${set.scenarioVersion}, seed ${set.seed}`);
   lines.push(`- finalTick: ${set.finalTick}`);
   lines.push(`- worldStateHash: \`${set.worldStateHash}\``);
@@ -106,13 +112,18 @@ export function renderComparisonMarkdown(comparison: BehaviorComparison): string
   const lines: string[] = [];
   const mara = comparison.npcs.mara;
   lines.push(
-    `# Behavior similarity — ${mara.left.scenarioId}/${mara.left.conditionId} vs ` +
-      `${mara.right.scenarioId}/${mara.right.conditionId}`,
+    `# Behavior similarity — ${mara.left.scenarioId}/${mara.left.providerPlanId} vs ` +
+      `${mara.right.scenarioId}/${mara.right.providerPlanId}`,
   );
   lines.push('');
   lines.push(`- similarityVersion: \`${comparison.similarityVersion}\``);
   lines.push(`- pairing: ${comparison.pairing}`);
   lines.push(`- seed: ${mara.left.seed}`);
+  lines.push(
+    `- registered conditions: left \`${mara.left.registeredConditionId}\`, ` +
+      `right \`${mara.right.registeredConditionId}\` (provider plans above are ` +
+      `ledger-proven; conditions require a manifest or study plan)`,
+  );
   lines.push('');
   lines.push(`> ${COMMITMENT_STATUS_NOTE}`);
   lines.push('');

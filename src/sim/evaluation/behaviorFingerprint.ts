@@ -19,6 +19,7 @@ import {
   type BehaviorFingerprintSet,
   type TargetOrientationBucket,
 } from '../../shared/behaviorArtifacts';
+import { classifyProviderId } from '../../shared/providerTaxonomy';
 import { DECISION_REJECTION_REASONS } from '../../shared/decisionContracts';
 import { replayLedger } from '../replay/replay';
 import { V1_ROLES, roleOf } from '../scenarios/roles';
@@ -31,15 +32,36 @@ import { largestRemainderBp } from './arithmetic';
  * confidence, or score diagnostics (§10.1 and the R7 confidence ruling) —
  * those fields exist in decision events and are deliberately not consulted.
  *
+ * Two audited semantic contracts (Phase 2 audit, findings 1 and 3):
+ *
+ *  - Decision sources are classified by the explicit provider-source
+ *    taxonomy (`providerTaxonomy.ts`), never by a negative comparison.
+ *    Request-derived counts never claim upstream calls; upstream call
+ *    counts are `not-observable` from a plain ledger.
+ *
+ *  - Category active time is movement-inclusive (brief §10.4: start,
+ *    completion, interruption, movement, scenario-end events): an action's
+ *    active-time interval opens at its MovementStarted tick when a travel
+ *    leg exists, else at its ActionStarted tick, and closes at completion,
+ *    interruption, start-rejection on arrival, or scenario end. Travel
+ *    toward an action that fails start validation on arrival is attributed
+ *    to the selected action's category WITHOUT counting an action start.
+ *    `ActionStarted` alone governs start counts, mode-start distributions,
+ *    transitions, and work-session counts; `longestWorkSessionTicks`
+ *    measures continuous bench occupancy from ActionStarted (travel to the
+ *    bench is not bench work).
+ *
  * The caller is responsible for validation (`validateLedgerFile`); this
  * module trusts the exact per-event schemas that validation enforced.
  */
 
-/** Provider id of the deterministic utility provider — everything else is external. */
-const DETERMINISTIC_PROVIDER_ID = 'deterministic-utility-v1';
-
-interface OpenAction {
-  startTick: number;
+interface OpenInterval {
+  /** Active-time clock opening tick: MovementStarted if the action had a
+   * travel leg, otherwise ActionStarted. */
+  openTick: number;
+  /** ActionStarted tick, null while the action is still in transit (or was
+   * rejected on arrival and never started). */
+  startTick: number | null;
   category: ActionCategory;
   mode: ActionMode;
   isBenchSession: boolean;
@@ -83,12 +105,13 @@ interface NpcAccumulator {
   purifierContributionUnits: number;
   workSessionCount: number;
   longestWorkSessionTicks: number;
-  externalActionCalls: number;
+  externalActionRequestsEmitted: number;
   acceptedExternalActions: number;
+  policyExecutorDecisions: number;
   deterministicFallbackDecisions: number;
   providerFailuresByCode: Map<string, number>;
   engineRejectionsByReason: Map<string, number>;
-  openActions: Map<string, OpenAction>;
+  openIntervals: Map<string, OpenInterval>;
   relationships: Map<string, number>;
 }
 
@@ -131,12 +154,13 @@ function freshAccumulator(): NpcAccumulator {
     purifierContributionUnits: 0,
     workSessionCount: 0,
     longestWorkSessionTicks: 0,
-    externalActionCalls: 0,
+    externalActionRequestsEmitted: 0,
     acceptedExternalActions: 0,
+    policyExecutorDecisions: 0,
     deterministicFallbackDecisions: 0,
     providerFailuresByCode: new Map(),
     engineRejectionsByReason: new Map(),
-    openActions: new Map(),
+    openIntervals: new Map(),
     relationships: new Map(),
   };
 }
@@ -164,6 +188,18 @@ function orientationBucket(
   return 'untargeted';
 }
 
+/** Closes an open active-time interval at `tick`, crediting the active-time
+ * clock, and the bench-session length when the active phase actually ran. */
+function closeInterval(a: NpcAccumulator, interval: OpenInterval, tick: number): void {
+  const activeDelta = tick - interval.openTick;
+  a.activeTicks += activeDelta;
+  bump(a.timeByCategoryTicks, interval.category, activeDelta);
+  if (interval.isBenchSession && interval.startTick !== null) {
+    const sessionDelta = tick - interval.startTick;
+    if (sessionDelta > a.longestWorkSessionTicks) a.longestWorkSessionTicks = sessionDelta;
+  }
+}
+
 /**
  * Builds one fingerprint per NPC from a validated exported ledger. Exported
  * ledgers always carry the V1 role assignment (`buildLedgerFile` refuses
@@ -180,6 +216,7 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
   };
 
   const requestProviderById = new Map<string, string>();
+  const proposedActionById = new Map<string, { category: ActionCategory; mode: ActionMode }>();
   const commitmentDebtorById = new Map<string, NpcId>();
   let taskCompletionTick: number | null = null;
   let mealViolation = false;
@@ -193,7 +230,16 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
         const a = acc(npcId);
         a.decisionOpportunities += 1;
         requestProviderById.set(p.requestId as string, providerId);
-        if (providerId !== DETERMINISTIC_PROVIDER_ID) a.externalActionCalls += 1;
+        // Explicit taxonomy classification (audit finding 1): an unknown
+        // provider ID fails loudly, never defaults to external.
+        const sourceClass = classifyProviderId(providerId);
+        if (sourceClass === 'external-action-request') {
+          a.externalActionRequestsEmitted += 1;
+        } else if (sourceClass === 'external-policy-compilation') {
+          // The compilation authority never serves per-decision action
+          // requests; a ledger claiming otherwise is mis-wired evidence.
+          throw new Error(`fingerprint-action-request-to-compilation-authority:${providerId}`);
+        }
         break;
       }
       case 'DecisionResponseAccepted': {
@@ -204,8 +250,10 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
         const usedFallback = p.usedFallback as boolean;
         if (usedFallback) a.fallbackSelections += 1;
         const provider = requestProviderById.get(p.requestId as string);
-        if (!usedFallback && provider !== undefined && provider !== DETERMINISTIC_PROVIDER_ID) {
-          a.acceptedExternalActions += 1;
+        if (!usedFallback && provider !== undefined) {
+          const sourceClass = classifyProviderId(provider);
+          if (sourceClass === 'external-action-request') a.acceptedExternalActions += 1;
+          else if (sourceClass === 'local-policy-executor') a.policyExecutorDecisions += 1;
         }
         break;
       }
@@ -236,6 +284,26 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
       }
       case 'ActionProposed': {
         acc(p.npcId as NpcId).actionsProposed += 1;
+        proposedActionById.set(p.actionId as string, {
+          category: p.category as ActionCategory,
+          mode: p.mode as ActionMode,
+        });
+        break;
+      }
+      case 'MovementStarted': {
+        // Travel legs open the movement-inclusive active-time clock. The
+        // moving action's descriptor comes from its ActionProposed event
+        // (MovementStarted itself carries no category).
+        const descriptor = proposedActionById.get(p.actionId as string);
+        if (descriptor) {
+          acc(p.npcId as NpcId).openIntervals.set(p.actionId as string, {
+            openTick: event.tick,
+            startTick: null,
+            category: descriptor.category,
+            mode: descriptor.mode,
+            isBenchSession: false,
+          });
+        }
         break;
       }
       case 'ActionStarted': {
@@ -262,12 +330,20 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
         bump(a.targetOrientation, orientationBucket(targetNpcId, targetResourceId));
         const isBenchSession = mode === 'work' || mode === 'relieve';
         if (isBenchSession) a.workSessionCount += 1;
-        a.openActions.set(p.actionId as string, {
-          startTick: event.tick,
-          category,
-          mode,
-          isBenchSession,
-        });
+        const existing = a.openIntervals.get(p.actionId as string);
+        if (existing) {
+          // The travel leg already opened the clock; the active phase begins.
+          existing.startTick = event.tick;
+          existing.isBenchSession = isBenchSession;
+        } else {
+          a.openIntervals.set(p.actionId as string, {
+            openTick: event.tick,
+            startTick: event.tick,
+            category,
+            mode,
+            isBenchSession,
+          });
+        }
         break;
       }
       case 'ActionCompleted':
@@ -276,20 +352,28 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
         const a = acc(npcId);
         if (event.type === 'ActionCompleted') a.actionsCompleted += 1;
         else a.actionsInterrupted += 1;
-        const open = a.openActions.get(p.actionId as string);
+        const open = a.openIntervals.get(p.actionId as string);
         if (open) {
-          const delta = event.tick - open.startTick;
-          a.activeTicks += delta;
-          bump(a.timeByCategoryTicks, open.category, delta);
-          if (open.isBenchSession && delta > a.longestWorkSessionTicks) {
-            a.longestWorkSessionTicks = delta;
-          }
-          a.openActions.delete(p.actionId as string);
+          closeInterval(a, open, event.tick);
+          a.openIntervals.delete(p.actionId as string);
         }
         break;
       }
       case 'ActionRejected': {
-        acc(p.npcId as NpcId).actionsRejected += 1;
+        const npcId = p.npcId as NpcId;
+        const a = acc(npcId);
+        a.actionsRejected += 1;
+        // Movement-then-start-rejection (audit finding 3): the travel already
+        // spent is attributed to the selected action's category; the start
+        // count is untouched because no start occurred.
+        const actionId = p.actionId as string | null;
+        if (actionId !== null) {
+          const open = a.openIntervals.get(actionId);
+          if (open) {
+            closeInterval(a, open, event.tick);
+            a.openIntervals.delete(actionId);
+          }
+        }
         break;
       }
       case 'RepairProgressed': {
@@ -378,18 +462,14 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
     }
   }
 
-  // Defensive close for any action still open at scenario end (the engine
-  // interrupts everything at the end tick, so this is normally a no-op).
+  // Scenario-end close for any interval still open (the engine interrupts
+  // everything at the end tick, so this is normally a no-op; a transit still
+  // in flight at the end closes here too).
   for (const a of accumulators.values()) {
-    for (const open of a.openActions.values()) {
-      const delta = file.finalSummary.tick - open.startTick;
-      a.activeTicks += delta;
-      bump(a.timeByCategoryTicks, open.category, delta);
-      if (open.isBenchSession && delta > a.longestWorkSessionTicks) {
-        a.longestWorkSessionTicks = delta;
-      }
+    for (const open of a.openIntervals.values()) {
+      closeInterval(a, open, file.finalSummary.tick);
     }
-    a.openActions.clear();
+    a.openIntervals.clear();
   }
 
   const replay = replayLedger(file.scenario.id, file.events);
@@ -411,7 +491,11 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
       scenarioId: file.scenario.id,
       scenarioVersion: file.scenario.version,
       seed: file.scenario.seed,
-      conditionId: file.providerId,
+      providerPlanId: file.providerId,
+      // A bare ledger proves the provider plan, never a registered condition
+      // (audit finding 4): the condition is reported only when a manifest or
+      // study plan proves it, which ledger-only evidence cannot.
+      registeredConditionId: 'not-observable',
       npcId,
       finalTick: file.finalSummary.tick,
       worldStateHash: file.worldStateHash,
@@ -493,9 +577,19 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
 
       relationshipsAtEnd,
 
-      externalActionCalls: a.externalActionCalls,
-      policyCompilationCalls: 0,
+      externalActionRequestsEmitted: a.externalActionRequestsEmitted,
       acceptedExternalActions: a.acceptedExternalActions,
+      policyExecutorDecisions: a.policyExecutorDecisions,
+      // No policy-compilation lifecycle exists in the VS001 event vocabulary;
+      // the field is part of the M2 schema contract and stays 0 until the
+      // compilation events exist.
+      policyCompilationRequestsEmitted: 0,
+      // Transport facts a plain ledger cannot prove (audit finding 1): only
+      // gateway-trace evidence may populate these.
+      upstreamActionCallsAttempted: 'not-observable',
+      upstreamActionCallsCompleted: 'not-observable',
+      upstreamPolicyCompilationCallsAttempted: 'not-observable',
+      upstreamPolicyCompilationCallsCompleted: 'not-observable',
       acceptedPolicyPatches: 0,
       policyPatchUses: 0,
       policyPatchMisses: 0,
@@ -517,7 +611,8 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
     scenarioId: file.scenario.id,
     scenarioVersion: file.scenario.version,
     seed: file.scenario.seed,
-    conditionId: file.providerId,
+    providerPlanId: file.providerId,
+    registeredConditionId: 'not-observable',
     finalTick: file.finalSummary.tick,
     worldStateHash: file.worldStateHash,
     canonicalLedgerHash: file.canonicalLedgerHash,

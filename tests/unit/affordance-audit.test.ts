@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { auditEventStream, auditStaticContracts } from '../../src/sim/audit/affordanceAudit';
-import { KNOWN_GAPS, matchKnownGap } from '../../src/sim/audit/knownGaps';
+import {
+  auditEventStream,
+  auditEventStreamDetailed,
+  auditStaticContracts,
+} from '../../src/sim/audit/affordanceAudit';
+import {
+  KNOWN_GAPS,
+  coverageSourceSchema,
+  knownGapSchema,
+  matchKnownGap,
+} from '../../src/sim/audit/knownGaps';
 import { INTERRUPTION_CONTRACTS, interruptionContractFor } from '../../src/sim/audit/contracts';
 import { validateSustained } from '../../src/sim/actions/validation';
+import {
+  coverageStatus,
+  loadSyntheticFixture,
+  runAudit,
+  type CorpusItem,
+} from '../../scripts/audit/affordances';
 import { exportedFile } from '../ledgerCorruption';
 import { freshState } from '../helpers';
 import { ACTION_MODES } from '../../src/shared/ids';
@@ -10,11 +25,13 @@ import type { EventEnvelope } from '../../src/shared/events';
 import type { AuditFinding } from '../../src/sim/audit/findings';
 
 /**
- * Affordance-space and interruption-contract auditor (M2 brief §27.6–§27.7).
- * Proves: the declared contracts match actual engine behavior; the static
- * findings are exactly the registered VS001 gaps; classification follows the
- * four-way CI table (exact match → known limitation; changed shape, changed
- * scope, or new gap → unregistered).
+ * Affordance-space and interruption-contract auditor (M2 brief §27.6–§27.7,
+ * remediated per the Phase 2 audit finding 2). Proves: the declared contracts
+ * match actual engine behavior; the static findings are exactly the
+ * registered VS001 gaps; every registered gap carries CI-exercisable
+ * coverage that reproduces it; an unobserved registered gap fails the audit;
+ * a pending own meal-transfer request satisfies the lawful-acquisition exit
+ * class while the post-refusal cooldown is evaluated separately.
  */
 
 describe('interruption contracts match the actual engine', () => {
@@ -128,8 +145,85 @@ describe('known-gap classification (§27.7 CI table)', () => {
     expect(matchKnownGap({ ...renegotiation, scenarioId: 'A' })).toBeNull();
   });
 
-  it('registry entries validate their own schema', () => {
-    expect(KNOWN_GAPS.length).toBeGreaterThanOrEqual(5);
+  it('holds exactly the four Milestone-1-documented entries, each with coverage', () => {
+    expect(KNOWN_GAPS.map((gap) => gap.knownGapId).sort()).toEqual([
+      'KG-VS001-EAT-SUSTAINED-INTERRUPTION',
+      'KG-VS001-EAT-VIOLATION-SUSTAINED-INTERRUPTION',
+      'KG-VS001-RENEGOTIATION-RESPONSE-WINDOW',
+      'KG-VS001-TREAT-SUSTAINED-INTERRUPTION',
+    ]);
+    for (const gap of KNOWN_GAPS) {
+      expect(() => knownGapSchema.parse(gap)).not.toThrow();
+      expect(gap.coverage.length).toBeGreaterThanOrEqual(1);
+      for (const source of gap.coverage) {
+        expect(() => coverageSourceSchema.parse(source)).not.toThrow();
+      }
+    }
+  });
+
+  it('rejects an entry whose only coverage cannot be exercised in CI', () => {
+    const entry = {
+      ...KNOWN_GAPS[0]!,
+      coverage: [
+        { kind: 'retained-live-evidence-fixture' as const, description: 'outside the Git tree' },
+      ],
+    };
+    expect(() => knownGapSchema.parse(entry)).toThrow();
+  });
+});
+
+describe('coverage guarantee (audit §4.3): unobserved registered gaps fail', () => {
+  const staticGap = KNOWN_GAPS.find(
+    (gap) => gap.knownGapId === 'KG-VS001-TREAT-SUSTAINED-INTERRUPTION',
+  )!;
+  const staticFinding: AuditFinding = {
+    checkId: 'non-interruptible-mode-has-world-interruption',
+    scenarioId: 'static',
+    key: { mode: 'treat', classes: 'patient-absent' },
+    detail: 'observed',
+  };
+
+  it('a gap reproduced by its declared source is matched', () => {
+    const corpus: CorpusItem[] = [
+      { source: { kind: 'static-contract' }, findings: [staticFinding] },
+    ];
+    const status = coverageStatus([staticGap], corpus);
+    expect(status.matchedKnownGapIds).toEqual([staticGap.knownGapId]);
+    expect(status.unobservedKnownGapIds).toEqual([]);
+  });
+
+  it('a gap whose declared source produced nothing is unobserved — even if seen elsewhere', () => {
+    const emptyDeclaredSource: CorpusItem[] = [
+      { source: { kind: 'static-contract' }, findings: [] },
+      // The same finding arriving from an UNDECLARED source (a supplied
+      // ledger) is an extra observation, never a substitute for coverage.
+      {
+        source: { kind: 'supplied-ledger', path: 'somewhere.json' },
+        findings: [{ ...staticFinding, scenarioId: 'C' }],
+      },
+    ];
+    const status = coverageStatus([staticGap], emptyDeclaredSource);
+    expect(status.matchedKnownGapIds).toEqual([]);
+    expect(status.unobservedKnownGapIds).toEqual([staticGap.knownGapId]);
+  });
+
+  it('deleting a declared coverage fixture fails the audit', () => {
+    expect(() => loadSyntheticFixture('scripts/audit/fixtures/does-not-exist.json')).toThrow(
+      'audit-coverage-fixture-missing',
+    );
+  });
+
+  it('the committed scenario-C fixture reproduces the exact registered finding through the real audit code', () => {
+    const fixture = loadSyntheticFixture(
+      'scripts/audit/fixtures/kg-vs001-renegotiation-response-window-events.json',
+    );
+    expect(fixture.scenarioId).toBe('C');
+    const findings = auditEventStream(fixture.scenarioId, fixture.events);
+    expect(findings.length).toBe(1);
+    const finding = findings[0]!;
+    expect(finding.checkId).toBe('renegotiation-proposal-without-response-opportunity');
+    expect(finding.key.commitmentKind).toBe('relieve-at-bench');
+    expect(matchKnownGap(finding)?.knownGapId).toBe('KG-VS001-RENEGOTIATION-RESPONSE-WINDOW');
   });
 });
 
@@ -170,14 +264,22 @@ describe('event-stream audit over deterministic exports', () => {
     ).toEqual([]);
   });
 
-  it('scenario D surfaces only the registered meal-dilemma request-window gap', () => {
+  it('scenario D is clean under the refined dilemma semantics, with the sub-states reported separately', () => {
+    // Probe evidence (Phase 2 remediation): scenario D offers eat-violation
+    // without request-transfer six times — ticks 90/150 while Mara's own
+    // transfer request is PENDING (lawful acquisition in progress), ticks
+    // 210–390 during the post-refusal COOLDOWN (acquisition exercised and
+    // lawfully refused; forgo modes offered every time). Neither sub-state
+    // is a missing-lawful-exit gap; each is counted separately.
     const file = exportedFile('D');
-    const findings = auditEventStream('D', file.events);
-    expect(findings.length).toBe(1);
-    const finding = findings[0]!;
-    expect(finding.checkId).toBe('dilemma-missing-lawful-exits');
-    expect(finding.key.missingClasses).toBe('lawful-acquisition');
-    expect(matchKnownGap(finding)?.knownGapId).toBe('KG-VS001-MEAL-DILEMMA-REQUEST-WINDOW');
+    const result = auditEventStreamDetailed('D', file.events);
+    expect(result.findings).toEqual([]);
+    const stats = result.dilemmaStats.find((s) => s.dilemmaId === 'meal-scarcity-violation-choice');
+    expect(stats).toBeDefined();
+    expect(stats!.satisfiedByPendingRequest).toBe(2);
+    expect(stats!.satisfiedByRefusalCooldown).toBe(4);
+    expect(stats!.missingExitFindings).toBe(0);
+    expect(stats!.triggeringOfferSets).toBe(stats!.satisfiedByOfferedModes + 6);
   });
 
   it('scenario C stream satisfies the renegotiation-response contract deterministically', () => {
@@ -213,5 +315,55 @@ describe('event-stream audit over deterministic exports', () => {
     const mismatch = findings.find((f) => f.checkId === 'contract-advertisement-mismatch');
     expect(mismatch).toBeDefined();
     expect(matchKnownGap(mismatch!)).toBeNull();
+  });
+
+  it('MUTATION GUARD: withholding request-transfer with no pending request and no cooldown is an unregistered finding', () => {
+    const file = exportedFile('D');
+    const events = JSON.parse(JSON.stringify(file.events)) as EventEnvelope[];
+    // Find the first offer set where BOTH eat-violation and request-transfer
+    // are offered (so the actor has neither a pending request nor a cooldown)
+    // and remove the lawful-acquisition offer against the engine invariant.
+    let mutated = false;
+    for (const event of events) {
+      if (event.type !== 'DecisionRequested') continue;
+      const payload = event.payload as {
+        offeredAffordances: { mode: string; id: string }[];
+      };
+      const offered = payload.offeredAffordances;
+      if (
+        offered.some((o) => o.mode === 'eat-violation') &&
+        offered.some((o) => o.mode === 'request-transfer')
+      ) {
+        payload.offeredAffordances = offered.filter((o) => o.mode !== 'request-transfer');
+        mutated = true;
+        break;
+      }
+    }
+    expect(mutated).toBe(true);
+    const findings = auditEventStream('D', events);
+    const missing = findings.find((f) => f.checkId === 'dilemma-missing-lawful-exits');
+    expect(missing).toBeDefined();
+    expect(missing!.key.missingClasses).toBe('lawful-acquisition');
+    // The Scenario D registry entry was removed per the audit ruling: this
+    // finding must classify as UNREGISTERED and fail CI.
+    expect(matchKnownGap(missing!)).toBeNull();
+  });
+});
+
+describe('full audit run (CI shape)', () => {
+  it('is green: all registered gaps observed by declared coverage, zero unregistered findings', () => {
+    const report = runAudit([]);
+    expect(report.ok).toBe(true);
+    expect(report.unregisteredFindings).toEqual([]);
+    expect(report.unobservedKnownGapIds).toEqual([]);
+    expect(report.matchedKnownGapIds.sort()).toEqual(KNOWN_GAPS.map((g) => g.knownGapId).sort());
+    expect(report.auditedFixtures).toEqual([
+      'scripts/audit/fixtures/kg-vs001-renegotiation-response-window-events.json',
+    ]);
+    expect(report.knownLimitationCount).toBe(4);
+    const dStats = report.dilemmaStats.find((s) => s.source === 'scenario-D');
+    expect(dStats).toBeDefined();
+    expect(dStats!.satisfiedByPendingRequest).toBe(2);
+    expect(dStats!.satisfiedByRefusalCooldown).toBe(4);
   });
 });

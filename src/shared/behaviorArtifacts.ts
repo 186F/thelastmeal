@@ -116,13 +116,22 @@ function completeRecord<V extends z.ZodTypeAny>(keys: readonly string[], value: 
 export const notObservable = z.literal('not-observable');
 export type CountOrNotObservable = number | 'not-observable';
 
+/**
+ * Provenance rule (Phase 2 audit, blocking finding 4): `providerPlanId` is the
+ * provider-plan identity the ledger itself proves (`ledger.providerId`);
+ * `registeredConditionId` is an experimental condition PROVEN by a manifest or
+ * study plan. A bare ledger proves no condition — the evaluator reports
+ * `not-observable` rather than inventing one, and a condition is never
+ * inferred from a provider plan.
+ */
 export const behaviorFingerprintSchema = z
   .object({
     fingerprintVersion: z.literal(BEHAVIOR_FINGERPRINT_VERSION),
     scenarioId: z.enum(SCENARIO_IDS),
     scenarioVersion: z.string().min(1),
     seed: z.number().int(),
-    conditionId: z.string().min(1),
+    providerPlanId: z.string().min(1),
+    registeredConditionId: z.union([z.string().min(1), notObservable]),
     npcId: z.enum(NPC_IDS),
     finalTick: intTick,
     worldStateHash: hash16,
@@ -202,10 +211,19 @@ export const behaviorFingerprintSchema = z
     // used by the relationship-delta outcome subcomponent (§10.6E).
     relationshipsAtEnd: completeRecord(NPC_IDS, signedMicro),
 
-    // Decision-source behavior (§10.4).
-    externalActionCalls: intCount,
-    policyCompilationCalls: intCount,
+    // Decision-source behavior (§10.4), under the explicit provider-source
+    // taxonomy (audit finding 1). Request-derived counts are canonical ledger
+    // facts and never claim upstream dispatch; upstream call counts are
+    // transport facts a plain ledger cannot prove, reported `not-observable`
+    // unless gateway-trace evidence supplies them.
+    externalActionRequestsEmitted: intCount,
     acceptedExternalActions: intCount,
+    policyExecutorDecisions: intCount,
+    policyCompilationRequestsEmitted: intCount,
+    upstreamActionCallsAttempted: z.union([intCount, notObservable]),
+    upstreamActionCallsCompleted: z.union([intCount, notObservable]),
+    upstreamPolicyCompilationCallsAttempted: z.union([intCount, notObservable]),
+    upstreamPolicyCompilationCallsCompleted: z.union([intCount, notObservable]),
     acceptedPolicyPatches: intCount,
     policyPatchUses: intCount,
     policyPatchMisses: intCount,
@@ -225,7 +243,8 @@ export const behaviorFingerprintSetSchema = z
     scenarioId: z.enum(SCENARIO_IDS),
     scenarioVersion: z.string().min(1),
     seed: z.number().int(),
-    conditionId: z.string().min(1),
+    providerPlanId: z.string().min(1),
+    registeredConditionId: z.union([z.string().min(1), notObservable]),
     finalTick: intTick,
     worldStateHash: hash16,
     canonicalLedgerHash: hash16,
@@ -262,7 +281,8 @@ export const behaviorSimilaritySchema = z
       .object({
         scenarioId: z.enum(SCENARIO_IDS),
         seed: z.number().int(),
-        conditionId: z.string().min(1),
+        providerPlanId: z.string().min(1),
+        registeredConditionId: z.union([z.string().min(1), notObservable]),
         canonicalLedgerHash: hash16,
       })
       .strict(),
@@ -270,7 +290,8 @@ export const behaviorSimilaritySchema = z
       .object({
         scenarioId: z.enum(SCENARIO_IDS),
         seed: z.number().int(),
-        conditionId: z.string().min(1),
+        providerPlanId: z.string().min(1),
+        registeredConditionId: z.union([z.string().min(1), notObservable]),
         canonicalLedgerHash: hash16,
       })
       .strict(),

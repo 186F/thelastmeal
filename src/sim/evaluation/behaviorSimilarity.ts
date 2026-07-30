@@ -133,13 +133,15 @@ function compareNpc(left: BehaviorFingerprint, right: BehaviorFingerprint): Beha
     left: {
       scenarioId: left.scenarioId,
       seed: left.seed,
-      conditionId: left.conditionId,
+      providerPlanId: left.providerPlanId,
+      registeredConditionId: left.registeredConditionId,
       canonicalLedgerHash: left.canonicalLedgerHash,
     },
     right: {
       scenarioId: right.scenarioId,
       seed: right.seed,
-      conditionId: right.conditionId,
+      providerPlanId: right.providerPlanId,
+      registeredConditionId: right.registeredConditionId,
       canonicalLedgerHash: right.canonicalLedgerHash,
     },
     components: { categoryTime, modeStarts, transitions, targetOrientation, outcomes },

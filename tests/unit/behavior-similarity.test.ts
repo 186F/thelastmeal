@@ -48,11 +48,12 @@ describe('behavior similarity', () => {
     const cmp = compareBehaviorFingerprintSets(b1, b2);
     expect(cmp.pairing).toBe('registered-ablation-pair');
     // FROZEN-BEHAVIOR PINS (deterministic provider, frozen scenarios): the
-    // criticism memory drives Mara's work/rest split apart while Jonas and
-    // Rin remain nearly identical. Recompute only under a new
-    // BEHAVIOR_SIMILARITY_VERSION.
-    expect(cmp.npcs.mara.components.categoryTime).toBe(5_147);
-    expect(cmp.npcs.mara.compositeBp).toBe(7_018);
+    // criticism memory drives Mara's work/rest split apart while Rin remains
+    // identical. Values are movement-inclusive per the Phase 2 audit
+    // finding 3 (travel legs are behaviorally consequential time); recompute
+    // only under a new BEHAVIOR_SIMILARITY_VERSION.
+    expect(cmp.npcs.mara.components.categoryTime).toBe(5_634);
+    expect(cmp.npcs.mara.compositeBp).toBe(7_189);
     expect(cmp.npcs.mara.compositeBp).toBeLessThan(cmp.npcs.rin.compositeBp);
   });
 

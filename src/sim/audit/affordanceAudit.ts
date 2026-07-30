@@ -1,10 +1,12 @@
 import type { EventEnvelope } from '../../shared/events';
 import type { ActionMode, NpcId, ScenarioId } from '../../shared/ids';
+import { REQUEST_REFUSAL_COOLDOWN_TICKS } from '../config';
 import {
   COMMITMENT_LIFECYCLE_CONTRACTS,
   DILEMMA_CHECKPOINTS,
   INTERRUPTION_CONTRACTS,
   interruptionContractFor,
+  type DilemmaStateSatisfaction,
 } from './contracts';
 import { findingSortKey, type AuditFinding } from './findings';
 
@@ -77,12 +79,46 @@ interface CommitmentView {
 }
 
 /**
+ * Per-checkpoint dilemma evaluation accounting (Phase 2 audit §4.4: the
+ * pending-request and refusal-cooldown sub-states are evaluated SEPARATELY
+ * and reported, never silently merged into one satisfied bucket).
+ */
+export interface DilemmaEvaluationStats {
+  dilemmaId: string;
+  /** Offer sets containing the trigger mode. */
+  triggeringOfferSets: number;
+  /** Sets where every exit class had an offered mode. */
+  satisfiedByOfferedModes: number;
+  /** Sets where lawful acquisition was satisfied only by the actor's own
+   * pending transfer request (acquisition in progress). */
+  satisfiedByPendingRequest: number;
+  /** Sets where lawful acquisition was satisfied only by the post-refusal
+   * cooldown (acquisition exercised and lawfully refused). */
+  satisfiedByRefusalCooldown: number;
+  /** Sets that produced a missing-lawful-exits finding. */
+  missingExitFindings: number;
+}
+
+export interface EventStreamAuditResult {
+  findings: AuditFinding[];
+  dilemmaStats: DilemmaEvaluationStats[];
+}
+
+/**
  * Event-stream conformance findings for one validated ledger's events.
  */
 export function auditEventStream(
   scenarioId: ScenarioId,
   events: readonly EventEnvelope[],
 ): AuditFinding[] {
+  return auditEventStreamDetailed(scenarioId, events).findings;
+}
+
+/** Full event-stream audit: findings plus dilemma-evaluation accounting. */
+export function auditEventStreamDetailed(
+  scenarioId: ScenarioId,
+  events: readonly EventEnvelope[],
+): EventStreamAuditResult {
   const findings: AuditFinding[] = [];
   const seen = new Set<string>();
   const push = (finding: AuditFinding): void => {
@@ -104,6 +140,36 @@ export function auditEventStream(
   }
   const proposals = new Map<string, PendingProposal>();
   const startedNonInterruptible = new Map<string, ActionMode>();
+
+  // Transfer-request lifecycle state for dilemma state satisfactions. VS001
+  // has exactly one transferable resource (the meal), so tracking is keyed by
+  // requester. The cooldown horizon reuses the frozen engine constant.
+  const pendingOwnTransferRequest = new Map<NpcId, string>();
+  const requestRefusalCooldownUntil = new Map<NpcId, number>();
+  const dilemmaStats = new Map<string, DilemmaEvaluationStats>(
+    DILEMMA_CHECKPOINTS.map((dilemma) => [
+      dilemma.id,
+      {
+        dilemmaId: dilemma.id,
+        triggeringOfferSets: 0,
+        satisfiedByOfferedModes: 0,
+        satisfiedByPendingRequest: 0,
+        satisfiedByRefusalCooldown: 0,
+        missingExitFindings: 0,
+      },
+    ]),
+  );
+  const stateSatisfied = (
+    satisfaction: DilemmaStateSatisfaction,
+    npcId: NpcId,
+    tick: number,
+  ): boolean => {
+    if (satisfaction === 'own-transfer-request-pending') {
+      return pendingOwnTransferRequest.has(npcId);
+    }
+    const until = requestRefusalCooldownUntil.get(npcId);
+    return until !== undefined && tick < until;
+  };
 
   for (const event of events) {
     const p = event.payload as Record<string, unknown>;
@@ -129,17 +195,36 @@ export function auditEventStream(
           }
         }
         // 2. Registered dilemma checkpoints: two consequentially distinct
-        //    lawful exits whenever the trigger mode is offered.
+        //    lawful exits whenever the trigger mode is offered. An exit class
+        //    is satisfied by an offered mode or by one of its declared world
+        //    states (audit §4.4: a pending own transfer request is lawful
+        //    acquisition in progress; the post-refusal cooldown is the modeled
+        //    consequence of an exercised-and-refused acquisition — each
+        //    evaluated and reported separately).
         for (const dilemma of DILEMMA_CHECKPOINTS) {
           if (!offered.some((o) => o.mode === dilemma.triggerMode)) continue;
+          const stats = dilemmaStats.get(dilemma.id)!;
+          stats.triggeringOfferSets += 1;
           const missingClasses: string[] = [];
+          let allByOffer = true;
+          let usedPendingRequest = false;
+          let usedRefusalCooldown = false;
           for (const exitClass of dilemma.exitClasses) {
-            if (!offered.some((o) => (exitClass.modes as readonly string[]).includes(o.mode))) {
-              missingClasses.push(exitClass.classId);
-            }
+            const offeredMode = offered.some((o) =>
+              (exitClass.modes as readonly string[]).includes(o.mode),
+            );
+            if (offeredMode) continue;
+            allByOffer = false;
+            const bySatisfaction = exitClass.stateSatisfactions.find((satisfaction) =>
+              stateSatisfied(satisfaction, npcId, event.tick),
+            );
+            if (bySatisfaction === 'own-transfer-request-pending') usedPendingRequest = true;
+            else if (bySatisfaction === 'own-request-refusal-cooldown') usedRefusalCooldown = true;
+            else missingClasses.push(exitClass.classId);
           }
           const distinctClasses = dilemma.exitClasses.length - missingClasses.length;
           if (distinctClasses < 2) {
+            stats.missingExitFindings += 1;
             push({
               checkId: 'dilemma-missing-lawful-exits',
               scenarioId,
@@ -148,6 +233,11 @@ export function auditEventStream(
                 `offer set at tick ${event.tick} triggers '${dilemma.id}' but provides ` +
                 `${distinctClasses} distinct lawful exit class(es) (missing: ${missingClasses.join(', ')}); 2 required`,
             });
+          } else if (allByOffer) {
+            stats.satisfiedByOfferedModes += 1;
+          } else {
+            if (usedPendingRequest) stats.satisfiedByPendingRequest += 1;
+            if (usedRefusalCooldown) stats.satisfiedByRefusalCooldown += 1;
           }
         }
         // 3. Renegotiation response opportunity: an offer of a required
@@ -217,6 +307,24 @@ export function auditEventStream(
             }
           }
         }
+        break;
+      }
+      case 'ReservationTransferRequested': {
+        pendingOwnTransferRequest.set(p.requesterNpcId as NpcId, p.requestId as string);
+        break;
+      }
+      case 'ReservationTransferred': {
+        if (p.requestId !== null) {
+          for (const [requester, requestId] of pendingOwnTransferRequest) {
+            if (requestId === (p.requestId as string)) pendingOwnTransferRequest.delete(requester);
+          }
+        }
+        break;
+      }
+      case 'ReservationTransferRefused': {
+        const requester = p.requesterNpcId as NpcId;
+        pendingOwnTransferRequest.delete(requester);
+        requestRefusalCooldownUntil.set(requester, event.tick + REQUEST_REFUSAL_COOLDOWN_TICKS);
         break;
       }
       case 'CommitmentCreated': {
@@ -292,5 +400,8 @@ export function auditEventStream(
     }
   }
 
-  return findings.sort((a, b) => findingSortKey(a).localeCompare(findingSortKey(b)));
+  return {
+    findings: findings.sort((a, b) => findingSortKey(a).localeCompare(findingSortKey(b))),
+    dilemmaStats: [...dilemmaStats.values()],
+  };
 }
