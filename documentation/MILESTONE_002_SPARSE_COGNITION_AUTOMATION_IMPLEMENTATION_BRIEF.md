@@ -33,6 +33,12 @@ Do not treat browser automation as a convenience added at the end. It is a first
 
 Do not begin implementation until the Milestone 1 publication closeout has been merged and the accepted implementation SHA has been tagged. The Milestone 1 raw evidence remains outside Git and must not be rewritten or blended into Milestone 2 evidence.
 
+This brief incorporates the Project Advisor's authoritative scope ruling
+([`MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)),
+which disposes the coding agent's R1–R9 laboratory proposals and rules on
+governance questions Q1–Q3. Where any ambiguity remains between this brief and
+that ruling, the ruling governs.
+
 ---
 
 # 1. Scientific baseline at the start of Milestone 2
@@ -59,7 +65,7 @@ Milestone 1 did **not** demonstrate:
 - durable behavioral individuality under sparse inference;
 - intersubjectivity, reflection, dialogue, or autobiographical consolidation.
 
-The Milestone 1 B1/B2 result was behaviorally negative: the criticism memory reached the model correctly and influenced some explanations, but produced little action-level difference. Treat this as an important result. Do not tune Milestone 2 to force a positive memory effect.
+The Milestone 1 B1/B2 result was behaviorally negative **in the single observed matched pair**: the criticism memory reached the model correctly and influenced some explanations, but produced little action-level difference. Treat this as an important descriptive result — one formal run per condition. It does **not** establish that biography does not affect model behavior; it establishes only that the tested memory intervention did not materially alter behavior in that one pair. Milestone 2 exists to convert such descriptive findings into repeatable measurements. Do not tune Milestone 2 to force a positive memory effect.
 
 Milestone 1 also exposed three implementation lessons that Milestone 2 must absorb:
 
@@ -241,7 +247,32 @@ The formal sequence must complete through a single repository command without ma
 
 ## H9 — Memory sensitivity, exploratory
 
-B1 and B2 will be evaluated for behavioral separation, but no minimum effect is required. The result must be reported even if action behavior remains indistinguishable.
+The registered question is deliberately narrow (per the Advisor's R3 ruling —
+do not register "no biography input moves model behavior"):
+
+> Does between-condition behavioral separation caused by the B1/B2
+> criticism-memory ablation exceed Mara's ordinary within-condition
+> behavioral variation?
+
+The required comparison is:
+
+```text
+B1 versus B2 distance
+    compared with
+A versus A repeat-run distance
+B1 versus B1 repeat-run distance
+B2 versus B2 repeat-run distance
+```
+
+The deterministic provider's large B1/B2 effect may be reported as a reference
+scale only — it is not psychological ground truth, because its weights were
+deliberately constructed to respond to the memory intervention.
+
+No minimum effect is required. The result must be reported even if action
+behavior remains indistinguishable. Use only the existing B1/B2 intervention
+and the matched replicates already in the formal plan; additional biography
+interventions belong in separately registered studies after the laboratory
+exists.
 
 ---
 
@@ -274,7 +305,7 @@ The following must remain byte-identical:
 - existing deterministic conditions and event streams;
 - all fourteen published deterministic golden hashes.
 
-Do not “fix” Scenario C inside the frozen scenarios. Record the proposal-response and treatment-movement limitations as known limitations. Scenario C may be used for emergency, failure, and behavior-comparison measurements, but Milestone 2 may not claim that it validates complete negotiation or treatment-interruption semantics.
+Do not “fix” Scenario C inside the frozen scenarios. Record the proposal-response and treatment-movement limitations as known limitations — specifically, as registered entries in the VS001 known-gap registry (§27.7), which the affordance and interruption-contract auditors (§27.6) consume. Scenario C may be used for emergency, failure, and behavior-comparison measurements, but Milestone 2 may not claim that it validates complete negotiation or treatment-interruption semantics.
 
 ## 6.3 New experiment and conditions
 
@@ -361,6 +392,33 @@ Changing the model, provider, prompts, policy vocabulary, patch lifecycle consta
 - Treating rationale prose as evidence of causal reasoning.
 
 Do not expand scope because an adjacent capability appears easy.
+
+## 7.3 Deferred to Vertical Slice 002 — Social Causality and Counterparty Agency
+
+The commitment-layer repair proposed after Milestone 1 (R5) is **excluded from
+Milestone 2** by the Advisor's ruling. It is not an instrumentation-only
+change: it would alter canonical commitment semantics, event streams, beliefs,
+relationship consequences, subsequent decisions, and both world and ledger
+hashes — confounding the sparse-cognition comparison by changing the world
+model at the same time as the decision architecture.
+
+Its scope is recorded here as a deferred requirement for a future vertical
+slice:
+
+```text
+Vertical Slice 002 — Social Causality and Counterparty Agency
+```
+
+Potential VS002 scope: tender and conforming performance; prevention; waiver;
+creditor-caused nonperformance; renegotiation response affordances;
+proximate-cause social consequences; treatment-interruption semantics.
+
+Milestone 2 may **audit and report** the VS001 gaps (§27.6–§27.7) but may not
+repair them. Do not create `VS001 v1.1`, do not overwrite VS001 behavior, do
+not regenerate the accepted VS001 golden hashes, and do not reinterpret
+Milestone 1 evidence under new semantics. VS001 remains the immutable accepted
+baseline. See §10.11 for how commitment outcomes must be labeled in Milestone
+2 reports.
 
 ---
 
@@ -713,14 +771,74 @@ composite similarity between B1 and B2
 outcome diff
 ```
 
-The report must distinguish:
+The report must distinguish, separately and without inferring one level from
+another:
 
-- memory changed the compiler output;
-- memory changed the local rule selected;
-- memory changed the accepted action;
-- memory changed the final outcome.
+1. memory changed the model or compiler input;
+2. memory changed the compiled policy structure;
+3. memory changed the locally selected policy rule;
+4. memory changed the selected affordance;
+5. memory changed the accepted action;
+6. memory changed the final consequential outcome.
 
-Do not infer one from another.
+## 10.10 Matched-decision comparability rule
+
+Decision opportunities across two runs are directly comparable **only while
+both runs share the same**:
+
+- semantic world context;
+- relevant beliefs and memories;
+- current activity state;
+- offered-affordance descriptors;
+- hard-dependency fingerprint.
+
+After the first behavioral divergence, later ordinal decisions must **not** be
+treated as though they remain naturally matched — ordinal decision 12 in one
+run is not equivalent to ordinal decision 12 in another. After divergence,
+compare runs using trajectory-level behavioral fingerprints, outcome
+distributions, event-sequence alignment where explicitly valid, and semantic
+context matching rather than raw ordinal matching.
+
+## 10.11 Commitment-outcome labeling
+
+In every Milestone 2 evaluator and report, describe the commitment field as:
+
+> The mechanical commitment terminal status produced under VS001 rules.
+
+Do not present it as a validated attribution of moral responsibility or
+realistic blame — Milestone 1 documented that VS001's breach attribution can
+invert proximate cause (see §7.3). It may remain a behavioral-similarity
+component because both compared Milestone 2 conditions operate under the same
+frozen rules.
+
+## 10.12 Blinded reviewer packages for live runs
+
+Extend the existing role-counterbalanced reviewer-package machinery — as
+**non-gating laboratory infrastructure** — to accept validated live ledgers,
+strict-finalized run directories, versioned behavioral fingerprints, hidden
+condition labels, separate answer keys, and separately imported reviewer
+scores.
+
+Permitted diagnostic questions:
+
+```text
+Mara versus Jonas versus Rin identity recognition
+deterministic Mara versus per-decision Mara
+per-decision Mara versus policy-patch Mara
+```
+
+These remain diagnostic unless a separate human-review study pre-registers:
+reviewer population, sample size, recruitment and exclusion rules, assignment
+design, chance baseline, primary statistic, confidence-interval method, and a
+pass threshold.
+
+**Model-discrimination limitation.** Do not claim that reviewers can
+distinguish Gemini-Mara from Ling-Mara using the existing Milestone 1
+archives: that evidence is unbalanced (the Ling sequence was aborted under a
+capacity failure; experiment versions differ; model conditions were not
+randomized or counterbalanced; run counts differ). The machinery may support a
+future balanced model-discrimination study; the existing archives may be used
+only for exploratory method development.
 
 ---
 
@@ -761,7 +879,9 @@ Create exact shared Zod schemas for this conceptual shape:
 interface PolicyPatchDraftV1 {
   schemaVersion: 1;
   strategicIntent: PolicyStrategicIntent;
-  confidenceBp: number; // integer 0..10000
+  selfReportedConfidenceBp?: number; // integer 0..10000; OPTIONAL, diagnostic
+  // only — never gates acceptance, never enters canonical state or hashes,
+  // excluded from primary analysis (Advisor R7 ruling)
   rules: PolicyRuleDraft[]; // 1..8
   defaultPreferences: PolicyPreferenceDraft[]; // 1..8
   rationale?: unknown; // diagnostic only; normalized separately
@@ -889,10 +1009,13 @@ POLICY_PATCH_MAX_DEFAULT_PREFERENCES = 8
 POLICY_PATCH_MAX_AGE_TICKS = scenario end - install tick
 POLICY_PATCH_MAX_USES = 64
 POLICY_PATCH_MAX_CONSECUTIVE_MISSES = 2
-POLICY_PATCH_MIN_CONFIDENCE_BP = 5000
 POLICY_COMPILATION_TTL_TICKS = 180
 POLICY_COMPILATION_RETRY_COOLDOWN_TICKS = 60
 ```
+
+There is deliberately no minimum-confidence constant (the Advisor's R7 ruling
+removed `POLICY_PATCH_MIN_CONFIDENCE_BP`): the model's self-reported score
+never determines whether an otherwise valid policy is installed.
 
 For the frozen 45-minute scenarios, a normal patch should not expire solely because of time or use count. Model refresh should therefore be driven primarily by salient changes rather than by raw cadence.
 
@@ -925,7 +1048,6 @@ interface ActivePolicyPatchState {
   noveltyEpochAtInstall: number;
   sourceContextHash: string;
   strategicIntent: PolicyStrategicIntent;
-  confidenceBp: number;
   rules: CanonicalPolicyRule[];
   defaultPreferences: CanonicalPolicyPreference[];
 }
@@ -942,7 +1064,7 @@ interface PendingPolicyCompilationState {
 }
 ```
 
-The canonical patch contains no rationale, token count, latency, model ID, provider route, or wall-clock time.
+The canonical patch contains no rationale, no self-reported confidence, no token count, latency, model ID, provider route, or wall-clock time. Per the Advisor's R7 ruling, the model's self-reported confidence is uncalibrated and must not affect action legality, policy installation, rule selection, or fallback behavior; it may survive only as optional noncanonical trace metadata named `selfReportedConfidenceBp`, excluded from the semantic world hash, formal acceptance thresholds, and primary analysis unless a separate calibration study validates its semantics against outcomes.
 
 The semantic world hash must include behaviorally consequential active-patch content for Milestone 2 conditions. Legacy hashes must remain unchanged by omitting absent policy state from the legacy projection.
 
@@ -1150,10 +1272,12 @@ npcId
 scenarioId
 providerId
 policyDraft
-confidenceBp
 ```
 
-The model draft carries its own confidence only once; do not duplicate inconsistent confidence fields.
+Any self-reported confidence travels only inside the draft's optional
+`selfReportedConfidenceBp` field, is preserved (if present) only in
+noncanonical trace data, and is never duplicated into the response envelope,
+canonical events, or manifests as a consequential field.
 
 ## 15.4 Acceptance gate
 
@@ -1168,8 +1292,11 @@ duplicate-policy-response
 policy-context-stale
 invalid-policy-schema
 invalid-policy-semantics
-policy-confidence-below-minimum
 ```
+
+There is deliberately **no confidence-based rejection reason** (the Advisor's
+R7 ruling removed `policy-confidence-below-minimum`): an otherwise valid
+policy may not be rejected because of the model's uncalibrated self-score.
 
 ## 15.5 Request resolution
 
@@ -1672,6 +1799,43 @@ estimated maximum input/output tokens when calculable
 
 Never print or persist the API key.
 
+## 19.15 Secret boundary
+
+The orchestrator must **not** read, parse, print, export, or copy
+`.env.gateway` or the API key into any orchestrator or browser-automation
+state. It may only spawn the gateway process, which remains the sole component
+responsible for reading live credentials through its existing configuration
+loader.
+
+## 19.16 Initial unattended acceptance test
+
+Before the harness may be used for the variance calibration study (§22.6) or
+the formal Milestone 2 sequence, it must complete this three-run unattended
+acceptance:
+
+```text
+1. Scenario A — deterministic baseline — gateway off
+2. Scenario A — M2 per-decision condition — live gateway
+3. Scenario A — M2 policy-patch condition — live gateway
+```
+
+The two model-backed runs must strict-finalize as `completed`, replay exactly,
+produce complete evidence bundles, record the pinned model and provider, use
+no manual browser interaction after launch, and create no secret-bearing
+artifact.
+
+The gateway-stop path must first be demonstrated **keylessly** (fake adapter)
+before any live spend, and again inside the formal Milestone 2 sequence.
+
+## 19.17 Pacing restriction
+
+Formal live evidence runs at `speed = 1×`. Accelerated execution may be used
+for unit tests, fake-adapter rehearsals, deterministic headless tests,
+synthetic benchmarks, and non-evidentiary development runs — but no
+accelerated live run may enter a behavioral study until a separately
+pre-registered pacing-comparability study demonstrates that the alternate pace
+preserves the relevant race, latency, supersession, and fallback semantics.
+
 ---
 
 # 20. Optional Claude Code and Chrome-tool supervision
@@ -1776,6 +1940,64 @@ pairedRunKey
 
 The plan file is tracked and reviewed. The API key and output path are not stored in it.
 
+## 21.1 General study registry (mandatory)
+
+Every dataset collected through the laboratory — formal, calibration, pilot,
+exploratory, or blinded-evaluation — must have a registered study file written
+**before** execution, declaring:
+
+```text
+study ID
+study version
+status: confirmatory | calibration | exploratory | pilot
+research question
+hypothesis or explicit no-hypothesis statement
+repository SHA
+package version
+experiment and condition IDs
+model and provider
+prompt versions
+scenario IDs and seeds
+sample size n
+run order, matching, or randomization method
+primary metrics
+secondary metrics
+analysis-script and metric versions
+thresholds, when applicable
+exclusion rules
+replacement policy
+stop rule
+live-call budget
+output root
+evidence retention policy
+```
+
+Evidence discipline: failed, aborted, and null-result studies remain
+registered; replacement attempts remain linked to the original study;
+exploratory analyses remain labeled exploratory; a study may not become
+confirmatory after its output looks favorable; metrics and thresholds may not
+change mid-study.
+
+## 21.2 Two levels of freeze
+
+- **Milestone acceptance freeze** (formal M2 sequence): one exact repository
+  SHA, one tracked plan hash, fixed model/provider/prompt versions, fixed
+  policy vocabulary and lifecycle constants, fixed metrics and thresholds,
+  fixed replacement rules, and a full sequence restart after any material
+  change.
+- **Study-local freeze** (every calibration, exploratory, pilot, or
+  blinded-evaluation dataset): one exact repository SHA for the entire study,
+  one immutable study-plan hash, one fixed nonsecret configuration
+  fingerprint, no code/model/provider/prompt/metric/sample-definition change
+  mid-study, a complete restart or new study version after a material change,
+  and full provenance with preserved failures.
+
+The governing rule: **milestone-level acceptance freezes govern milestone
+verdicts; study-local freezes and provenance govern every collected dataset.**
+Calibration and exploratory studies are not formal acceptance sequences unless
+explicitly promoted through a new pre-registration, and they may not mix runs
+from different implementations or alter metrics after observing results.
+
 ---
 
 # 22. Run profiles
@@ -1791,7 +2013,7 @@ It must cover:
 - duplicate response;
 - stale response after novelty supersession;
 - malformed policy response;
-- low-confidence policy rejection;
+- overlong-rationale draft accepted with rationale normalized (never rejected);
 - policy miss and deterministic fallback;
 - policy invalidation on injury;
 - gateway stop after one accepted patch;
@@ -1873,6 +2095,48 @@ Record the complete order before the first live call. Do not reorder after obser
 ## 22.5 Formal speed
 
 All primary live runs use 1× speed and may not be paused while awaiting inference. The policy-patch and per-decision conditions must run under the same browser and pacing environment.
+
+## 22.6 Repeat-run variance calibration study
+
+The **first live study** executed through the unattended harness (after the
+§19.16 acceptance test) is a registered calibration study measuring how
+behaviorally different Mara is from herself under identical observable
+configuration:
+
+```text
+study ID: m2-calibration-variance-a-001
+study version: 1.0.0
+status: calibration
+scenario: A
+seed: 1001
+condition: mara-model-per-decision-m2-v1
+n: 10 valid primary runs
+speed: 1×
+model / provider / prompt / repository SHA: pinned for the study
+```
+
+Failed attempts remain in the evidence archive but do not count toward `n`
+unless the study plan explicitly defines them as primary observations.
+
+Required outputs, at minimum:
+
+- pairwise behavioral-fingerprint similarities and distances;
+- median, p10, p25, p75, and p90 composite similarity;
+- tick and semantic context of first divergence (per §10.10);
+- action-category, action-mode, and transition entropy;
+- task, commitment, meal, treatment, and violation outcome frequencies;
+- upstream calls attempted and completed; accepted-model coverage;
+- latency and token distributions;
+- rationale-normalization frequency;
+- returned-model and serving-provider consistency.
+
+This is a **calibration study, not a Milestone 2 acceptance gate**. Its
+results may reveal that the formal behavioral-similarity thresholds are poorly
+scaled, but they may not be used to silently alter the pre-registered
+thresholds: any threshold or similarity-formula change after observing this
+study's data requires a new metric version (formula change), a new Milestone 2
+experiment version (formal threshold change), and a repeated pilot before
+formal data collection.
 
 ---
 
@@ -2111,7 +2375,7 @@ M2 experiment and condition
 policy compiler provider
 active patch ID
 patch strategic intent
-patch confidence
+self-reported confidence (labeled "diagnostic only"; from noncanonical trace)
 remaining uses
 novelty epoch
 last compilation trigger
@@ -2178,7 +2442,6 @@ Cover:
 - stale context;
 - wrong provider;
 - malformed patch;
-- low confidence;
 - compiler failure;
 - gateway stop;
 - patch miss fallback;
@@ -2218,11 +2481,93 @@ Add focused mutations that must be caught, including:
 - plan resume ignores changed model/provider;
 - orchestrator overwrites a completed attempt;
 - ZIP writes backslash paths;
-- evaluator accidentally reads rationale.
+- evaluator accidentally reads rationale;
+- a self-reported confidence value influences policy acceptance, rule
+  selection, or the world hash.
 
 ## 27.5 Existing regression gates
 
 All existing tests must remain. All fourteen deterministic golden hashes must remain byte-identical.
+
+## 27.6 Affordance-space and interruption-contract auditors
+
+Add deterministic auditors, run in CI like the golden-hashes test.
+
+**Commitment lifecycle contracts.** Do not implement the overly broad rule
+"every commitment role must always have a compliance affordance." Each
+commitment type instead declares a machine-readable lifecycle contract:
+
+```text
+fulfillment recognition: automatic | explicit-response
+renegotiation: forbidden | unilateral | target-response-required
+prevention or waiver: applicable | not-applicable
+required response modes: [accept, decline, counter, ...]
+```
+
+The auditor checks that generated affordances and event transitions satisfy
+the declared contract.
+
+**Affordance coverage checks**, at minimum:
+
+- required response affordances for the actual target of a pending proposal;
+- registered commitment lifecycle exits;
+- registered dilemma checkpoints, each with at least two **consequentially
+  distinct lawful exits** (syntactically distinct wait variants do not count
+  unless they produce meaningfully different consequences);
+- no generated response mode that no legal transition can consume;
+- no lifecycle state that cannot legally resolve.
+
+**Interruption-contract checks.** Every action mode declares: ordinary
+interruptibility; whether the actor may voluntarily preempt it; world-event
+interruption classes; target-departure behavior; target-incapacity behavior;
+resource-loss behavior; scenario-end behavior. The auditor and tests must
+prove actual engine behavior matches the declaration. `non-interruptible`
+must have one precise engine meaning — it may not remain only a presentation
+label.
+
+## 27.7 VS001 known-gap registry
+
+Add a versioned registry so the auditors do not make CI permanently red by
+rediscovering already documented VS001 limitations:
+
+```text
+knownGapId
+affectedScenario
+affectedMechanic
+expectedFinding
+sourceMilestone
+exactMatchCriteria
+plannedResolution
+```
+
+Required CI behavior:
+
+```text
+Known finding matching the registry exactly:
+  report as known limitation; do not fail
+
+New unregistered gap:
+  fail
+
+Known gap changes shape, severity, or affected scope:
+  fail
+
+New M2 mechanic lacks required coverage:
+  fail
+```
+
+The VS001 proposal-response and treatment-movement limitations must be
+registered entries (planned resolution: Vertical Slice 002, §7.3) — never
+silently fixed in Milestone 2.
+
+## 27.8 `liveSmoke.ts` shutdown-race repair
+
+Fix in the first Milestone 2 source PR (package `1.7.0`; no separate `1.6.3`
+release): replace immediate `process.exit(1)` calls with thrown errors that
+allow `finally` to execute, or `process.exitCode = 1` with return after
+`finally`. Add tests proving `gateway.stop()` completes after: a successful
+smoke response; a schema-invalid gateway response; a typed upstream failure;
+a fetch or transport exception.
 
 ---
 
@@ -2236,6 +2581,7 @@ Add named steps after the existing Milestone 1 gates:
 Milestone 2 unit/integration gate
 Milestone 2 browser automation tests
 Milestone 2 keyless unattended rehearsal
+Affordance and interruption-contract audit (with known-gap registry)
 Policy interpreter synthetic benchmark
 Upload Milestone 2 rehearsal evidence
 ```
@@ -2335,7 +2681,8 @@ The user should not have to:
 
 # 31. Implementation sequence
 
-Do not implement the entire milestone as one opaque diff.
+Do not implement the entire milestone as one opaque diff. This order follows
+the Advisor's approved sequence.
 
 ## Phase 0 — Close Milestone 1
 
@@ -2347,52 +2694,77 @@ Before source work:
 - tag the accepted implementation SHA;
 - confirm the tracked worktree is clean.
 
-## Phase 1 — Evaluation laboratory
+## Phase 1 — Amend and merge this brief
 
-Implement fingerprinting, similarity, deterministic baselines, and tests with no canonical simulation changes.
+- Apply the Advisor's scope ruling to PR #10.
+- Conduct review before merging.
+- Do not begin M2 source implementation until the amended brief is
+  authoritative.
+
+## Phase 2 — Laboratory foundation
+
+Implement, with no canonical simulation changes:
+
+- behavioral fingerprints and similarity;
+- study registry and plan schema (§21.1–§21.2);
+- evidence and analysis versioning;
+- the §27.6 auditors and §27.7 VS001 known-gap registry;
+- live-run reviewer-package support (§10.12);
+- the §27.8 `liveSmoke.ts` shutdown-race repair.
 
 Deliver a reviewable PR and sample reports from existing Milestone 1 ledgers.
 
-## Phase 2 — Policy core
+## Phase 3 — Unattended orchestrator
 
-Implement schemas, canonical state, events, novelty broker, interpreter, fake compiler, replay, import validation, and tests.
+Build the R1 harness first against the existing deterministic and Milestone 1
+per-decision paths. Prove process isolation, fresh gateway per run, browser
+isolation, downloads, replay, finalization, failure preservation, resume
+behavior, secret scanning, and portable packaging — keylessly wherever
+possible.
 
-No live gateway work yet.
+## Phase 4 — M2 per-decision comparator
 
-## Phase 3 — Gateway and artifacts
+- Implement the new M2 action prompt and condition.
+- Run the §19.16 three-run unattended acceptance test.
+- Execute the §22.6 variance calibration study
+  (`m2-calibration-variance-a-001`).
 
-Implement M2 action and policy endpoints, prompts, rationale normalization, exact traces, finalization, and keyless integration tests.
+## Phase 5 — Sparse policy system
 
-## Phase 4 — Unattended orchestrator
+Implement schemas, canonical state, events, novelty broker, interpreter, fake
+compiler, replay, import validation, M2 gateway routes and prompts, rationale
+normalization, exact traces, finalization, and tests — with **no confidence
+gating** anywhere.
 
-Implement Playwright process control, run-plan/state schemas, downloads, resume, evidence packaging, and failure diagnostics.
+## Phase 6 — Adversarial audit and remediation
 
-## Phase 5 — Adversarial audit and remediation
+Before live policy-condition spend, review at least: canonical authority;
+replay and event semantics; policy expressiveness and escape paths; evaluator
+validity; artifact integrity; automation/resume correctness; secret handling;
+statistical and threshold implementation. Every confirmed finding receives a
+regression test.
 
-Before live spend, review at least:
+## Phase 7 — Keyless rehearsal and live pilot
 
-- canonical authority;
-- replay and event semantics;
-- policy expressiveness and escape paths;
-- evaluator validity;
-- artifact integrity;
-- automation/resume correctness;
-- secret handling;
-- statistical and threshold implementation.
+Run all clean-checkout gates. Then perform the two-run live pilot (one
+unattended attempt per M2 condition) and inspect artifacts. After the pilot,
+any material prompt, schema, metric, threshold, model, or provider change
+requires new versioning and a repeated pilot.
 
-Every confirmed finding receives a regression test.
+## Phase 8 — Freeze and formal sequence
 
-## Phase 6 — Keyless rehearsal and live pilot
+Freeze exact SHA, plan, model, provider, prompts, constants, browser version,
+limits, and thresholds. Execute the unattended formal sequence. Generate the
+H9/R3 memory-sensitivity outputs and §10.12 blinded packages from the same
+evidence, without altering formal thresholds after observing the data.
 
-Run all clean-checkout gates. Then perform the two-run live pilot and inspect artifacts.
-
-## Phase 7 — Freeze and formal sequence
-
-Freeze exact SHA, plan, model, provider, prompts, constants, browser version, limits, and thresholds. Execute the unattended formal sequence.
-
-## Phase 8 — Evidence review and publication
+## Phase 9 — Evidence review and publication
 
 Package evidence, perform independent review, publish a documentation-only outcome PR, and tag the frozen implementation SHA.
+
+Commitment attribution, counterparty agency, renegotiation response,
+prevention, waiver, and treatment interruption are addressed only later, in
+Vertical Slice 002 (§7.3), with new configuration and golden baselines.
 
 ---
 
@@ -2531,12 +2903,22 @@ Milestone 2 is complete only when all of the following are true.
 ## Automation
 
 - [ ] The formal plan runs with one command and no browser clicks by the user.
+- [ ] The §19.16 three-run unattended acceptance test passed before any live study.
 - [ ] Fresh gateway and browser context are used per attempt.
+- [ ] The orchestrator never reads `.env.gateway` or the API key (§19.15).
 - [ ] Downloads, replay, finalization, evaluation, and packaging are automatic.
 - [ ] Interrupted execution resumes safely.
 - [ ] Failed attempts are preserved.
 - [ ] Heartbeat, watchdog, screenshots, traces, and logs exist.
 - [ ] Optional Claude supervision is non-authoritative and nonessential.
+
+## Laboratory
+
+- [ ] Every collected dataset has a registered study file (§21.1) under a study-local freeze (§21.2).
+- [ ] The `m2-calibration-variance-a-001` study completed and its report exists (non-gating).
+- [ ] The §27.6 auditors run in CI against the §27.7 known-gap registry with no unregistered gap.
+- [ ] No confidence value gates policy acceptance, rule selection, or hashing (R7).
+- [ ] Commitment outcomes are labeled per §10.11 in every report.
 
 ## Evidence
 
@@ -2579,6 +2961,19 @@ timeout, concurrency, or call caps
 Bug fixes discovered before formal Run 1 may be implemented, reviewed, merged, and re-frozen.
 
 After formal Run 1 begins, do not patch around unexpected behavior. Preserve the evidence, stop when required, and version the next attempt honestly.
+
+Calibration and exploratory datasets are governed by the study-local freeze
+(§21.2). In particular, the §22.6 variance study may not be used to silently
+recalibrate formal thresholds: a similarity-formula change requires a new
+metric version, a formal-threshold change requires a new Milestone 2
+experiment version, and either requires a repeated pilot before formal data
+collection.
+
+The following pre-implementation changes required no M2 experiment-version
+bump because no source work or live data collection had begun: the Advisor's
+R1–R9 scope rulings, removal of confidence gating, final wording of the
+initial M2 prompts, the study-registry structure, and the evaluator formula
+implementation matching this brief.
 
 ---
 
