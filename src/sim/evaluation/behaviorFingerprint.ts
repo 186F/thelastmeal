@@ -12,13 +12,14 @@ import {
   BEHAVIOR_FINGERPRINT_VERSION,
   CATEGORY_TRANSITION_KEYS,
   MODE_TRANSITION_KEYS,
+  PROVIDER_FAILURE_CODE_VOCABULARY,
   TARGET_ORIENTATION_BUCKETS,
   behaviorFingerprintSetSchema,
   type BehaviorFingerprint,
   type BehaviorFingerprintSet,
   type TargetOrientationBucket,
 } from '../../shared/behaviorArtifacts';
-import { DECISION_REJECTION_REASONS, EXTERNAL_FAILURE_CODES } from '../../shared/decisionContracts';
+import { DECISION_REJECTION_REASONS } from '../../shared/decisionContracts';
 import { replayLedger } from '../replay/replay';
 import { V1_ROLES, roleOf } from '../scenarios/roles';
 import { largestRemainderBp } from './arithmetic';
@@ -220,7 +221,10 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
       case 'DecisionProviderFailed': {
         const a = acc(p.npcId as NpcId);
         const code = p.errorCode as string;
-        if (!(EXTERNAL_FAILURE_CODES as readonly string[]).includes(code)) {
+        // The closed vocabulary covers everything the frozen engine can emit,
+        // including scenario F's scripted provider code; anything else is
+        // vocabulary drift and must fail loudly (§10.3/§10.5).
+        if (!PROVIDER_FAILURE_CODE_VOCABULARY.includes(code)) {
           throw new Error(`fingerprint-unknown-provider-failure-code:${code}`);
         }
         bump(a.providerFailuresByCode, code);
@@ -497,7 +501,10 @@ export function buildBehaviorFingerprints(file: LedgerFile): BehaviorFingerprint
       policyPatchMisses: 0,
       policyPatchInvalidationsByReason: {},
       deterministicFallbackDecisions: a.deterministicFallbackDecisions,
-      providerFailuresByCode: toCompleteRecord(a.providerFailuresByCode, EXTERNAL_FAILURE_CODES),
+      providerFailuresByCode: toCompleteRecord(
+        a.providerFailuresByCode,
+        PROVIDER_FAILURE_CODE_VOCABULARY,
+      ),
       engineRejectionsByReason: toCompleteRecord(
         a.engineRejectionsByReason,
         DECISION_REJECTION_REASONS,

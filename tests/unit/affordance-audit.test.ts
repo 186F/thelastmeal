@@ -139,6 +139,37 @@ describe('event-stream audit over deterministic exports', () => {
     expect(auditEventStream('A', file.events)).toEqual([]);
   });
 
+  it('stale-at-completion termination of a non-interruptible action is NOT a finding', () => {
+    // Completion-time staleness is universal completion discipline, excluded
+    // from the non-interruptible gap rule (contracts.ts).
+    const file = exportedFile('A');
+    const events = JSON.parse(JSON.stringify(file.events)) as EventEnvelope[];
+    // Build a minimal synthetic pair on top of the real stream shape.
+    const base = events.find((e) => e.type === 'ActionStarted')!;
+    const startedCopy = JSON.parse(JSON.stringify(base)) as EventEnvelope;
+    (startedCopy.payload as Record<string, unknown>).actionId = 'act-synthetic-1';
+    (startedCopy.payload as Record<string, unknown>).interruptible = false;
+    (startedCopy.payload as Record<string, unknown>).mode = 'request-transfer';
+    (startedCopy.payload as Record<string, unknown>).category = 'request-meal-transfer';
+    const interruptedCopy = JSON.parse(JSON.stringify(startedCopy)) as EventEnvelope;
+    interruptedCopy.type = 'ActionInterrupted';
+    interruptedCopy.payload = {
+      actionId: 'act-synthetic-1',
+      npcId: (startedCopy.payload as { npcId: string }).npcId,
+      category: 'request-meal-transfer',
+      mode: 'request-transfer',
+      reasonCode: 'stale-at-completion:meal-missing',
+    };
+    const findings = auditEventStream('A', [...events, startedCopy, interruptedCopy]);
+    expect(
+      findings.filter(
+        (f) =>
+          f.checkId === 'non-interruptible-mode-has-world-interruption' ||
+          f.checkId === 'unclassified-non-interruptible-termination',
+      ),
+    ).toEqual([]);
+  });
+
   it('scenario D surfaces only the registered meal-dilemma request-window gap', () => {
     const file = exportedFile('D');
     const findings = auditEventStream('D', file.events);

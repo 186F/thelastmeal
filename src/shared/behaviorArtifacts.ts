@@ -11,6 +11,21 @@ import {
 import { DECISION_REJECTION_REASONS, EXTERNAL_FAILURE_CODES } from './decisionContracts';
 
 /**
+ * Complete provider-failure vocabulary for fingerprints (§10.5). The frozen
+ * engine emits either a gateway-client failure code (EXTERNAL_FAILURE_CODES),
+ * a scripted provider's own code (`scripted-failure-mode`, scenario F's frozen
+ * failing provider — inside the hashed event stream and therefore immutable),
+ * or the engine's catch-all `provider-exception`. Any code outside this closed
+ * set is vocabulary drift and fails loudly (a new fingerprint version is then
+ * required per §10.3).
+ */
+export const PROVIDER_FAILURE_CODE_VOCABULARY: readonly string[] = [
+  ...EXTERNAL_FAILURE_CODES,
+  'provider-exception',
+  'scripted-failure-mode',
+];
+
+/**
  * Versioned contracts for the Milestone 2 behavioral-evaluation laboratory
  * (M2 brief §10). One source of truth for the fingerprint and similarity
  * document shapes, their version literals, and the fixed metric constants.
@@ -196,7 +211,7 @@ export const behaviorFingerprintSchema = z
     policyPatchMisses: intCount,
     policyPatchInvalidationsByReason: z.record(z.string(), intCount),
     deterministicFallbackDecisions: intCount,
-    providerFailuresByCode: completeRecord(EXTERNAL_FAILURE_CODES, intCount),
+    providerFailuresByCode: completeRecord(PROVIDER_FAILURE_CODE_VOCABULARY, intCount),
     engineRejectionsByReason: completeRecord(DECISION_REJECTION_REASONS, intCount),
   })
   .strict();

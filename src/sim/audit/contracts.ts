@@ -35,124 +35,117 @@ export interface InterruptionContract {
    * terminate the active action mid-flight, beyond the universal classes.
    */
   sustainedTerminationClasses: readonly string[];
-  /** Mode-specific completion-time staleness classes (`validateCompletion`). */
-  completionStaleClasses: readonly string[];
 }
+
+/**
+ * Deliberately NOT part of the interruption contract: completion-time
+ * staleness (`stale-at-completion:<class>` interruption reasons). That is the
+ * engine's universal completion discipline — a FINISHED action's outcome is
+ * suppressed when its preconditions went stale by the completion tick — and
+ * is semantically distinct from mid-flight interruption. The precise engine
+ * meaning of `non-interruptible` audited here is therefore: no voluntary
+ * preemption via a new decision, and no mode-specific MID-FLIGHT world-event
+ * termination (sustained checks); incapacitation, scenario end, and
+ * completion-time staleness always apply to every action. The stream auditor
+ * excludes `stale-at-completion:` reasons from the non-interruptible gap rule
+ * accordingly.
+ */
 
 export const INTERRUPTION_CONTRACTS: readonly InterruptionContract[] = [
   {
     mode: 'work',
     advertisedInterruptible: true,
     sustainedTerminationClasses: ['actor-not-capable-of-repair', 'bench-reservation-lost'],
-    completionStaleClasses: [],
   },
   {
     mode: 'relieve',
     advertisedInterruptible: true,
     sustainedTerminationClasses: ['actor-not-capable-of-repair', 'bench-reservation-lost'],
-    completionStaleClasses: [],
   },
   {
     mode: 'treat',
     advertisedInterruptible: false,
     sustainedTerminationClasses: ['patient-absent'],
-    completionStaleClasses: ['patient-absent'],
   },
   {
     mode: 'eat',
     advertisedInterruptible: false,
     sustainedTerminationClasses: ['meal-missing'],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'eat-violation',
     advertisedInterruptible: false,
     sustainedTerminationClasses: ['meal-missing'],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'request-transfer',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'transfer',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'release',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'refuse-request',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: ['meal-missing'],
   },
   {
     mode: 'ask-help',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'request-break',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'propose-renegotiation',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'accept-renegotiation',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'reject-renegotiation',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'rest',
     advertisedInterruptible: true,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'wait',
     advertisedInterruptible: true,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'routine-work',
     advertisedInterruptible: true,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'deliver-materials',
     advertisedInterruptible: false,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
   {
     mode: 'stay-at-cot',
     advertisedInterruptible: true,
     sustainedTerminationClasses: [],
-    completionStaleClasses: [],
   },
 ];
 

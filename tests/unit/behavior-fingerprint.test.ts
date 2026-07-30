@@ -141,3 +141,24 @@ describe('fixture provenance', () => {
     expect(run.state.terminal).toBe(true);
   });
 });
+
+describe('all seven frozen scenarios fingerprint without error (§10.1 failed-run support)', () => {
+  for (const scenarioId of ['A', 'B1', 'B2', 'C', 'D', 'E', 'F'] as const) {
+    it(`scenario ${scenarioId} fingerprints, validates, and serializes`, () => {
+      const set = fingerprintOf(exportedFile(scenarioId));
+      expect(() => behaviorFingerprintSetSchema.parse(set)).not.toThrow();
+      expect(() => canonicalSerialize(set as unknown)).not.toThrow();
+    });
+  }
+
+  it('scenario F records the scripted provider-failure code (frozen-behavior pin)', () => {
+    const set = fingerprintOf(exportedFile('F'));
+    const totalScripted = NPC_IDS.reduce(
+      (sum, npcId) => sum + set.npcs[npcId].providerFailuresByCode['scripted-failure-mode']!,
+      0,
+    );
+    // Frozen deterministic scenario F: 127 scripted provider failures.
+    expect(totalScripted).toBe(127);
+    expect(set.npcs.mara.deterministicFallbackDecisions).toBeGreaterThan(0);
+  });
+});

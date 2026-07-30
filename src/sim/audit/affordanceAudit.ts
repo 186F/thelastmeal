@@ -17,6 +17,12 @@ import { findingSortKey, type AuditFinding } from './findings';
 
 const VOLUNTARY_PREEMPTION_REASON = 'preempted-by-new-decision';
 const SUSTAINED_PREFIX = 'sustained-check-failed:';
+/**
+ * Completion-time staleness is the engine's universal completion discipline
+ * (outcome suppression of a FINISHED action), not mid-flight interruption —
+ * excluded from the non-interruptible gap rule (see contracts.ts).
+ */
+const STALE_AT_COMPLETION_PREFIX = 'stale-at-completion:';
 
 /**
  * Declaration-level findings, independent of any run: an advertised
@@ -173,8 +179,13 @@ export function auditEventStream(
           const reason = p.reasonCode as string;
           // Observed reason codes for the universal classes declared in
           // UNIVERSAL_TERMINATION_CLASSES ('actor-incapacitated' is emitted
-          // as 'incapacitated' by the engine).
-          const universal = reason === 'incapacitated' || reason === 'scenario-ended';
+          // as 'incapacitated' by the engine), plus completion-time
+          // staleness, which is universal completion discipline rather than
+          // mid-flight interruption.
+          const universal =
+            reason === 'incapacitated' ||
+            reason === 'scenario-ended' ||
+            reason.startsWith(STALE_AT_COMPLETION_PREFIX);
           if (!universal) {
             if (reason.startsWith(SUSTAINED_PREFIX)) {
               push({
