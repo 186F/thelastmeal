@@ -1,11 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
 // Phase 3 drives the existing Milestone 1 experiment paths; the sequence
 // identity records THAT experiment. The M2 experiment identity joins in
 // Phase 4 when its condition becomes orchestratable.
-import { MODEL_EXPERIMENT_ID, MODEL_EXPERIMENT_VERSION } from '../../../src/shared/modelExperiment';
+import {
+  EXTERNAL_MARA_PROVIDER_ID,
+  MODEL_EXPERIMENT_ID,
+  MODEL_EXPERIMENT_VERSION,
+  MODEL_PROMPT_VERSION,
+  MODEL_UPSTREAM_PLATFORM,
+} from '../../../src/shared/modelExperiment';
 import { canonicalSerialize } from '../../../src/sim/replay/serialize';
 import { fnv1a64Hex } from '../../../src/sim/replay/hash';
 import {
@@ -104,10 +110,10 @@ function hasLiveAttempt(plan: OrchestratorPlan): boolean {
   return plan.attempts.some((attempt) => attempt.gatewayMode === 'live');
 }
 
-/** §19.14: the live interlocks, printed and recorded before anything runs. */
-function enforceLiveInterlocks(
+/** §19.14 gating (no writes): refuse a live plan before any directory or
+ * state exists, so a corrected first launch starts clean. */
+function checkLiveInterlocks(
   plan: OrchestratorPlan,
-  sequenceRoot: string,
   options: OrchestrateOptions,
   keepAwake: KeepAwakeLease | null,
 ): void {
@@ -123,6 +129,11 @@ function enforceLiveInterlocks(
         'rerun with --allow-sleep-risk to accept the risk for a live plan',
     );
   }
+}
+
+/** §19.14 record: printed and persisted once the sequence root exists. */
+function recordLiveAcknowledgement(plan: OrchestratorPlan, sequenceRoot: string): void {
+  if (!hasLiveAttempt(plan)) return;
   const liveAttempts = plan.attempts.filter((attempt) => attempt.gatewayMode === 'live');
   const acknowledgement = {
     plannedLiveAttempts: liveAttempts.length,
@@ -255,6 +266,39 @@ function basenameOf(path: string): string {
   return path.replaceAll('\\', '/').split('/').pop() ?? path;
 }
 
+/** Exclusive single-writer lock (§19.12): a second invocation against a
+ * LIVE sequence must refuse before touching any state. The lock records the
+ * holder's PID; a lock whose holder is dead is stale and is replaced. */
+function acquireSequenceLock(sequenceRoot: string): () => void {
+  const lockPath = join(sequenceRoot, 'sequence.lock');
+  try {
+    writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
+  } catch {
+    const holderPid = Number(readFileSync(lockPath, 'utf8').trim());
+    let holderAlive = false;
+    try {
+      process.kill(holderPid, 0);
+      holderAlive = true;
+    } catch {
+      holderAlive = false;
+    }
+    if (holderAlive) {
+      throw new Error(
+        `sequence-locked: ${lockPath} is held by live pid ${holderPid} — ` +
+          'a sequence has exactly one writer',
+      );
+    }
+    writeFileSync(lockPath, String(process.pid));
+  }
+  return () => {
+    try {
+      rmSync(lockPath, { force: true });
+    } catch {
+      // lock release must never throw.
+    }
+  };
+}
+
 export async function orchestrateSequence(options: OrchestrateOptions): Promise<OrchestrateResult> {
   const planBytes = readFileSync(options.planPath);
   const loaded: LoadedPlan = parsePlan(planBytes);
@@ -262,7 +306,6 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
   const sequenceRoot = isAbsolute(plan.outputRoot)
     ? plan.outputRoot
     : resolve(options.repoRoot, plan.outputRoot);
-  mkdirSync(sequenceRoot, { recursive: true });
 
   const repositorySha = headSha(options.repoRoot);
   if (plan.repositorySha !== undefined && plan.repositorySha !== repositorySha) {
@@ -276,50 +319,60 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     packageVersion: packageVersion(options.repoRoot),
     experimentId: MODEL_EXPERIMENT_ID,
     experimentVersion: MODEL_EXPERIMENT_VERSION,
+    promptVersion: MODEL_PROMPT_VERSION,
+    externalProviderId: EXTERNAL_MARA_PROVIDER_ID,
+    upstreamPlatform: MODEL_UPSTREAM_PLATFORM,
     configFingerprint: planConfigFingerprint(plan),
   };
 
-  let state = readSequenceState(sequenceRoot);
-  if (state && !options.resume) {
-    throw new Error(
-      `sequence-already-exists: ${sequenceRoot} — use --resume to continue it (identity-checked)`,
-    );
-  }
-  if (!state && options.resume) {
-    throw new Error(`resume-without-state: no sequence-state.json under ${sequenceRoot}`);
-  }
-  if (state) {
-    assertResumeIdentity(state, identity);
-    const interrupted = markInterruptedExecutions(state, nowUtc());
-    state.status = 'in-progress';
-    state.lastTransition = `resumed (${interrupted} interrupted execution(s) preserved)`;
-    state.updatedAtUtc = nowUtc();
-    writeSequenceState(sequenceRoot, state);
-  } else {
-    state = {
-      stateVersion: SEQUENCE_STATE_VERSION,
-      sequenceId: plan.sequenceId,
-      ...identity,
-      status: 'in-progress',
-      executions: [],
-      lastTransition: 'created',
-      createdAtUtc: nowUtc(),
-      updatedAtUtc: nowUtc(),
-    };
-    writeSequenceState(sequenceRoot, state);
-  }
-
-  const keepAwake = acquireKeepAwake();
+  // §19.14 acknowledgement gating runs BEFORE any directory or state is
+  // created: a refused first launch leaves nothing behind and needs no
+  // --resume when corrected.
+  const keepAwake = await acquireKeepAwake();
   if (keepAwake === null) {
     console.warn('WARNING: no keep-awake lease could be established — the machine may sleep.');
   }
-  const processManager = new ProcessManager();
+  let releaseLock: (() => void) | null = null;
+  const processManager = new ProcessManager(join(sequenceRoot, 'process-log.jsonl'));
   let browser: Browser | null = null;
   let batchVerdict: string | null = null;
   let evaluation: SequenceEvaluation | null = null;
   let zipPath: string | null = null;
   try {
-    enforceLiveInterlocks(plan, sequenceRoot, options, keepAwake);
+    checkLiveInterlocks(plan, options, keepAwake);
+    mkdirSync(sequenceRoot, { recursive: true });
+    releaseLock = acquireSequenceLock(sequenceRoot);
+    recordLiveAcknowledgement(plan, sequenceRoot);
+
+    let state = readSequenceState(sequenceRoot);
+    if (state && !options.resume) {
+      throw new Error(
+        `sequence-already-exists: ${sequenceRoot} — use --resume to continue it (identity-checked)`,
+      );
+    }
+    if (!state && options.resume) {
+      throw new Error(`resume-without-state: no sequence-state.json under ${sequenceRoot}`);
+    }
+    if (state) {
+      assertResumeIdentity(state, identity);
+      const interrupted = markInterruptedExecutions(state, nowUtc());
+      state.status = 'in-progress';
+      state.lastTransition = `resumed (${interrupted} interrupted execution(s) preserved)`;
+      state.updatedAtUtc = nowUtc();
+      writeSequenceState(sequenceRoot, state);
+    } else {
+      state = {
+        stateVersion: SEQUENCE_STATE_VERSION,
+        sequenceId: plan.sequenceId,
+        ...identity,
+        status: 'in-progress',
+        executions: [],
+        lastTransition: 'created',
+        createdAtUtc: nowUtc(),
+        updatedAtUtc: nowUtc(),
+      };
+      writeSequenceState(sequenceRoot, state);
+    }
 
     // Preflight (§19.6): both automation ports must be free; no fallback.
     if (!(await portIsFree(AUTOMATION_VITE_PORT))) {
@@ -339,11 +392,24 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     let sequenceFailed = false;
     for (const attempt of plan.attempts) {
       if (completedExecution(state, attempt.attemptId)) continue;
-      let replacementsUsed = state.executions.filter(
-        (execution) => execution.attemptId === attempt.attemptId && execution.status === 'failed',
-      ).length;
+      const maxExecutions = 1 + plan.replacementPolicy.maxReplacementAttempts;
       let attemptCompleted = false;
       while (!attemptCompleted) {
+        // Replacement policy gates BEFORE a new execution starts (§19.11:
+        // only the pre-registered policy may create a new attempt) — a
+        // resumed sequence whose policy is already exhausted fails again
+        // without spending another execution.
+        const executionsSoFar = state.executions.filter(
+          (execution) => execution.attemptId === attempt.attemptId,
+        ).length;
+        if (executionsSoFar >= maxExecutions) {
+          console.error(
+            `attempt ${attempt.attemptId}: replacement policy exhausted ` +
+              `(${executionsSoFar}/${maxExecutions} executions used) — sequence fails`,
+          );
+          sequenceFailed = true;
+          break;
+        }
         const executionId = nextExecutionId(state, attempt.attemptId);
         const execution: AttemptExecution = {
           executionId,
@@ -378,15 +444,10 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         if (outcome.execution.status === 'completed') {
           attemptCompleted = true;
         } else {
-          replacementsUsed += 1;
           console.error(
             `attempt ${attempt.attemptId} execution ${executionId} FAILED ` +
               `(${outcome.execution.failureReason ?? 'error'}); evidence preserved in ${execution.dir}`,
           );
-          if (replacementsUsed > plan.replacementPolicy.maxReplacementAttempts) {
-            sequenceFailed = true;
-            break;
-          }
         }
       }
       if (sequenceFailed) break;
@@ -407,6 +468,14 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
       if (exit !== '0') sequenceFailed = true;
     }
 
+    // Stop the browser and every remaining child BEFORE the derived
+    // reports, so exit codes land in the append-only process log the report
+    // reads (§19.5) and the evidence zip contains the complete record.
+    const browserVersion = browser.version();
+    await browser.close().catch(() => undefined);
+    browser = null;
+    await processManager.stopAll();
+
     evaluation = evaluateFromState(sequenceRoot, state);
     state.status = sequenceFailed ? 'failed' : 'completed';
     state.lastTransition = sequenceFailed ? 'sequence-failed' : 'sequence-completed';
@@ -414,9 +483,9 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     writeSequenceState(sequenceRoot, state);
 
     writeSequenceReport(sequenceRoot, state, {
-      browserVersion: browser.version(),
+      browserVersion,
       launchFlags: [options.headed ? '--headed' : 'headless'],
-      processTable: processManager.processTable(),
+      processLog: readProcessLog(sequenceRoot),
       batchVerdict,
       evaluation,
     });
@@ -438,5 +507,19 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     if (browser) await browser.close().catch(() => undefined);
     await processManager.stopAll();
     keepAwake?.release();
+    releaseLock?.();
+  }
+}
+
+/** The append-only §19.5 process record for this sequence, across every
+ * invocation (resume included). */
+function readProcessLog(sequenceRoot: string): Array<Record<string, unknown>> {
+  try {
+    return readFileSync(join(sequenceRoot, 'process-log.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  } catch {
+    return [];
   }
 }

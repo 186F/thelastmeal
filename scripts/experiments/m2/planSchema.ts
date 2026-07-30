@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { SCENARIO_IDS } from '../../../src/shared/ids';
 import { AUTOMATION_SPEEDS } from '../../../src/shared/automationContract';
+import { MODEL_CONDITION_SCENARIOS } from '../../../src/shared/modelExperiment';
 
 /**
  * Orchestrator plan schema (M2 brief §19). A plan is the complete,
@@ -67,6 +68,18 @@ export const plannedAttemptSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'model-attempt-requires-a-gateway',
+      });
+    }
+    // The app refuses the model condition outside its registered scenarios
+    // (silently degrading to baseline); a plan must fail STATICALLY, never
+    // at attempt time in an unattended run.
+    if (
+      attempt.conditionId === 'mara-model-per-decision-v1' &&
+      !MODEL_CONDITION_SCENARIOS.includes(attempt.scenarioId)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `scenario-not-in-model-condition:${attempt.scenarioId}`,
       });
     }
     if (attempt.gatewayStopAtTick !== undefined && attempt.gatewayMode === 'off') {

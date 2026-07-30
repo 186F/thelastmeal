@@ -12,7 +12,11 @@ import type { SequenceEvaluation } from './evaluateSequence';
 export interface SequenceReportExtras {
   browserVersion: string | null;
   launchFlags: string[];
-  processTable: { name: string; pid: number; exitCode: number | null }[];
+  /** The append-only §19.5 process record (spawn/exit events across every
+   * invocation of this sequence, resume included), read back from
+   * process-log.jsonl — never a live in-memory table, which a regenerated
+   * report would silently truncate. */
+  processLog: Array<Record<string, unknown>>;
   batchVerdict: string | null;
   evaluation: SequenceEvaluation | null;
 }
@@ -62,12 +66,15 @@ export function writeSequenceReport(
     }
     lines.push('');
   }
-  lines.push('## Managed processes');
+  lines.push('## Managed processes (append-only log, all invocations)');
   lines.push('');
-  lines.push('| name | pid | exit code |');
-  lines.push('| --- | --- | --- |');
-  for (const row of extras.processTable) {
-    lines.push(`| ${row.name} | ${row.pid} | ${row.exitCode ?? 'running'} |`);
+  lines.push('| at | event | name | pid | exit |');
+  lines.push('| --- | --- | --- | --- | --- |');
+  for (const row of extras.processLog) {
+    lines.push(
+      `| ${String(row.atUtc ?? '—')} | ${String(row.event ?? '—')} | ${String(row.name ?? '—')} | ` +
+        `${String(row.pid ?? '—')} | ${String(row.exit ?? '—')} |`,
+    );
   }
   lines.push('');
   writeFileSync(markdownPath, `${lines.join('\n')}\n`, 'utf8');

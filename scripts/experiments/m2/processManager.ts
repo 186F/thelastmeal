@@ -33,6 +33,26 @@ export interface SpawnOptions {
 
 export class ProcessManager {
   private readonly managed: ManagedProcess[] = [];
+  /** Append-only JSONL record of every spawn and exit (§19.5): survives
+   * report regeneration and resume, unlike any in-memory table. */
+  private readonly recordPath: string | null;
+
+  constructor(recordPath: string | null = null) {
+    this.recordPath = recordPath;
+  }
+
+  private record(entry: Record<string, unknown>): void {
+    if (!this.recordPath) return;
+    try {
+      mkdirSync(dirname(this.recordPath), { recursive: true });
+      appendFileSync(
+        this.recordPath,
+        `${JSON.stringify({ atUtc: new Date().toISOString(), ...entry })}\n`,
+      );
+    } catch {
+      // Process-record IO must never break orchestration.
+    }
+  }
 
   spawnManaged(options: SpawnOptions): ManagedProcess {
     mkdirSync(dirname(options.logPath), { recursive: true });
@@ -52,13 +72,19 @@ export class ProcessManager {
     };
     child.stdout?.on('data', (chunk: Buffer) => log('stdout', chunk));
     child.stderr?.on('data', (chunk: Buffer) => log('stderr', chunk));
+    this.record({ event: 'spawned', name: options.name, pid: child.pid });
     let code: number | null = null;
     const exited = new Promise<string>((resolve) => {
       child.on('exit', (exitCode, signal) => {
         code = exitCode;
-        resolve(exitCode !== null ? String(exitCode) : `signal:${String(signal)}`);
+        const outcome = exitCode !== null ? String(exitCode) : `signal:${String(signal)}`;
+        this.record({ event: 'exited', name: options.name, pid: child.pid, exit: outcome });
+        resolve(outcome);
       });
-      child.on('error', () => resolve('spawn-error'));
+      child.on('error', () => {
+        this.record({ event: 'spawn-error', name: options.name, pid: child.pid });
+        resolve('spawn-error');
+      });
     });
     const managedProcess: ManagedProcess = {
       name: options.name,

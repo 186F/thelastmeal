@@ -89,23 +89,44 @@ export async function runBrowserAttempt(
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-  const captureDiagnostics = async (reason: string, detail: string): Promise<void> => {
+  let terminalDiagnosticsCaptured = false;
+
+  /**
+   * Diagnostics capture (§19.7). Terminal capture (any failed attempt)
+   * writes failure-* artifacts and STOPS the trace into failure-trace.zip;
+   * it runs at most once. Non-terminal capture (the stall grace snapshot,
+   * §19.9 step 1) writes stall-* artifacts and leaves tracing RUNNING, so a
+   * later terminal failure still gets the full trace and a recovered
+   * attempt completes without failure-named artifacts.
+   */
+  const captureDiagnostics = async (
+    reason: string,
+    detail: string,
+    terminal: boolean,
+  ): Promise<void> => {
+    const prefix = terminal ? 'failure' : 'stall';
     try {
-      await page.screenshot({ path: join(attemptDir, 'failure-screenshot.png'), fullPage: true });
-      writeFileSync(join(attemptDir, 'failure-dom.html'), await page.content(), 'utf8');
+      await page.screenshot({
+        path: join(attemptDir, `${prefix}-screenshot.png`),
+        fullPage: true,
+      });
+      writeFileSync(join(attemptDir, `${prefix}-dom.html`), await page.content(), 'utf8');
       writeFileSync(
-        join(attemptDir, 'failure.json'),
+        join(attemptDir, `${prefix}.json`),
         `${JSON.stringify({ reason, detail, consoleErrors }, null, 2)}\n`,
         'utf8',
       );
-      await context.tracing.stop({ path: join(attemptDir, 'failure-trace.zip') });
+      if (terminal && !terminalDiagnosticsCaptured) {
+        terminalDiagnosticsCaptured = true;
+        await context.tracing.stop({ path: join(attemptDir, 'failure-trace.zip') });
+      }
     } catch {
       // Diagnostics capture must never mask the original failure.
     }
   };
 
   const fail = async (reason: string, detail: string): Promise<never> => {
-    await captureDiagnostics(reason, detail);
+    await captureDiagnostics(reason, detail, true);
     throw new AttemptFailure(reason, detail);
   };
 
@@ -219,6 +240,7 @@ export async function runBrowserAttempt(
           await captureDiagnostics(
             'simulation-stall-diagnostics',
             `tick ${lastTick} unchanged for ${now - lastTickChangeAt}ms — grace period begins`,
+            false,
           );
           await new Promise((resolve) => setTimeout(resolve, timeouts.stallGraceMs));
           continue;
@@ -302,6 +324,16 @@ export async function runBrowserAttempt(
       consoleErrors,
       replayVerdict: replayVerdict.trim(),
     };
+  } catch (error: unknown) {
+    // Every failure path — including raw Playwright throws (selector
+    // timeouts, download timeouts, navigation errors) that never went
+    // through fail() — must leave §19.7 diagnostics. fail() already
+    // captured; anything else captures here before rethrowing as a typed
+    // failure.
+    if (error instanceof AttemptFailure) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    await captureDiagnostics('browser-error', detail, true);
+    throw new AttemptFailure('browser-error', detail);
   } finally {
     await context.close().catch(() => undefined);
   }

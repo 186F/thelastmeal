@@ -82,12 +82,19 @@ export async function startGateway(
     env,
     logPath: launch.logPath,
   });
-  await ProcessManager.waitFor(
-    () =>
-      existsSync(launch.logPath) &&
-      readFileSync(launch.logPath, 'utf8').includes(`${GATEWAY_READY_PREFIX}${launch.port}`),
-    launch.readyTimeoutMs ?? 30_000,
-    `gateway readiness on port ${launch.port}`,
-  );
+  try {
+    await ProcessManager.waitFor(
+      () =>
+        existsSync(launch.logPath) &&
+        readFileSync(launch.logPath, 'utf8').includes(`${GATEWAY_READY_PREFIX}${launch.port}`),
+      launch.readyTimeoutMs ?? 30_000,
+      `gateway readiness on port ${launch.port}`,
+    );
+  } catch (error: unknown) {
+    // A child that missed its readiness deadline must not be left holding
+    // the fixed automation port for the rest of the sequence.
+    await processManager.stop(managedProcess, 5_000);
+    throw error;
+  }
   return managedProcess;
 }

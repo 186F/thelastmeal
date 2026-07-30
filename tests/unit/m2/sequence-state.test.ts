@@ -39,6 +39,9 @@ function baseState(): SequenceState {
     packageVersion: '1.8.0',
     experimentId: 'model-backed-npc-001',
     experimentVersion: '1.2.0',
+    promptVersion: 'mara-action-selection-1.0.0',
+    externalProviderId: 'openrouter-mara-action-v1',
+    upstreamPlatform: 'openrouter',
     configFingerprint: 'c'.repeat(16),
     status: 'in-progress',
     executions: [],
@@ -65,6 +68,9 @@ describe('sequence state', () => {
       packageVersion: state.packageVersion,
       experimentId: state.experimentId,
       experimentVersion: state.experimentVersion,
+      promptVersion: state.promptVersion,
+      externalProviderId: state.externalProviderId,
+      upstreamPlatform: state.upstreamPlatform,
       configFingerprint: state.configFingerprint,
     };
     expect(() => assertResumeIdentity(state, identity)).not.toThrow();

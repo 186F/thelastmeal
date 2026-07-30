@@ -58,6 +58,14 @@ export const sequenceStateSchema = z
     packageVersion: nonEmpty,
     experimentId: nonEmpty,
     experimentVersion: nonEmpty,
+    /** Code-pinned prompt version and provider/platform identity (§19.11:
+     * resume requires exact agreement on model, provider, and prompts). The
+     * runtime model slug lives ONLY in the gateway's own configuration and
+     * is bound per run by the finalized manifests' pinned-model criterion —
+     * the orchestrator never reads it (§19.15). */
+    promptVersion: nonEmpty,
+    externalProviderId: nonEmpty,
+    upstreamPlatform: nonEmpty,
     /** Nonsecret configuration fingerprint over the plan's frozen fields. */
     configFingerprint: nonEmpty,
     status: z.enum(['in-progress', 'completed', 'failed']),
@@ -97,6 +105,9 @@ export interface ResumeIdentity {
   packageVersion: string;
   experimentId: string;
   experimentVersion: string;
+  promptVersion: string;
+  externalProviderId: string;
+  upstreamPlatform: string;
   configFingerprint: string;
 }
 
@@ -109,6 +120,9 @@ export function assertResumeIdentity(state: SequenceState, identity: ResumeIdent
     'packageVersion',
     'experimentId',
     'experimentVersion',
+    'promptVersion',
+    'externalProviderId',
+    'upstreamPlatform',
     'configFingerprint',
   ] as const) {
     if (state[key] !== identity[key]) {

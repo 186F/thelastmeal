@@ -23,7 +23,7 @@ Add-Type -Name Sleep -Namespace Orchestrator -MemberDefinition '[DllImport("kern
 while ($true) { Start-Sleep -Seconds 30; [Orchestrator.Sleep]::SetThreadExecutionState([uint32]"0x80000001") | Out-Null }
 `;
 
-export function acquireKeepAwake(): KeepAwakeLease | null {
+export async function acquireKeepAwake(): Promise<KeepAwakeLease | null> {
   let child: ChildProcess | null = null;
   let method: string;
   try {
@@ -56,16 +56,26 @@ export function acquireKeepAwake(): KeepAwakeLease | null {
   child.on('error', () => {
     failed = true;
   });
-  const lease: KeepAwakeLease = {
-    method,
-    release: () => {
-      try {
-        child?.kill();
-      } catch {
-        // release must never throw.
+  // A lease is only a lease if the helper actually survives its spawn: wait
+  // briefly and verify the process is still alive before reporting it held
+  // (a missing binary or immediate crash must surface as `null`, so the
+  // §19.13 --allow-sleep-risk interlock can do its job).
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      if (failed || child!.exitCode !== null || child!.signalCode !== null) {
+        resolve(null);
+        return;
       }
-    },
-  };
-  // Give a spawn error one tick to surface before declaring the lease held.
-  return failed ? null : lease;
+      resolve({
+        method,
+        release: () => {
+          try {
+            child?.kill();
+          } catch {
+            // release must never throw.
+          }
+        },
+      });
+    }, 500);
+  });
 }
