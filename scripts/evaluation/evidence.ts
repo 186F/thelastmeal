@@ -154,17 +154,33 @@ function findSingleLedger(dir: string): string {
   return join(dir, candidates[0]!);
 }
 
-/** Ledger-derived count of decision requests addressed to the external
- * action authority, per the provider-source taxonomy — the same quantity the
+interface CanonicalExternalRequest {
+  npcId: NpcId;
+  providerId: string;
+  requestedAtLogicalTick: number;
+}
+
+/** The canonical external-request map from the validated ledger (targeted
+ * re-audit §4.4): every `DecisionRequested` addressed to a registered
+ * external action authority, keyed by requestId, with the identity facts the
+ * finalized trace must reproduce exactly. Its size is the same quantity the
  * fingerprint reports as `externalActionRequestsEmitted`. */
-function countExternalActionRequests(file: LedgerFile): number {
-  let count = 0;
+function canonicalExternalRequests(file: LedgerFile): Map<string, CanonicalExternalRequest> {
+  const requests = new Map<string, CanonicalExternalRequest>();
   for (const event of file.events) {
     if (event.type !== 'DecisionRequested') continue;
-    const providerId = (event.payload as { providerId: string }).providerId;
-    if (classifyProviderId(providerId) === 'external-action-request') count += 1;
+    const p = event.payload as { requestId: string; npcId: NpcId; providerId: string };
+    if (classifyProviderId(p.providerId) !== 'external-action-request') continue;
+    if (requests.has(p.requestId)) {
+      fail('run-evidence-conflict', `ledger repeats external requestId ${p.requestId}`);
+    }
+    requests.set(p.requestId, {
+      npcId: p.npcId,
+      providerId: p.providerId,
+      requestedAtLogicalTick: event.tick,
+    });
   }
-  return count;
+  return requests;
 }
 
 function loadStrictFinalizedRun(dir: string): EvaluationEvidence {
@@ -239,16 +255,64 @@ function loadStrictFinalizedRun(dir: string): EvaluationEvidence {
     }
   }
 
+  // Exact trace-to-ledger request join (targeted re-audit §4.4): the
+  // finalized trace must be a BIJECTION onto the ledger's canonical external
+  // requests — one row per requestId, no missing, extra, duplicated, or
+  // substituted ids — and every row must reproduce its canonical request's
+  // npcId, providerId, and logical request tick. Aggregate equality alone
+  // cannot prove this (a deleted null-outcome row or a reassigned npcId
+  // leaves every aggregate untouched); mismatches are refused, never
+  // repaired or downgraded.
+  const canonical = canonicalExternalRequests(file);
+  const seenRequestIds = new Set<string>();
+  for (const row of trace) {
+    if (seenRequestIds.has(row.requestId)) {
+      fail('run-evidence-conflict', `${dir}: duplicate finalized-trace requestId ${row.requestId}`);
+    }
+    seenRequestIds.add(row.requestId);
+    const request = canonical.get(row.requestId);
+    if (!request) {
+      fail(
+        'run-evidence-conflict',
+        `${dir}: finalized-trace row ${row.requestId} names no canonical external request`,
+      );
+    }
+    if (row.npcId !== request.npcId) {
+      fail(
+        'run-evidence-conflict',
+        `${dir}: trace row ${row.requestId} npcId ${row.npcId} != canonical ${request.npcId}`,
+      );
+    }
+    if (row.providerId !== request.providerId) {
+      fail(
+        'run-evidence-conflict',
+        `${dir}: trace row ${row.requestId} providerId ${row.providerId} != canonical ${request.providerId}`,
+      );
+    }
+    if (row.requestedAtLogicalTick !== request.requestedAtLogicalTick) {
+      fail(
+        'run-evidence-conflict',
+        `${dir}: trace row ${row.requestId} requestedAtLogicalTick ${row.requestedAtLogicalTick} ` +
+          `!= canonical tick ${request.requestedAtLogicalTick}`,
+      );
+    }
+  }
+  if (seenRequestIds.size !== canonical.size) {
+    fail(
+      'run-evidence-conflict',
+      `${dir}: finalized trace covers ${seenRequestIds.size} of ${canonical.size} canonical external requests`,
+    );
+  }
+
   // Count agreement. The ledger's external-action request count must equal
   // the manifest's engine-emitted count, and the gateway evidence in the
   // finalized trace must reproduce the manifest's attempted/completed
   // upstream call counts exactly (an emitted request is NOT a call — this is
   // the Run 6 distinction the evidence model exists to keep).
-  const emittedFromLedger = countExternalActionRequests(file);
-  if (emittedFromLedger !== manifest.externalRequestsEmitted) {
+  if (canonical.size !== manifest.externalRequestsEmitted) {
     fail(
       'run-evidence-conflict',
-      `${dir}: ledger emits ${emittedFromLedger} external action requests; manifest records ${manifest.externalRequestsEmitted}`,
+      `${dir}: ledger emits ${canonical.size} external action requests; manifest records ${manifest.externalRequestsEmitted}`,
     );
   }
   const attemptedByNpc = {} as Record<NpcId, number>;

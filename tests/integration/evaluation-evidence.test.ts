@@ -193,3 +193,97 @@ describe('contradictory, tampered, and incomplete directories are refused', () =
     expect(() => loadEvaluationEvidence(dir)).toThrow('run-directory-not-strict-finalized');
   });
 });
+
+describe('exact trace-to-ledger request join (targeted re-audit §4.4–§4.5)', () => {
+  interface TraceRowShape {
+    requestId: string;
+    npcId: string;
+    providerId: string;
+    requestedAtLogicalTick: number;
+    gatewayOutcome: string | null;
+  }
+
+  /** Copies a fixture, rewrites its finalized trace through `mutate`, reseals
+   * the bundle forger-style, and returns the tampered directory. */
+  function tamperTrace(
+    sourceDir: string,
+    label: string,
+    mutate: (rows: TraceRowShape[]) => TraceRowShape[],
+  ): string {
+    const dir = copyOf(sourceDir, label);
+    const tracePath = join(dir, 'finalized-trace.jsonl');
+    const rows = readFileSync(tracePath, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as TraceRowShape);
+    const mutated = mutate(rows);
+    writeFileSync(tracePath, `${mutated.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+    resealBundle(dir);
+    return dir;
+  }
+
+  it('1. deleting a null-outcome row is rejected even though every aggregate survives', () => {
+    // The gateway-stop fixture is exactly the §4.3 example: null-outcome rows
+    // carry no attempted/completed weight, so only the identity join can
+    // notice one vanishing.
+    const dir = tamperTrace(stopDir, 'join-drop-null', (rows) => {
+      const index = rows.findIndex((row) => row.gatewayOutcome === null);
+      expect(index).toBeGreaterThanOrEqual(0);
+      return rows.filter((_, i) => i !== index);
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('2. a duplicated request ID is rejected', () => {
+    const dir = tamperTrace(stopDir, 'join-duplicate', (rows) => {
+      const nullRow = rows.find((row) => row.gatewayOutcome === null)!;
+      return [...rows, { ...nullRow }];
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('3. an unknown request ID is rejected', () => {
+    const dir = tamperTrace(normalDir, 'join-unknown', (rows) => {
+      rows[0] = { ...rows[0]!, requestId: 'req-fabricated-000001' };
+      return rows;
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('4. a row reassigned from Mara to Jonas is rejected (per-NPC evidence integrity)', () => {
+    const dir = tamperTrace(normalDir, 'join-npc', (rows) => {
+      rows[0] = { ...rows[0]!, npcId: 'jonas' };
+      return rows;
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('5. a row with the wrong provider for its request is rejected', () => {
+    const dir = tamperTrace(normalDir, 'join-provider', (rows) => {
+      rows[0] = { ...rows[0]!, providerId: 'openrouter-mara-action-m2-v1' };
+      return rows;
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('6. a row with a shifted logical request tick is rejected', () => {
+    const dir = tamperTrace(normalDir, 'join-tick', (rows) => {
+      rows[0] = { ...rows[0]!, requestedAtLogicalTick: rows[0]!.requestedAtLogicalTick + 1 };
+      return rows;
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+
+  it('7. substituting one canonical request ID for another preserves aggregates and is still rejected', () => {
+    const dir = tamperTrace(stopDir, 'join-substitute', (rows) => {
+      const nullRows = rows.filter((row) => row.gatewayOutcome === null);
+      expect(nullRows.length).toBeGreaterThanOrEqual(2);
+      const target = rows.indexOf(nullRows[0]!);
+      // Both rows are null-outcome: attempted/completed totals are untouched,
+      // yet one canonical request loses coverage and another is duplicated.
+      rows[target] = { ...rows[target]!, requestId: nullRows[1]!.requestId };
+      return rows;
+    });
+    expect(() => loadEvaluationEvidence(dir)).toThrow('run-evidence-conflict');
+  });
+});

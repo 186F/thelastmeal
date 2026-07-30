@@ -75,7 +75,13 @@ export const reviewerPackageSchema = z
 export const answerKeyRunSchema = z
   .object({
     runLabel: opaqueLabel,
+    /** The PROVING evidence root: the strict-finalized run directory for
+     * enriched runs, the ledger file itself for bare-ledger inputs (targeted
+     * re-audit §5.2 — the extracted ledger alone cannot reproduce enriched
+     * condition/upstream evidence). */
     sourcePath: z.string().min(1),
+    /** The canonical ledger inside that evidence root. */
+    ledgerPath: z.string().min(1),
     scenarioId: z.string().min(1),
     seed: z.number().int(),
     /** The ledger-proven provider plan (audit finding 4): never a condition. */
@@ -135,7 +141,8 @@ export function buildReviewerPackage(
     reviewerRuns.push({ runLabel, traces: entry.traces });
     answerRuns.push({
       runLabel,
-      sourcePath: entry.evidence.ledgerPath,
+      sourcePath: entry.evidence.sourcePath,
+      ledgerPath: entry.evidence.ledgerPath,
       scenarioId: entry.evidence.file.scenario.id,
       seed: entry.evidence.file.scenario.seed,
       providerPlanId: entry.evidence.file.providerId,
