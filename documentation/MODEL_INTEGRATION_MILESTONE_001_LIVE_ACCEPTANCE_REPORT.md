@@ -193,7 +193,7 @@ post-sequence batch at the same SHA passed after Run 6.
 | Prompt version | `mara-action-selection-1.0.0` |
 | Requested model (`OPENROUTER_MODEL`) | `google/gemini-2.5-flash-lite` |
 | Pinned OpenRouter provider (`OPENROUTER_PROVIDER`) | `google-ai-studio` |
-| Returned model identifier(s) (from finalized manifests) | `google/gemini-2.5-flash-lite` — the only returned model id in every finalized manifest (Runs 2–6); reported routing provider `Google AI Studio` on all 188 answered calls |
+| Returned model identifier(s) (from finalized manifests) | `google/gemini-2.5-flash-lite` — the only returned model id in every finalized manifest (Runs 2–6); reported routing provider `Google AI Studio` on all 198 provider-bearing routing sidecars (the single exception across 199 sidecars is Run 3's one upstream-error call, provider null per the failed-call contract) |
 | Gateway settings (timeout / concurrency / per-run budget / total cap) | 20,000 ms / 1 / 120 / 120 |
 | OpenRouter routing (`require_parameters`, fallbacks, provider allowlist) | `require_parameters: true`, `allow_fallbacks: false`, `provider.only: ["google-ai-studio"]`, router metadata enabled |
 | Prompt, model configuration, limits, or code changed mid-sequence? | **no** |
