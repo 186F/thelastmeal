@@ -8,7 +8,8 @@ acceptance criterion checked. One earlier sequence (experiment v1.1.0,
 and is recorded below as non-acceptance evidence.**
 
 The Provenance table and Run log below are filled exclusively from live
-evidence: the six strict-finalized run artifacts and the operator's sealed
+evidence: the five strict-finalized run artifacts (Runs 2–6), the fully
+validated and replayed Run 1 baseline ledger, and the operator's sealed
 evidence package (see Overall verdict). No fake-adapter or fixture number
 appears anywhere in them. Failed or surprising live runs are recorded, not
 discarded — the aborted 2026-07-29 attempt is recorded in its own section
@@ -234,7 +235,7 @@ complete the scenario; export ledger + run bundle; finalize; replay.
 | Upstream calls attempted / completed | 50 / 46 |
 | Accepted model responses / engine rejections (by reason) | 46 / none (`engineRejectionsByReason: {}`) |
 | Token totals (input / output / total) | 113,368 / 3,771 / 117,139 |
-| Latency (min / median / p95 / max) | 491 / 660 / 813 / 2,559 ms |
+| Latency (min / median / p95 / max) | 491 / 660 / 813 / 2,559 ms over the 46 answered calls (the machine `model-summary.json`, computed over all 50 rows including failures, records p95 878 ms) |
 | `model:finalize` result (completeness sources + notes) | strict `status: completed`; sources `gateway+ledger+client`; 0 notes; 0 failed criteria |
 | `bundle-manifest.json` aggregate SHA-256 | `87c078fea449b2f0ffea71882ccb7ae3352439ca84fa39096a8d9c85c26ea39f` (107 files) |
 | Anomalies | 4 `invalid-model-output` failures, all diagnosed from raw outputs as rationale-length overruns (198/228/163/245 chars vs the 160 bound, which the upstream's structured-output mode does not enforce; longest accepted rationale exactly 160). Complete valid JSON, in-enum selections, correct model+provider on all four; the failure lifecycle ran to spec and the engine never saw an invalid output. Scattered ticks — no capacity signature |
@@ -252,7 +253,7 @@ failed or surprising results.
 | `worldStateHash` / `canonicalLedgerHash` | `0b1ed3d11c90154d` / `c669beffb36e491a` |
 | Only Mara generated external requests | yes — 48 of 48 |
 | Upstream calls / accepted / rejected | 48 attempted, 46 completed / 46 accepted / 0 engine rejections |
-| Token totals / latency summary | 107,276 / 3,493 / 110,769; latency 551 / 673 / 950 / 1,307 ms (min/med/p95/max) |
+| Token totals / latency summary | 107,276 / 3,493 / 110,769; latency 551 / 673 / 950 / 1,307 ms (min/med/p95/max over the 47 answered calls; the run's one upstream failure returned in 279 ms) |
 | Finalized bundle aggregate SHA-256 | `32188b290426db1797c1965bb9fab93745aca4d8d70e3444e21d9ca1572aba25` (103 files); strict `completed`, sources `gateway+ledger+client`, 0 notes, 0 failed criteria |
 | Anomalies | 1 isolated `upstream-error` (tick 1741: 279 ms immediate rejection, no upstream response id, null provider in its sidecar per the failed-call contract — the sequence's only upstream failure, not clustered); 1 rationale-length overrun (175 chars) |
 
@@ -270,7 +271,7 @@ any behavioral comparison.
 | `worldStateHash` / `canonicalLedgerHash` | `4e9920f37f73f139` / `633703a7390806a2` |
 | Only Mara generated external requests | yes — 48 of 48 |
 | Upstream calls / accepted / rejected | 48 attempted, 47 completed / 47 accepted / 0 engine rejections |
-| Token totals / latency summary | 104,270 / 3,523 / 107,793; latency 494 / 712 / 1,086 / 1,354 ms (min/med/p95/max) |
+| Token totals / latency summary | 104,270 / 3,523 / 107,793; latency 494 / 712 / 1,086 / 1,354 ms (min/med/p95/max over the 47 answered calls) |
 | Finalized bundle aggregate SHA-256 | `8cee8aaad35b7c552db28fef971a8e590e46f74386a486c1234d3200a18d3072` (103 files); strict `completed`, sources `gateway+ledger+client`, 0 notes, 0 failed criteria |
 | Anomalies | 1 rationale-length overrun (169 chars), zero upstream errors |
 
@@ -289,7 +290,7 @@ stale responses, if any, must be recorded rather than hidden.
 | `worldStateHash` / `canonicalLedgerHash` | `7fbae8b5db40e53f` / `32a23ac90a6f61ca` |
 | Only Mara generated external requests | yes — 43 of 43 |
 | Upstream calls / accepted / rejected | 43 attempted, 42 completed / 42 accepted / 0 engine rejections |
-| Token totals / latency summary | 102,330 / 3,132 / 105,462; latency 584 / 713 / 1,074 / 1,130 ms (min/med/p95/max) |
+| Token totals / latency summary | 102,330 / 3,132 / 105,462; latency 584 / 713 / 1,074 / 1,130 ms (min/med/p95/max over the 42 answered calls) |
 | Finalized bundle aggregate SHA-256 | `1c2a898829489ddc3e03f28668c80816ee8f0e398f7b33f15066b0671ea12850` (93 files); strict `completed`, sources `gateway+ledger+client`, 0 notes, 0 failed criteria |
 | Anomalies | 1 rationale-length overrun (211 chars). Terminal state was `TaskDeadlineMissed` at tick 2700 (progressUnits 117,600/120,000) — a valid terminal state; the shortfall closely matches the ~400 ticks Mara spent off the bench treating Rin. Mara's `treat` action, advertised `interruptible: false`, was ended by `sustained-check-failed: patient-absent` — the same pre-existing VS001 design ambiguity class recorded in the VS002 findings (finding 3 family); no mid-sequence action taken |
 
@@ -400,8 +401,11 @@ whatever sources and notes the finalizer actually prints.
       and post-sequence after Run 6 (2026-07-30, 100 runs/scenario,
       replay=match on all seven scenarios).
 - [x] all fourteen golden hashes remain unchanged — asserted by
-      `tests/integration/golden-hashes.test.ts` (7/7) at the frozen SHA both
-      before Run 1 and after Run 6, and reproduced by both batches.
+      `tests/integration/golden-hashes.test.ts` (7/7, all fourteen pinned
+      hashes) at the frozen SHA during pre-flight (recorded in the archived
+      sequence log), and confirmed unchanged after Run 6 by the archived
+      post-sequence batch report, whose per-scenario hashes equal the pinned
+      golden constants on all seven scenarios.
 
 ### Documentation
 
