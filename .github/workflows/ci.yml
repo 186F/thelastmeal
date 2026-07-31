@@ -43,6 +43,13 @@ jobs:
       - name: Validate frozen experiment data
         run: npm run validate
 
+      # The Chromium binary is needed BEFORE the unit suite: the
+      # packaging-recovery drills (focused re-audit finding 3) drive the
+      # real orchestrator resume, whose ordinary failing leg launches the
+      # real browser. The e2e step later reuses the same install.
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+
       - name: Unit and integration tests
         run: npm run test:run
 
@@ -60,9 +67,6 @@ jobs:
 
       - name: Build-secret scan (dist)
         run: npm run check:dist
-
-      - name: Install Playwright browser
-        run: npm run test:e2e:install
 
       - name: Browser end-to-end tests
         run: npm run test:e2e
