@@ -1,5 +1,5 @@
 {
-  "planSchemaVersion": "m2-orchestrator-plan-1.0.0",
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
   "sequenceId": "m2-orchestrator-rehearsal",
   "description": "Keyless unattended-orchestrator rehearsal (M2 brief §19.16 precursor): deterministic baseline, fake-gateway per-decision run, and the fake-gateway mid-run stop drill, all through the real Vite + Chromium + gateway-child pipeline with pre-Start treatment verification against the gateway's public configuration. Non-evidentiary: accelerated 20× pacing per §19.17.",
   "evidentiary": false,
@@ -32,6 +32,10 @@
       "maxTotalCalls": 120
     }
   ],
+  "attemptProfile": {
+    "profileId": "m2-rehearsal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
   "expectedTreatment": {
     "modelId": "fake-adapter",
     "servingProviderId": "local",
@@ -48,7 +52,9 @@
       "run-timeout",
       "simulation-stall",
       "browser-error",
-      "gateway-not-connected"
+      "gateway-not-connected",
+      "gateway-launch-failed",
+      "interrupted"
     ]
   },
   "liveCallBudget": 0,

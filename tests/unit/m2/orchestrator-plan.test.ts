@@ -8,6 +8,10 @@ import {
   type OrchestratorPlan,
 } from '../../../scripts/experiments/m2/planSchema';
 import { planConfigFingerprint } from '../../../scripts/experiments/m2/orchestrate';
+import {
+  HARD_STOP_FAILURE_CLASSES,
+  RETRYABLE_ELIGIBLE_FAILURE_CLASSES,
+} from '../../../scripts/experiments/m2/failureTaxonomy';
 
 /**
  * Orchestrator plan contract (M2 brief §19.11, §19.14, §19.17): schema
@@ -184,5 +188,107 @@ describe('orchestrator plan schema', () => {
       timeouts: { ...plan.timeouts, runTimeoutMs: plan.timeouts.runTimeoutMs + 1 },
     };
     expect(planConfigFingerprint(plan)).not.toBe(planConfigFingerprint(repaced));
+    const reprofiled = {
+      ...plan,
+      attemptProfile: { ...plan.attemptProfile, profileVersion: '9.9.9' },
+    };
+    expect(planConfigFingerprint(plan)).not.toBe(planConfigFingerprint(reprofiled));
+  });
+});
+
+describe('attempt profile and closed failure taxonomy gates (re-audit finding 3)', () => {
+  it('every plan must bind a registered attempt profile', () => {
+    const plan = basePlan();
+    const withoutProfile = { ...plan } as Record<string, unknown>;
+    delete withoutProfile.attemptProfile;
+    expect(() => orchestratorPlanSchema.parse(withoutProfile)).toThrow();
+
+    const unknown = {
+      ...plan,
+      attemptProfile: { profileId: 'no-such-profile', profileVersion: '1.0.0' },
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(unknown)))).toThrow(
+      /unknown-attempt-profile/,
+    );
+    const wrongVersion = {
+      ...plan,
+      attemptProfile: { ...plan.attemptProfile, profileVersion: '9.9.9' },
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(wrongVersion)))).toThrow(
+      /attempt-profile-version-mismatch/,
+    );
+  });
+
+  it('hard-stop failure classes are STRUCTURALLY impossible to register as retryable (§7.2)', () => {
+    const plan = basePlan();
+    for (const hardStop of [
+      'replay-mismatch',
+      'freeze-violation',
+      'treatment-mismatch',
+      'invalid-treatment',
+      'strict-finalize-failed',
+    ]) {
+      expect(() =>
+        orchestratorPlanSchema.parse({
+          ...plan,
+          replacementPolicy: {
+            maxReplacementAttempts: 1,
+            retryableFailureClasses: [hardStop],
+          },
+        }),
+      ).toThrow();
+    }
+    for (const eligible of RETRYABLE_ELIGIBLE_FAILURE_CLASSES) {
+      expect(HARD_STOP_FAILURE_CLASSES).not.toContain(eligible);
+    }
+  });
+
+  it('a plan cannot permit more replacements than its profile (§7.4)', () => {
+    const plan = basePlan();
+    const overLimit = {
+      ...plan,
+      replacementPolicy: { ...plan.replacementPolicy, maxReplacementAttempts: 2 },
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(overLimit)))).toThrow(
+      /plan-replacements-exceed-profile-limit/,
+    );
+  });
+
+  it('evidentiary and live plans are hard-refused without a formal attempt profile (§7.1)', () => {
+    const plan = basePlan();
+    const evidentiary = {
+      ...plan,
+      evidentiary: true,
+      attempts: plan.attempts.map((attempt) => ({ ...attempt, speed: 1 })),
+      repositorySha: 'a'.repeat(40),
+      study: {
+        studyId: 'm2-calibration-variance-a-001',
+        studyVersion: '1.0.0',
+        studyPlanPath: 'experiments/m2/studies/calibration.json',
+        studyPlanSha256: 'b'.repeat(64),
+        studyConfigFingerprint: 'c'.repeat(16),
+      },
+      timeouts: {
+        runTimeoutMs: 75 * 60_000,
+        gatewayStopRunTimeoutMs: 90 * 60_000,
+        stallTimeoutMs: 120_000,
+        stallGraceMs: 30_000,
+        heartbeatIntervalMs: 60_000,
+      },
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(evidentiary)))).toThrow(
+      /formal-attempt-profile-required/,
+    );
+    const live = {
+      ...plan,
+      attempts: [
+        plan.attempts[0]!,
+        { ...plan.attempts[1]!, gatewayMode: 'live', maxCallsPerRun: 10, maxTotalCalls: 10 },
+      ],
+      liveCallBudget: 100,
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(live)))).toThrow(
+      /formal-attempt-profile-required/,
+    );
   });
 });

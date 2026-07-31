@@ -1,7 +1,15 @@
 import { describe, expect, it, afterAll } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
   batchChildEnv,
   fakeGatewayEnv,
@@ -13,7 +21,11 @@ import {
   type SequenceState,
   SEQUENCE_STATE_VERSION,
 } from '../../../scripts/experiments/m2/sequenceState';
-import { packageSequence } from '../../../scripts/experiments/m2/packageEvidence';
+import {
+  nextArchivePath,
+  packageSequence,
+  stagedArchivePath,
+} from '../../../scripts/experiments/m2/packageEvidence';
 import { loadGatewayConfig } from '../../../gateway/config';
 
 /**
@@ -106,12 +118,29 @@ describe('child environments (audit finding 9)', () => {
   });
 });
 
-describe('execution seals (audit finding 4)', () => {
+describe('execution seals (audit finding 4; re-audit finding 5)', () => {
   function sealedState(root: string): SequenceState {
     mkdirSync(join(root, 'attempt-a-e1', 'sub'), { recursive: true });
     writeFileSync(join(root, 'attempt-a-e1', 'ledger-A.json'), '{"canonical":true}', 'utf8');
     writeFileSync(join(root, 'attempt-a-e1', 'sub', 'trace.jsonl'), '{"row":1}\n', 'utf8');
-    const seal = sealExecution(root, 'attempt-a-e1');
+    mkdirSync(join(root, 'attempt-a-e2'), { recursive: true });
+    writeFileSync(join(root, 'attempt-a-e2', 'failure-message.txt'), 'run-timeout: x\n', 'utf8');
+    const seal = sealExecution(root, 'attempt-a-e1', 'completed');
+    const failedSeal = sealExecution(root, 'attempt-a-e2', 'failed');
+    const executionBase = {
+      failureStage: null,
+      artifactStatus: null,
+      studyStatus: null,
+      replacementDisposition: null,
+      thresholdVerdicts: null,
+      runId: null,
+      artifacts: [],
+      verdicts: {},
+      navigationCount: null,
+      browserProvenance: null,
+      startedAtUtc: '2026-07-30T00:00:00.000Z',
+      endedAtUtc: '2026-07-30T00:01:00.000Z',
+    };
     return {
       stateVersion: SEQUENCE_STATE_VERSION,
       sequenceId: 'seal-test',
@@ -128,24 +157,33 @@ describe('execution seals (audit finding 4)', () => {
       studyId: 'none',
       studyVersion: 'none',
       studyPlanSha256: 'none',
+      thresholdProfileId: 'm2-rehearsal-attempt-profile',
+      thresholdProfileVersion: '1.0.0',
       configFingerprint: 'c'.repeat(16),
       status: 'completed',
       sequenceFailureReason: null,
       archivePath: null,
       archiveSha256: null,
+      inventoryAggregateSha256: null,
+      freezeCheckpoints: [],
       executions: [
         {
+          ...executionBase,
           executionId: 'a-e1',
           attemptId: 'a',
           status: 'completed',
           seal,
           failureReason: null,
-          runId: null,
           dir: 'attempt-a-e1',
-          artifacts: [],
-          verdicts: {},
-          startedAtUtc: '2026-07-30T00:00:00.000Z',
-          endedAtUtc: '2026-07-30T00:01:00.000Z',
+        },
+        {
+          ...executionBase,
+          executionId: 'a-e2',
+          attemptId: 'a',
+          status: 'failed',
+          seal: failedSeal,
+          failureReason: 'run-timeout',
+          dir: 'attempt-a-e2',
         },
       ],
       lastTransition: 'sequence-completed',
@@ -173,25 +211,42 @@ describe('execution seals (audit finding 4)', () => {
     expect(() => verifySealedExecutions(root, state)).toThrow(/resume-evidence-invalid.*added/);
   });
 
-  it('a completed execution without a seal refuses', () => {
+  it('FAILED executions are sealed evidence too: tamper or deletion refuses (re-audit finding 5)', () => {
     const root = scratch('m2-seal-');
     const state = sealedState(root);
-    state.executions[0]!.seal = null;
-    expect(() => verifySealedExecutions(root, state)).toThrow(/has no seal/);
+    writeFileSync(join(root, 'attempt-a-e2', 'failure-message.txt'), 'edited\n', 'utf8');
+    expect(() => verifySealedExecutions(root, state)).toThrow(/a-e2.*altered/);
+
+    writeFileSync(join(root, 'attempt-a-e2', 'failure-message.txt'), 'run-timeout: x\n', 'utf8');
+    expect(() => verifySealedExecutions(root, state)).not.toThrow();
+    rmSync(join(root, 'attempt-a-e2', 'failure-message.txt'));
+    expect(() => verifySealedExecutions(root, state)).toThrow(/a-e2.*missing/);
+  });
+
+  it('any terminal execution without a seal, or with a status-mismatched seal, refuses', () => {
+    const root = scratch('m2-seal-');
+    const state = sealedState(root);
+    state.executions[1]!.seal = null;
+    expect(() => verifySealedExecutions(root, state)).toThrow(/has no terminal seal/);
+
+    const fresh = sealedState(scratch('m2-seal-'));
+    fresh.executions[0]!.seal = { ...fresh.executions[0]!.seal!, sealedStatus: 'failed' };
+    expect(() => verifySealedExecutions(root, fresh)).toThrow(/seal status/);
   });
 });
 
-describe('portable packaging (audit finding 7)', () => {
+describe('portable packaging (audit finding 7; re-audit findings 1 and 7)', () => {
   const receipt = {
     sequenceId: 'package-test',
     planSha256: 'a'.repeat(64),
     repositorySha: 'b'.repeat(40),
+    studyPlanSha256: null,
   };
 
   function evidenceRoot(): string {
     const root = scratch('m2-package-');
     mkdirSync(join(root, 'attempt-a'), { recursive: true });
-    writeFileSync(join(root, 'sequence-state.json'), '{"status":"completed"}', 'utf8');
+    writeFileSync(join(root, 'sequence-manifest.json'), '{"attemptSetComplete":true}', 'utf8');
     writeFileSync(join(root, 'attempt-a', 'heartbeat.jsonl'), '{"tick":1}\n', 'utf8');
     return root;
   }
@@ -199,7 +254,7 @@ describe('portable packaging (audit finding 7)', () => {
   it('produces a verified fresh archive with receipt; excludes transient files', async () => {
     const root = evidenceRoot();
     writeFileSync(join(root, 'stale.tmp'), 'transient', 'utf8');
-    const zipPath = join(scratch('m2-package-out-'), 'evidence.zip');
+    const zipPath = join(scratch('m2-package-out-'), 'evidence-001.zip');
     const result = await packageSequence(root, zipPath, receipt);
     expect(result.zipSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(readFileSync(`${zipPath}.sha256`, 'utf8')).toContain(result.zipSha256);
@@ -209,6 +264,7 @@ describe('portable packaging (audit finding 7)', () => {
     >;
     expect(receiptJson.archiveSha256).toBe(result.zipSha256);
     expect(receiptJson.sequenceId).toBe('package-test');
+    expect(receiptJson.inventoryAggregateSha256).toBe(result.inventoryAggregateSha256);
     const inventory = JSON.parse(readFileSync(result.inventoryPath, 'utf8')) as {
       files: { name: string }[];
     };
@@ -217,26 +273,70 @@ describe('portable packaging (audit finding 7)', () => {
     expect(names.every((name) => !name.includes('\\'))).toBe(true);
   });
 
-  it('recreating an archive cannot retain a stale deleted entry', async () => {
+  it('a packaged root is immutable: post-inventory deletion refuses instead of re-inventorying (re-audit finding 1)', async () => {
     const root = evidenceRoot();
     writeFileSync(join(root, 'doomed.md'), 'will be deleted', 'utf8');
-    const zipPath = join(scratch('m2-package-out-'), 'evidence.zip');
+    const zipPath = join(scratch('m2-package-out-'), 'evidence-001.zip');
     await packageSequence(root, zipPath, receipt);
     rmSync(join(root, 'doomed.md'));
-    const second = await packageSequence(root, zipPath, receipt);
-    // Extraction verification inside packageSequence already proves set
-    // equality; a retained stale entry would have failed it. Double-check
-    // via the refreshed inventory.
-    const inventory = JSON.parse(readFileSync(second.inventoryPath, 'utf8')) as {
-      files: { name: string }[];
-    };
-    expect(inventory.files.map((file) => file.name)).not.toContain('doomed.md');
+    // A stale entry can never survive because the mutated tree is REFUSED
+    // outright — repackaging verifies the recorded inventory byte-for-byte.
+    const zipPath2 = join(scratch('m2-package-out-'), 'evidence-002.zip');
+    await expect(packageSequence(root, zipPath2, receipt)).rejects.toThrow(
+      /inventory-tree-mismatch/,
+    );
+    expect(existsSync(zipPath2)).toBe(false);
+    expect(existsSync(`${zipPath2}.receipt.json`)).toBe(false);
+  });
+
+  it('an existing destination archive is never deleted or overwritten (re-audit finding 7)', async () => {
+    const root = evidenceRoot();
+    const outDir = scratch('m2-package-out-');
+    const zipPath = join(outDir, 'evidence-001.zip');
+    const first = await packageSequence(root, zipPath, receipt);
+    const firstBytes = readFileSync(zipPath);
+    await expect(packageSequence(root, zipPath, receipt)).rejects.toThrow(
+      /archive-destination-exists/,
+    );
+    expect(readFileSync(zipPath)).toEqual(firstBytes);
+    expect(first.zipSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('stages the archive as a dot-tmp SIBLING on the destination volume (re-audit finding 7)', () => {
+    const zipPath = join('C:', 'somewhere', 'deep', 'evidence-001.zip');
+    const staged = stagedArchivePath(zipPath);
+    expect(dirname(staged)).toBe(dirname(zipPath));
+    expect(basename(staged).startsWith('.evidence-001.zip.')).toBe(true);
+    expect(staged.endsWith('.tmp')).toBe(true);
+  });
+
+  it('a failed verification leaves no partial destination archive and no receipt', async () => {
+    const root = evidenceRoot();
+    writeFileSync(join(root, 'leak.log'), 'Authorization: Bearer oops', 'utf8');
+    const outDir = scratch('m2-package-out-');
+    const zipPath = join(outDir, 'evidence-001.zip');
+    await expect(packageSequence(root, zipPath, receipt)).rejects.toThrow(
+      /evidence-secret-scan-failed/,
+    );
+    expect(existsSync(zipPath)).toBe(false);
+    expect(existsSync(`${zipPath}.sha256`)).toBe(false);
+    expect(existsSync(`${zipPath}.receipt.json`)).toBe(false);
+    // No staged temp file survives either.
+    expect(readdirSync(outDir)).toHaveLength(0);
+  });
+
+  it('versioned archive paths increment and never collide', async () => {
+    const root = evidenceRoot();
+    const outDir = scratch('m2-package-out-');
+    expect(basename(nextArchivePath(outDir, 'seq'))).toBe('seq-evidence-001.zip');
+    await packageSequence(root, nextArchivePath(outDir, 'seq'), receipt);
+    expect(basename(nextArchivePath(outDir, 'seq'))).toBe('seq-evidence-002.zip');
   });
 
   it('refuses to package a tree containing secrets — including inside nested archives', async () => {
     const root = evidenceRoot();
     writeFileSync(join(root, 'leak.log'), 'Authorization: Bearer oops', 'utf8');
-    const zipPath = join(scratch('m2-package-out-'), 'evidence.zip');
+    const zipPath = join(scratch('m2-package-out-'), 'evidence-001.zip');
     await expect(packageSequence(root, zipPath, receipt)).rejects.toThrow(
       /evidence-secret-scan-failed/,
     );
@@ -253,7 +353,7 @@ describe('portable packaging (audit finding 7)', () => {
     } else {
       execSync(`cd "${nestedSource}" && zip -r -q "${nestedZip}" .`);
     }
-    const zipPath2 = join(scratch('m2-package-out-'), 'evidence.zip');
+    const zipPath2 = join(scratch('m2-package-out-'), 'evidence-001.zip');
     await expect(packageSequence(root2, zipPath2, receipt)).rejects.toThrow(
       /evidence-secret-scan-failed/,
     );

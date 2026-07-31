@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { helperEnv } from './childEnv';
 
 /**
- * Optional cross-platform keep-awake lease (M2 brief §19.13).
+ * Optional cross-platform keep-awake lease (M2 brief §19.13; re-audit
+ * finding 6).
  *
  * Best-effort: a child process holds a sleep-inhibition lease for the
  * orchestrator's lifetime and is killed on release. Failure to establish a
@@ -9,12 +11,21 @@ import { spawn, type ChildProcess } from 'node:child_process';
  * warning and requires `--allow-sleep-risk` before running a LIVE plan
  * without one. No security control is disabled and no power setting is
  * permanently altered: the lease dies with the process.
+ *
+ * Secret boundary: the helper receives the nonsecret platform environment
+ * ONLY — an exported OPENROUTER_API_KEY in the operator shell never
+ * reaches powershell/caffeinate/systemd-inhibit. Acquisition is LIVE-ONLY
+ * and happens inside the orchestrator's release scope, so a refused or
+ * failed launch never leaves the helper running.
  */
 
 export interface KeepAwakeLease {
   method: string;
+  pid: number;
   release: () => void;
 }
+
+export type KeepAwakeSpawn = typeof spawn;
 
 const WINDOWS_KEEPAWAKE_PS = `
 Add-Type -Name Sleep -Namespace Orchestrator -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);'
@@ -23,29 +34,36 @@ Add-Type -Name Sleep -Namespace Orchestrator -MemberDefinition '[DllImport("kern
 while ($true) { Start-Sleep -Seconds 30; [Orchestrator.Sleep]::SetThreadExecutionState([uint32]"0x80000001") | Out-Null }
 `;
 
-export async function acquireKeepAwake(): Promise<KeepAwakeLease | null> {
+export async function acquireKeepAwake(
+  spawnImpl: KeepAwakeSpawn = spawn,
+): Promise<KeepAwakeLease | null> {
   let child: ChildProcess | null = null;
   let method: string;
+  const env = helperEnv(process.env);
   try {
     if (process.platform === 'win32') {
       method = 'windows-set-thread-execution-state';
-      child = spawn(
+      child = spawnImpl(
         'powershell',
         ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_KEEPAWAKE_PS],
         {
           stdio: 'ignore',
           windowsHide: true,
+          env,
         },
       );
     } else if (process.platform === 'darwin') {
       method = 'macos-caffeinate';
-      child = spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
+      child = spawnImpl('caffeinate', ['-i', '-w', String(process.pid)], {
+        stdio: 'ignore',
+        env,
+      });
     } else {
       method = 'linux-systemd-inhibit';
-      child = spawn(
+      child = spawnImpl(
         'systemd-inhibit',
         ['--what=sleep', '--why=m2-orchestrator-sequence', 'sleep', 'infinity'],
-        { stdio: 'ignore' },
+        { stdio: 'ignore', env },
       );
     }
   } catch {
@@ -68,6 +86,7 @@ export async function acquireKeepAwake(): Promise<KeepAwakeLease | null> {
       }
       resolve({
         method,
+        pid: child!.pid!,
         release: () => {
           try {
             child?.kill();

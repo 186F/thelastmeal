@@ -7,6 +7,7 @@ import {
   AUTOMATION_TEXT,
 } from '../../../src/shared/automationContract';
 import type { PlannedAttempt } from './planSchema';
+import { AttemptFailure, type FailureClass } from './failureTaxonomy';
 
 /**
  * Playwright browser driver for one attempt (M2 brief §19.7–§19.10).
@@ -17,19 +18,16 @@ import type { PlannedAttempt } from './planSchema';
  * a fresh browser context and page (§19.5); downloads land directly in the
  * attempt directory (§19.7); a machine-readable heartbeat is appended on a
  * fixed cadence (§19.9); a stall watchdog and a wall-clock timeout convert
- * hangs into preserved failed attempts (§19.9–§19.10); and every failure
+ * hangs into preserved failed attempts (§19.9–§19.10); every failure
  * captures a screenshot, DOM snapshot, console/page errors, and a
- * Playwright trace before the context closes.
+ * Playwright trace before the context closes; and an unexpected page
+ * reload or navigation is DETECTED and fails the attempt rather than
+ * masquerading as an uninterrupted run (re-audit §13.3): a load token is
+ * planted in the page after the initial load, and both a main-frame
+ * navigation counter and a per-poll token check guard it.
  */
 
-export class AttemptFailure extends Error {
-  readonly reason: string;
-  constructor(reason: string, message: string) {
-    super(message);
-    this.name = 'AttemptFailure';
-    this.reason = reason;
-  }
-}
+export { AttemptFailure } from './failureTaxonomy';
 
 export interface BrowserAttemptOptions {
   origin: string;
@@ -67,6 +65,27 @@ export interface BrowserAttemptResult {
   consoleErrors: string[];
   replayVerdict: string;
   gatewayStop: GatewayStopEvidence | null;
+  /** Main-frame navigations observed for the attempt (re-audit §13.3):
+   * exactly 1 for an uninterrupted run. */
+  navigationCount: number;
+}
+
+/** Runs one capture action, recording success or failure in the shared
+ * capture maps — a capture failure is evidence, never a silent absorption
+ * or a mask over the original failure (re-audit §12 drill seam). */
+export async function captureArtifact(
+  captured: Record<string, string>,
+  captureFailures: Record<string, string>,
+  name: string,
+  action: () => Promise<void>,
+): Promise<void> {
+  try {
+    await action();
+    captured[name] = 'captured';
+  } catch (captureError: unknown) {
+    captureFailures[name] =
+      captureError instanceof Error ? captureError.message : String(captureError);
+  }
 }
 
 function field(page: Page, name: string) {
@@ -94,13 +113,21 @@ export async function runBrowserAttempt(
 
   // Fresh context per attempt (§19.5): no cookies, storage, or page state
   // survives between attempts. Downloads are accepted and saved explicitly.
+  // Tracing is bounded (re-audit §13.4): screenshots + DOM snapshots, no
+  // source-file embedding — sources live in the pinned repository.
   const context: BrowserContext = await browser.newContext({ acceptDownloads: true });
-  await context.tracing.start({ screenshots: true, snapshots: true });
+  await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
   const page = await context.newPage();
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`console: ${message.text()}`);
   });
   page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
+  // Navigation detection (re-audit §13.3): the initial goto is navigation
+  // 1; anything after it is an unexpected reload/navigation.
+  let navigationCount = 0;
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navigationCount += 1;
+  });
 
   let terminalDiagnosticsCaptured = false;
 
@@ -181,7 +208,7 @@ export async function runBrowserAttempt(
     }
   };
 
-  const fail = async (reason: string, detail: string): Promise<never> => {
+  const fail = async (reason: FailureClass, detail: string): Promise<never> => {
     await captureDiagnostics(reason, detail, true);
     throw new AttemptFailure(reason, detail);
   };
@@ -191,6 +218,32 @@ export async function runBrowserAttempt(
     await field(page, AUTOMATION_FIELDS.workerStatus).filter({ hasText: 'ready' }).waitFor({
       timeout: 60_000,
     });
+
+    // Load-generation token (re-audit §13.3): planted once after the
+    // initial load; a reload or navigation produces a fresh window object
+    // without it. Checked on every poll alongside the navigation counter.
+    const loadToken = `m2-load-${attempt.attemptId}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+    await page.evaluate((token) => {
+      (window as unknown as Record<string, unknown>).__m2LoadToken = token;
+    }, loadToken);
+    const baselineNavigations = navigationCount;
+    const assertNoNavigation = async (): Promise<void> => {
+      if (navigationCount > baselineNavigations) {
+        await fail(
+          'unexpected-navigation',
+          `main frame navigated ${navigationCount - baselineNavigations} time(s) after setup`,
+        );
+      }
+      const token = await page.evaluate(
+        () => (window as unknown as Record<string, unknown>).__m2LoadToken,
+      );
+      if (token !== loadToken) {
+        await fail(
+          'unexpected-navigation',
+          `load token missing or changed (page reloaded): ${String(token)}`,
+        );
+      }
+    };
 
     // Scenario FIRST, then condition: selecting a scenario while the model
     // condition is active can silently degrade the condition to baseline.
@@ -253,6 +306,7 @@ export async function runBrowserAttempt(
       if (now - startedAt > timeouts.runTimeoutMs) {
         await fail('run-timeout', `wall clock exceeded ${timeouts.runTimeoutMs}ms`);
       }
+      await assertNoNavigation();
       const status = await readFieldText(page, AUTOMATION_FIELDS.runStatus);
       const tick = await readTick(page);
       if (tick !== null && tick !== lastTick) {
@@ -387,6 +441,7 @@ export async function runBrowserAttempt(
     if (!replayVerdict.trim().startsWith(AUTOMATION_TEXT.replayMatchPrefix)) {
       await fail('replay-mismatch', `in-browser replay verdict: '${replayVerdict.trim()}'`);
     }
+    await assertNoNavigation();
 
     // Always-saved attempt diagnostics (audit finding 6): the trace, final
     // screenshot, final DOM, and console/page errors are preserved for EVERY
@@ -395,25 +450,16 @@ export async function runBrowserAttempt(
     // exactly what was captured and any capture failure.
     const captured: Record<string, string> = {};
     const captureFailures: Record<string, string> = {};
-    const tryCapture = async (name: string, action: () => Promise<void>): Promise<void> => {
-      try {
-        await action();
-        captured[name] = 'captured';
-      } catch (captureError: unknown) {
-        captureFailures[name] =
-          captureError instanceof Error ? captureError.message : String(captureError);
-      }
-    };
-    await tryCapture('attempt-trace.zip', async () => {
+    await captureArtifact(captured, captureFailures, 'attempt-trace.zip', async () => {
       await context.tracing.stop({ path: join(attemptDir, 'attempt-trace.zip') });
     });
-    await tryCapture('final-screenshot.png', async () => {
+    await captureArtifact(captured, captureFailures, 'final-screenshot.png', async () => {
       await page.screenshot({ path: join(attemptDir, 'final-screenshot.png'), fullPage: true });
     });
-    await tryCapture('final-dom.html', async () => {
+    await captureArtifact(captured, captureFailures, 'final-dom.html', async () => {
       writeFileSync(join(attemptDir, 'final-dom.html'), await page.content(), 'utf8');
     });
-    await tryCapture('console-log.json', async () => {
+    await captureArtifact(captured, captureFailures, 'console-log.json', async () => {
       writeFileSync(
         join(attemptDir, 'console-log.json'),
         `${JSON.stringify({ consoleErrors }, null, 2)}\n`,
@@ -435,6 +481,7 @@ export async function runBrowserAttempt(
       consoleErrors,
       replayVerdict: replayVerdict.trim(),
       gatewayStop: gatewayStopEvidence,
+      navigationCount,
     };
   } catch (error: unknown) {
     // Every failure path — including raw Playwright throws (selector

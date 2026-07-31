@@ -1,16 +1,32 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { helperEnv } from './childEnv';
 
 /**
- * Child-process management for the orchestrator (M2 brief §19.5).
+ * Child-process management for the orchestrator (M2 brief §19.5;
+ * re-audit findings 6 and 13.1).
  *
  * Every managed child records its PID, captured stdout/stderr (to a log
  * file), and exit code. Shutdown is graceful first (SIGTERM / Windows
  * taskkill without /F), then force-kill after a fixed timeout. The
  * orchestrator never leaves children running: `stopAll` runs in `finally`
  * on success and failure alike.
+ *
+ * Provenance is a GATE, not best-effort: record-write and stop failures
+ * are counted in `health()`, and the sequence report carries them
+ * explicitly instead of implying complete provenance. The Windows
+ * `taskkill` helpers run under the nonsecret helper environment.
  */
+
+export interface ProcessManagerHealth {
+  recordPath: string | null;
+  recordWriteFailures: number;
+  lastRecordWriteError: string | null;
+  stopFailures: number;
+  /** Managed children with no observed exit at reconciliation time. */
+  runningChildren: string[];
+}
 
 export interface ManagedProcess {
   name: string;
@@ -36,6 +52,9 @@ export class ProcessManager {
   /** Append-only JSONL record of every spawn and exit (§19.5): survives
    * report regeneration and resume, unlike any in-memory table. */
   private readonly recordPath: string | null;
+  private recordWriteFailures = 0;
+  private lastRecordWriteError: string | null = null;
+  private stopFailures = 0;
 
   constructor(recordPath: string | null = null) {
     this.recordPath = recordPath;
@@ -49,9 +68,26 @@ export class ProcessManager {
         this.recordPath,
         `${JSON.stringify({ atUtc: new Date().toISOString(), ...entry })}\n`,
       );
-    } catch {
-      // Process-record IO must never break orchestration.
+    } catch (error: unknown) {
+      // Process-record IO must never break orchestration mid-flight — but
+      // it is COUNTED and gated, never silently absorbed (re-audit §13.1).
+      this.recordWriteFailures += 1;
+      this.lastRecordWriteError = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  /** Provenance health for the sequence report and the evidentiary
+   * completeness gate (re-audit §13.1). */
+  health(): ProcessManagerHealth {
+    return {
+      recordPath: this.recordPath,
+      recordWriteFailures: this.recordWriteFailures,
+      lastRecordWriteError: this.lastRecordWriteError,
+      stopFailures: this.stopFailures,
+      runningChildren: this.managed
+        .filter((managedProcess) => managedProcess.exitCode() === null)
+        .map((managedProcess) => managedProcess.name),
+    };
   }
 
   spawnManaged(options: SpawnOptions): ManagedProcess {
@@ -114,6 +150,21 @@ export class ProcessManager {
     throw new Error(`process-wait-timeout: ${what} (${timeoutMs}ms)`);
   }
 
+  /** Spawns a Windows taskkill helper under the nonsecret helper
+   * environment (re-audit finding 6); its own spawn errors are counted as
+   * stop failures rather than crashing the orchestrator. */
+  private taskkill(pid: number, force: boolean): void {
+    const args = force ? ['/PID', String(pid), '/T', '/F'] : ['/PID', String(pid), '/T'];
+    const killer = spawn('taskkill', args, {
+      stdio: 'ignore',
+      windowsHide: true,
+      env: helperEnv(process.env),
+    });
+    killer.on('error', () => {
+      this.stopFailures += 1;
+    });
+  }
+
   /** Graceful stop, then force-kill after `graceMs`. Windows has no POSIX
    * signal delivery to detached consoles, so graceful = taskkill (no /F)
    * and force = child.kill() plus taskkill /F /T. */
@@ -123,10 +174,7 @@ export class ProcessManager {
       return managedProcess.exited;
     }
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/PID', String(managedProcess.pid), '/T'], {
-        stdio: 'ignore',
-        windowsHide: true,
-      });
+      this.taskkill(managedProcess.pid, false);
     } else {
       child.kill('SIGTERM');
     }
@@ -136,10 +184,7 @@ export class ProcessManager {
     ]);
     if (raceResult !== 'timeout') return raceResult;
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/PID', String(managedProcess.pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
-      });
+      this.taskkill(managedProcess.pid, true);
     }
     child.kill('SIGKILL');
     return managedProcess.exited;
@@ -150,7 +195,9 @@ export class ProcessManager {
       try {
         await this.stop(managedProcess, graceMs);
       } catch {
-        // stopAll must never throw: it runs in finally paths.
+        // stopAll must never throw: it runs in finally paths — but the
+        // failure is COUNTED for the provenance gate (re-audit §13.1).
+        this.stopFailures += 1;
       }
     }
   }

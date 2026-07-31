@@ -1,14 +1,16 @@
 /**
- * Allowlisted child environments (Phase 3 audit finding 9).
+ * Allowlisted child environments (Phase 3 audit finding 9; re-audit
+ * finding 6).
  *
- * The API key must remain inside the LIVE gateway process only. A blanket
- * `{ ...process.env }` would copy an operator shell's OPENROUTER_API_KEY /
- * OPENAI_API_KEY into Vite, batch, and fake-gateway children — so every
- * non-live child is built from an explicit allowlist of platform variables
- * plus the specific settings that child needs, and the credential variables
- * are structurally absent. Only `liveGatewayEnv` passes the full parent
- * environment through, because the live gateway is the one authorized
- * credential reader (§19.15).
+ * The governing boundary: ONLY the authorized live gateway process
+ * receives the key. A blanket `{ ...process.env }` would copy an operator
+ * shell's OPENROUTER_API_KEY / OPENAI_API_KEY into every child — so every
+ * non-live child, HELPERS INCLUDED (keep-awake, zip/unzip/tar, git,
+ * taskkill), is built from an explicit allowlist of platform variables
+ * plus the specific settings that child needs, and the credential
+ * variables are structurally absent. Only `liveGatewayEnv` passes the full
+ * parent environment through, because the live gateway is the one
+ * authorized credential reader (§19.15).
  */
 
 /** Platform variables required for child processes to function at all
@@ -47,6 +49,13 @@ function platformBase(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     if (parent[name] !== undefined) env[name] = parent[name];
   }
   return env;
+}
+
+/** Every non-live-gateway HELPER process (keep-awake, archive utilities,
+ * git, taskkill, and any future spawn): platform base only (re-audit
+ * finding 6). */
+export function helperEnv(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return platformBase(parent);
 }
 
 /** Vite dev server: platform base + the gateway URL the app must bake in. */

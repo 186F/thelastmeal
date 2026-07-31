@@ -2,7 +2,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { orchestrateSequence, type OrchestrateResult } from './orchestrate';
-import { readSequenceState } from './sequenceState';
+import { readSequenceState, stateFilePath } from './sequenceState';
+import { readInventory, verifyTreeAgainstInventory } from './packageEvidence';
+import { sequenceManifestSchema } from './reporting';
+import { runCli } from './cli';
 import { portIsFree } from './gatewayDriver';
 import { AUTOMATION_GATEWAY_PORT, AUTOMATION_VITE_PORT } from './viteDriver';
 import { behaviorFingerprintSetSchema } from '../../../src/shared/behaviorArtifacts';
@@ -15,16 +18,24 @@ import { behaviorFingerprintSetSchema } from '../../../src/shared/behaviorArtifa
  * Drives the COMPLETE unattended pipeline — real Vite on the strict
  * automation port, real Chromium, a fresh fake-adapter gateway child
  * process per model attempt, real downloads, in-browser replay, strict
- * finalization, enrichment, packaging — then asserts the §19 properties:
+ * finalization, enrichment, packaging — then asserts the §19 properties
+ * and the re-audit's evidence-governance mechanisms:
  *
- *   1. the three-attempt keyless plan completes unattended
- *      (deterministic baseline / per-decision fake / mid-run gateway stop);
+ *   1. the three-attempt keyless plan completes unattended with every
+ *      execution artifact-valid, study-valid under the rehearsal profile,
+ *      sealed, and inside a versioned receipt-verified archive whose root
+ *      still matches its inventory byte-for-byte;
  *   2. the gateway-stop attempt preserves emitted > attempted upstream;
- *   3. `--resume` on the completed sequence is idempotent (no new
- *      executions; derived reports regenerated);
+ *   3. `--resume` on the completed sequence is a NO-OP that verifies
+ *      seals, inventory, manifest, semantic revalidation, archive, and
+ *      receipt without changing a byte or launching a process;
  *   4. resume under a modified plan is REFUSED (identity mismatch);
- *   5. the failure drill produces a preserved failed attempt (run-timeout)
- *      with diagnostics, heartbeats, and a failed sequence state.
+ *   5. the failure drill produces a preserved, SEALED failed attempt
+ *      (run-timeout, disposition `forbidden`) with diagnostics, a typed
+ *      failure manifest, and a failed sequence state;
+ *   6. resuming the failed drill is REFUSED by the recorded disposition;
+ *   7. `m2:evaluate` on the completed sequence writes ONLY to the derived
+ *      directory — the sealed root stays byte-identical.
  *
  * All rehearsal output is non-evidentiary and lives under artifacts/.
  */
@@ -53,15 +64,15 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
   const notes: string[] = [];
   const rehearsalPlan = join(repoRoot, 'experiments', 'm2', 'plans', 'rehearsal.json');
   const failureDrillPlan = join(repoRoot, 'experiments', 'm2', 'plans', 'failure-drill.json');
-  const rehearsalRoot = resolve(repoRoot, 'artifacts', 'm2-sequences', 'rehearsal');
-  const failureRoot = resolve(repoRoot, 'artifacts', 'm2-sequences', 'failure-drill');
+  const sequencesRoot = resolve(repoRoot, 'artifacts', 'm2-sequences');
+  const rehearsalRoot = join(sequencesRoot, 'rehearsal');
+  const failureRoot = join(sequencesRoot, 'failure-drill');
   const reportDir = resolve(repoRoot, 'artifacts', 'm2-rehearsal');
 
-  // Non-evidentiary roots: cleared at start so every rehearsal is fresh.
-  for (const root of [rehearsalRoot, failureRoot, reportDir]) {
-    rmSync(root, { recursive: true, force: true });
-  }
-  rmSync(resolve(rehearsalRoot, '..', 'm2-orchestrator-rehearsal-evidence.zip'), { force: true });
+  // Non-evidentiary roots (sequence roots, control roots, derived dirs,
+  // versioned archives): cleared at start so every rehearsal is fresh.
+  rmSync(sequencesRoot, { recursive: true, force: true });
+  rmSync(reportDir, { recursive: true, force: true });
   mkdirSync(reportDir, { recursive: true });
 
   // --- 1. The keyless three-attempt sequence, unattended. -------------------
@@ -80,6 +91,10 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
     `expected 0 failed executions, saw ${first.failedExecutions}`,
   );
   check(first.zipPath !== null && existsSync(first.zipPath), 'evidence zip missing');
+  check(
+    first.zipPath!.endsWith('m2-orchestrator-rehearsal-evidence-001.zip'),
+    `archive name not versioned: ${first.zipPath!}`,
+  );
   notes.push(`sequence completed: 3/3 executions; zip ${first.zipPath}`);
 
   const state = readSequenceState(rehearsalRoot);
@@ -94,6 +109,27 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
       existsSync(join(rehearsalRoot, execution.dir, 'heartbeat.jsonl')),
       `no heartbeat for ${execution.executionId}`,
     );
+    // Re-audit finding 3: artifact validity and study validity are separate
+    // recorded verdicts, both required for a completed primary observation.
+    check(
+      execution.artifactStatus === 'artifact-valid',
+      `execution ${execution.executionId} artifactStatus ${String(execution.artifactStatus)}`,
+    );
+    check(
+      execution.studyStatus === 'study-valid',
+      `execution ${execution.executionId} studyStatus ${String(execution.studyStatus)}`,
+    );
+    // Re-audit §13.2/§13.3: per-execution browser provenance and exactly
+    // one main-frame navigation.
+    check(
+      execution.browserProvenance !== null &&
+        execution.browserProvenance.playwrightVersion.length > 0,
+      `execution ${execution.executionId} missing browser provenance`,
+    );
+    check(
+      execution.navigationCount === 1,
+      `execution ${execution.executionId} navigationCount ${String(execution.navigationCount)}`,
+    );
   }
   const modelExecutions = state.executions.filter((execution) => execution.runId !== null);
   check(modelExecutions.length === 2, 'expected 2 model executions with run ids');
@@ -107,12 +143,22 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
         execution.verdicts['verified-serving-provider'] === 'local',
       `model execution ${execution.executionId} missing pre-Start treatment verification`,
     );
+    // Re-audit finding 3: threshold verdicts recorded under the rehearsal
+    // profile, all passing.
+    check(
+      execution.thresholdVerdicts !== null &&
+        execution.thresholdVerdicts.length > 0 &&
+        execution.thresholdVerdicts.every((verdict) => verdict.pass),
+      `model execution ${execution.executionId} missing passing threshold verdicts`,
+    );
   }
-  // Audit remediation: every completed execution is sealed and carries its
-  // always-saved diagnostics (trace, final DOM/screenshot, console log,
-  // diagnostic manifest).
+  // Every completed execution is sealed (completed seal) and carries its
+  // always-saved diagnostics.
   for (const execution of state.executions) {
-    check(execution.seal !== null, `execution ${execution.executionId} has no seal`);
+    check(
+      execution.seal !== null && execution.seal.sealedStatus === 'completed',
+      `execution ${execution.executionId} has no completed seal`,
+    );
     for (const artifact of [
       'attempt-trace.zip',
       'final-screenshot.png',
@@ -126,15 +172,59 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
       );
     }
   }
-  // Archive receipt (audit finding 5/7): sibling sha256 + receipt verify.
+  // Re-audit finding 1: the completed root still matches its recorded
+  // inventory byte-for-byte (nothing changed after packaging), the final
+  // evidence manifest describes the completed attempt set, and the archive
+  // receipt agrees with the state and inventory.
+  const inventory = readInventory(rehearsalRoot);
+  check(inventory !== null, 'sha256-inventory.json missing from completed root');
+  check(
+    state.inventoryAggregateSha256 === inventory.aggregateSha256,
+    'state inventory aggregate disagrees with the inventory file',
+  );
+  verifyTreeAgainstInventory(rehearsalRoot, inventory, 'rehearsal-post-completion');
+  const manifest = sequenceManifestSchema.parse(
+    JSON.parse(readFileSync(join(rehearsalRoot, 'sequence-manifest.json'), 'utf8')),
+  );
+  check(manifest.attemptSetComplete, 'manifest does not record a complete attempt set');
+  check(
+    manifest.sequenceOutcome === 'evidence-finalized',
+    `manifest outcome ${manifest.sequenceOutcome}`,
+  );
+  check(
+    manifest.executions.every((execution) => execution.status === 'completed'),
+    'manifest holds non-completed executions',
+  );
+  for (const expected of [
+    'pre-batch',
+    'pre-evaluation',
+    'post-evaluation',
+    'pre-package',
+    'post-package',
+  ]) {
+    check(
+      state.freezeCheckpoints.some((entry) => entry.checkpoint === expected),
+      `freeze checkpoint '${expected}' missing`,
+    );
+  }
   check(existsSync(`${first.zipPath!}.sha256`), 'archive .sha256 receipt missing');
   const receipt = JSON.parse(readFileSync(`${first.zipPath!}.receipt.json`, 'utf8')) as {
     archiveSha256: string;
+    inventoryAggregateSha256: string;
+    planSha256: string;
+    repositorySha: string;
   };
   check(
     state.archiveSha256 === receipt.archiveSha256,
     'archive receipt sha does not match sequence state',
   );
+  check(
+    receipt.inventoryAggregateSha256 === inventory.aggregateSha256 &&
+      receipt.planSha256 === state.planSha256 &&
+      receipt.repositorySha === state.repositorySha,
+    'archive receipt identity fields disagree',
+  );
+  notes.push('completed root immutable vs inventory; manifest + receipt verified');
   // Planned-stop evidence (audit finding 8).
   const stopVerdict = state.executions.find(
     (execution) => execution.attemptId === 'a-model-fake-gateway-stop',
@@ -169,10 +259,11 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
       `completed ${String(stopMara.upstreamActionCallsCompleted)}`,
   );
 
-  // --- 2. No-op resume on the completed sequence (audit finding 4): seals
-  // verified, NOTHING launched, no byte of evidence changed. ----------------
+  // --- 2. No-op resume on the completed sequence (re-audit findings 1+5):
+  // seals, inventory, manifest, semantic revalidation, archive, and receipt
+  // all verified; NOTHING launched; no byte of state or evidence changed. --
   const processLogBefore = readFileSync(join(rehearsalRoot, 'process-log.jsonl'), 'utf8');
-  const stateBytesBefore = readFileSync(join(rehearsalRoot, 'sequence-state.json'), 'utf8');
+  const stateBytesBefore = readFileSync(stateFilePath(rehearsalRoot), 'utf8');
   const resumed = await orchestrateSequence({
     planPath: rehearsalPlan,
     resume: true,
@@ -192,10 +283,14 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
     'no-op resume spawned processes (process log changed)',
   );
   check(
-    readFileSync(join(rehearsalRoot, 'sequence-state.json'), 'utf8') === stateBytesBefore,
+    readFileSync(stateFilePath(rehearsalRoot), 'utf8') === stateBytesBefore,
     'no-op resume changed the sequence state bytes',
   );
-  notes.push('resume on completed sequence: NO-OP (seals verified; nothing launched or changed)');
+  verifyTreeAgainstInventory(rehearsalRoot, inventory, 'rehearsal-post-noop-resume');
+  notes.push(
+    'resume on completed sequence: NO-OP (seals + inventory + manifest + semantic ' +
+      'revalidation + archive + receipt verified; nothing launched or changed)',
+  );
 
   // --- 3. Resume under a modified plan is refused. --------------------------
   const mutatedPlanPath = join(reportDir, 'rehearsal-mutated-plan.json');
@@ -239,11 +334,73 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
     drillExecution.status === 'failed' && drillExecution.failureReason === 'run-timeout',
     `drill failure reason ${String(drillExecution?.failureReason)} (expected run-timeout)`,
   );
+  // Re-audit finding 3: the terminal disposition is RECORDED — run-timeout
+  // is not registered as retryable by this plan, so it is forbidden.
+  check(
+    drillExecution.replacementDisposition === 'forbidden',
+    `drill disposition ${String(drillExecution.replacementDisposition)} (expected forbidden)`,
+  );
+  // Re-audit finding 5: failed attempts are sealed terminal evidence.
+  check(
+    drillExecution.seal !== null && drillExecution.seal.sealedStatus === 'failed',
+    'drill execution is not sealed as failed',
+  );
   const drillDir = join(failureRoot, drillExecution.dir);
-  for (const artifact of ['failure.json', 'failure-screenshot.png', 'heartbeat.jsonl']) {
+  for (const artifact of [
+    'failure.json',
+    'failure-screenshot.png',
+    'heartbeat.jsonl',
+    'failure-manifest.json',
+    'failure-message.txt',
+  ]) {
     check(existsSync(join(drillDir, artifact)), `drill artifact missing: ${artifact}`);
   }
-  notes.push('failure drill: run-timeout attempt preserved with diagnostics and heartbeats');
+  const failureManifest = JSON.parse(
+    readFileSync(join(drillDir, 'failure-manifest.json'), 'utf8'),
+  ) as { failureClass: string; stage: string };
+  check(
+    failureManifest.failureClass === 'run-timeout' && failureManifest.stage === 'browser',
+    `drill failure manifest ${failureManifest.failureClass}@${failureManifest.stage}`,
+  );
+  notes.push(
+    'failure drill: run-timeout attempt preserved+sealed with typed failure manifest; disposition forbidden',
+  );
+
+  // --- 5. Resuming the failed drill is refused by the RECORDED disposition
+  // (re-audit finding 3, §7.3), even though replacement capacity math alone
+  // would not stop a fresh loop. ---------------------------------------------
+  await waitForAutomationPortsFree();
+  let dispositionRefused = false;
+  try {
+    await orchestrateSequence({
+      planPath: failureDrillPlan,
+      resume: true,
+      acknowledgeLiveCost: false,
+      allowSleepRisk: true,
+      headed: false,
+      repoRoot,
+    });
+  } catch (error: unknown) {
+    dispositionRefused =
+      error instanceof Error && error.message.startsWith('resume-blocked-forbidden-failure');
+  }
+  check(dispositionRefused, 'failed-drill resume was not refused by the recorded disposition');
+  notes.push('failed-drill resume refused (resume-blocked-forbidden-failure)');
+
+  // --- 6. Derived evaluation: the completed root stays byte-identical. ------
+  const evaluateExit = await runCli([
+    'evaluate',
+    '--sequence',
+    join('artifacts', 'm2-sequences', 'rehearsal'),
+  ]);
+  check(evaluateExit === 0, `m2:evaluate exit ${evaluateExit}`);
+  verifyTreeAgainstInventory(rehearsalRoot, inventory, 'rehearsal-post-derived-evaluate');
+  check(
+    readFileSync(stateFilePath(rehearsalRoot), 'utf8') === stateBytesBefore,
+    'derived evaluate changed the sequence state bytes',
+  );
+  check(existsSync(`${rehearsalRoot}.derived`), 'derived evaluation directory missing');
+  notes.push('m2:evaluate on completed sequence wrote ONLY to the derived directory');
 
   return { ok: true, notes };
 }

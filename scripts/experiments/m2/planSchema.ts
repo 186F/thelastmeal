@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { SCENARIO_IDS } from '../../../src/shared/ids';
 import { AUTOMATION_SPEEDS } from '../../../src/shared/automationContract';
 import { MODEL_CONDITION_SCENARIOS } from '../../../src/shared/modelExperiment';
+import { RETRYABLE_ELIGIBLE_FAILURE_CLASSES } from './failureTaxonomy';
+import { getAttemptProfile, type AttemptProfile } from './attemptProfile';
 
 /**
  * Orchestrator plan schema (M2 brief §19). A plan is the complete,
@@ -17,7 +19,7 @@ import { MODEL_CONDITION_SCENARIOS } from '../../../src/shared/modelExperiment';
  * condition enum THERE, never here retroactively.
  */
 
-export const PLAN_SCHEMA_VERSION = 'm2-orchestrator-plan-1.0.0';
+export const PLAN_SCHEMA_VERSION = 'm2-orchestrator-plan-1.1.0';
 
 /** Conditions the Phase 3 harness may drive (R1: existing paths only). */
 export const ORCHESTRATABLE_CONDITION_IDS = [
@@ -50,6 +52,17 @@ export const expectedTreatmentSchema = z
   })
   .strict();
 export type ExpectedTreatment = z.infer<typeof expectedTreatmentSchema>;
+
+/** Registered attempt-profile binding (re-audit finding 3): every plan
+ * names the versioned execution/threshold profile its attempts are judged
+ * under. The profile id and version join the sequence resume identity. */
+export const attemptProfileBindingSchema = z
+  .object({
+    profileId: nonEmpty,
+    profileVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  })
+  .strict();
+export type AttemptProfileBinding = z.infer<typeof attemptProfileBindingSchema>;
 
 /** Pre-registered study binding (audit finding 2): an evidentiary sequence
  * must name its validated Phase 2 study declaration and freeze artifacts. */
@@ -156,6 +169,9 @@ export const orchestratorPlanSchema = z
       .regex(/^[0-9a-f]{40}$/)
       .optional(),
     attempts: z.array(plannedAttemptSchema).min(1),
+    /** The registered attempt execution/threshold profile every attempt is
+     * judged under (re-audit finding 3). */
+    attemptProfile: attemptProfileBindingSchema,
     /** Required whenever any model-backed attempt exists: the reviewed
      * treatment identity verified against the gateway before Start. */
     expectedTreatment: expectedTreatmentSchema.optional(),
@@ -165,10 +181,11 @@ export const orchestratorPlanSchema = z
       .object({
         maxReplacementAttempts: z.number().int().nonnegative(),
         /** The ONLY failure classes eligible for automatic replacement
-         * (audit finding 8): integrity failures — replay-mismatch,
-         * freeze-violation, evidence contradictions, treatment violations —
-         * must halt the sequence, never spend another run. */
-        retryableFailureClasses: z.array(nonEmpty),
+         * (audit finding 8; re-audit finding 3): a CLOSED enum built from
+         * the taxonomy's retryable-eligible partition, so hard-stop classes
+         * (replay-mismatch, freeze-violation, treatment-mismatch, evidence
+         * contradictions, …) are structurally impossible to register. */
+        retryableFailureClasses: z.array(z.enum(RETRYABLE_ELIGIBLE_FAILURE_CLASSES)),
       })
       .strict(),
     /** Acknowledged live-call budget (§19.14). Zero for keyless plans. */
@@ -191,6 +208,11 @@ export const orchestratorPlanSchema = z
     /** Run the deterministic batch after the sequence (§19.4). CI rehearsal
      * plans may skip it because CI runs the batch as its own frozen gate. */
     postSequenceBatch: z.boolean(),
+    /** Evidence-size budget for the sequence root (re-audit §13.4): free
+     * disk is preflighted against it and the root is measured after every
+     * execution; exceeding it fails the sequence as
+     * `evidence-budget-exceeded`. Defaults to the orchestrator constant. */
+    evidenceSizeBudgetBytes: positiveInt.optional(),
   })
   .strict()
   .superRefine((plan, ctx) => {
@@ -313,11 +335,32 @@ export interface LoadedPlan {
   plan: OrchestratorPlan;
   /** sha256 of the exact plan-file BYTES (§19.11 resume identity). */
   planSha256: string;
+  /** The resolved registered attempt profile (re-audit finding 3). */
+  profile: AttemptProfile;
 }
 
 export function parsePlan(bytes: Buffer): LoadedPlan {
   const plan = orchestratorPlanSchema.parse(JSON.parse(bytes.toString('utf8')));
+  const profile = getAttemptProfile(
+    plan.attemptProfile.profileId,
+    plan.attemptProfile.profileVersion,
+  );
   const live = plan.attempts.some((attempt) => attempt.gatewayMode === 'live');
+  if (plan.replacementPolicy.maxReplacementAttempts > profile.maxReplacementAttempts) {
+    throw new Error(
+      `plan-replacements-exceed-profile-limit: plan permits ` +
+        `${plan.replacementPolicy.maxReplacementAttempts}, profile '${profile.profileId}' ` +
+        `caps replacements at ${profile.maxReplacementAttempts}`,
+    );
+  }
+  for (const registered of plan.replacementPolicy.retryableFailureClasses) {
+    if (!profile.retryableFailureClasses.includes(registered)) {
+      throw new Error(
+        `plan-retryable-class-outside-profile: '${registered}' is not retryable under ` +
+          `profile '${profile.profileId}'`,
+      );
+    }
+  }
   if (live) {
     const worstCase = worstCaseStudyCalls(plan);
     if (worstCase > plan.liveCallBudget) {
@@ -328,5 +371,16 @@ export function parsePlan(bytes: Buffer): LoadedPlan {
       );
     }
   }
-  return { plan, planSha256: createHash('sha256').update(bytes).digest('hex') };
+  // Re-audit finding 3 (§7.1): evidentiary or live operation requires a
+  // profile REVIEWED for formal use. Phase 3 registers none, so every
+  // evidentiary/live plan is hard-refused until Phase 4 registers the
+  // formal profile with its study.
+  if ((plan.evidentiary || live) && !profile.formalUse) {
+    throw new Error(
+      `formal-attempt-profile-required: '${profile.profileId}' is not reviewed for ` +
+        'evidentiary/live use, and no formal attempt profile is registered in Phase 3 — ' +
+        'Phase 4 registers it with the calibration study',
+    );
+  }
+  return { plan, planSha256: createHash('sha256').update(bytes).digest('hex'), profile };
 }

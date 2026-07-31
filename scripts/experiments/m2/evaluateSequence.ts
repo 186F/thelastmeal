@@ -15,6 +15,12 @@ import { readSequenceState, type SequenceState } from './sequenceState';
  * evidence. Every comparable pair (same scenario + seed, or the registered
  * B1/B2 ablation) among COMPLETED executions is compared with the Phase 2
  * similarity; non-comparable pairs are listed as skipped, not guessed at.
+ *
+ * Output location (re-audit finding 5, §9.4): during orchestration the
+ * evaluation is written into the sequence root BEFORE packaging, becoming
+ * part of the sealed evidence. A COMPLETED sequence root is immutable —
+ * regenerated evaluations go to a versioned derived-output directory via
+ * `outputPath`, never back into the root.
  */
 
 export interface SequenceEvaluation {
@@ -29,13 +35,17 @@ export interface SequenceEvaluation {
   skippedPairs: Array<{ left: string; right: string; reason: string }>;
 }
 
-export function evaluateSequence(sequenceRoot: string): SequenceEvaluation {
+export function evaluateSequence(sequenceRoot: string, outputPath?: string): SequenceEvaluation {
   const state = readSequenceState(sequenceRoot);
   if (!state) throw new Error(`sequence-state-missing: ${sequenceRoot}`);
-  return evaluateFromState(sequenceRoot, state);
+  return evaluateFromState(sequenceRoot, state, outputPath);
 }
 
-export function evaluateFromState(sequenceRoot: string, state: SequenceState): SequenceEvaluation {
+export function evaluateFromState(
+  sequenceRoot: string,
+  state: SequenceState,
+  outputPath: string = join(sequenceRoot, 'sequence-evaluation.json'),
+): SequenceEvaluation {
   const fingerprints: Array<{ executionId: string; set: BehaviorFingerprintSet }> = [];
   for (const execution of state.executions) {
     if (execution.status !== 'completed') continue;
@@ -85,10 +95,6 @@ export function evaluateFromState(sequenceRoot: string, state: SequenceState): S
     comparisons,
     skippedPairs,
   };
-  writeFileSync(
-    join(sequenceRoot, 'sequence-evaluation.json'),
-    canonicalSerialize(evaluation),
-    'utf8',
-  );
+  writeFileSync(outputPath, canonicalSerialize(evaluation), 'utf8');
   return evaluation;
 }

@@ -1,10 +1,16 @@
 import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
 import { hasFlag, readOption } from '../../cli/args';
 import { orchestrateSequence } from './orchestrate';
-import { evaluateSequence } from './evaluateSequence';
-import { packageSequence } from './packageEvidence';
-import { readSequenceState, verifySealedExecutions } from './sequenceState';
+import { evaluateFromState } from './evaluateSequence';
+import {
+  nextArchivePath,
+  packageSequence,
+  readInventory,
+  verifyTreeAgainstInventory,
+} from './packageEvidence';
+import { readSequenceState, verifySealedExecutions, writeSequenceState } from './sequenceState';
 
 /**
  * Orchestrator command surface (M2 brief §19.2).
@@ -18,8 +24,14 @@ import { readSequenceState, verifySealedExecutions } from './sequenceState';
  * `m2:orchestrate -- --resume` IS the resume command (§19.2 allows this in
  * place of a separate m2:resume, documented here and in the README):
  * identity-checked against the recorded sequence state, it marks
- * interrupted executions failed-preserved and continues from the first
- * incomplete attempt.
+ * interrupted executions failed-preserved-and-sealed and continues from
+ * the first incomplete attempt.
+ *
+ * A COMPLETED sequence root is immutable raw evidence (re-audit
+ * finding 1): `m2:evaluate` writes its regenerated evaluation into a
+ * versioned derived-output directory beside the root, and `m2:package`
+ * verifies the root against its recorded inventory and produces the NEXT
+ * versioned archive — it never rewrites evidence or an existing archive.
  */
 
 export async function runCli(argv: readonly string[]): Promise<number> {
@@ -57,11 +69,24 @@ export async function runCli(argv: readonly string[]): Promise<number> {
         console.error('usage: m2:evaluate -- --sequence <sequence-root>');
         return 1;
       }
-      const evaluation = evaluateSequence(resolve(repoRoot, sequenceRoot));
+      const root = resolve(repoRoot, sequenceRoot);
+      const state = readSequenceState(root);
+      if (!state) throw new Error(`sequence-state-missing: ${root}`);
+      let outputPath: string;
+      if (state.status === 'completed') {
+        // Completed roots are immutable: derived output goes beside them.
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const derivedDir = join(`${root}.derived`, `evaluation-${stamp}`);
+        mkdirSync(derivedDir, { recursive: true });
+        outputPath = join(derivedDir, 'sequence-evaluation.json');
+      } else {
+        outputPath = join(root, 'sequence-evaluation.json');
+      }
+      const evaluation = evaluateFromState(root, state, outputPath);
       console.log(
         `m2:evaluate — ${evaluation.sequenceId}: ${evaluation.completedExecutions.length} completed ` +
           `execution(s), ${evaluation.comparisons.length} comparison(s), ` +
-          `${evaluation.skippedPairs.length} skipped pair(s); wrote sequence-evaluation.json`,
+          `${evaluation.skippedPairs.length} skipped pair(s); wrote ${outputPath}`,
       );
       return 0;
     }
@@ -72,23 +97,44 @@ export async function runCli(argv: readonly string[]): Promise<number> {
         return 1;
       }
       const root = resolve(repoRoot, sequenceRoot);
-      // Standalone packaging requires a COMPLETED, seal-valid sequence
-      // (audit finding 7.6): arbitrary directories are refused.
+      // Standalone packaging requires a COMPLETED, seal-valid,
+      // inventory-intact sequence (audit finding 7.6; re-audit finding 1):
+      // arbitrary or mutated directories are refused.
       const state = readSequenceState(root);
       if (!state) throw new Error(`package-requires-sequence-state: ${root}`);
       if (state.status !== 'completed') {
         throw new Error(`package-requires-completed-sequence: status is '${state.status}'`);
       }
       verifySealedExecutions(root, state);
-      const zipPath = readOption(rest, 'zip') ?? resolve(root, '..', 'sequence-evidence.zip');
-      const result = await packageSequence(root, resolve(repoRoot, zipPath), {
+      const inventory = readInventory(root);
+      if (!inventory) throw new Error(`package-requires-inventory: ${root}`);
+      if (state.inventoryAggregateSha256 !== inventory.aggregateSha256) {
+        throw new Error('package-inventory-disagrees-with-state');
+      }
+      verifyTreeAgainstInventory(root, inventory, 'm2:package');
+      const zipOption = readOption(rest, 'zip');
+      const zipPath = zipOption
+        ? resolve(repoRoot, zipOption)
+        : nextArchivePath(dirname(root), state.sequenceId);
+      if (existsSync(zipPath)) {
+        throw new Error(`archive-destination-exists: ${zipPath}`);
+      }
+      const result = await packageSequence(root, zipPath, {
         sequenceId: state.sequenceId,
         planSha256: state.planSha256,
         repositorySha: state.repositorySha,
+        studyPlanSha256: state.studyPlanSha256 === 'none' ? null : state.studyPlanSha256,
       });
+      // The operational state points at the NEWEST archive (re-audit §5.5);
+      // prior versioned archives remain untouched beside it.
+      state.archivePath = result.zipPath;
+      state.archiveSha256 = result.zipSha256;
+      state.lastTransition = 'repackaged';
+      state.updatedAtUtc = new Date().toISOString();
+      writeSequenceState(root, state);
       console.log(
-        `m2:package — ${result.fileCount} file(s) inventoried; zip ${result.zipPath} ` +
-          `(sha256 ${result.zipSha256}); receipt ${result.receiptPath}; secret scan clean`,
+        `m2:package — ${result.fileCount} file(s) verified against the recorded inventory; ` +
+          `zip ${result.zipPath} (sha256 ${result.zipSha256}); receipt ${result.receiptPath}; secret scan clean`,
       );
       return 0;
     }
