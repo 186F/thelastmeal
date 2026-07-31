@@ -8,6 +8,11 @@ import {
   MODEL_EXPERIMENT_ID,
   MODEL_EXPERIMENT_VERSION,
 } from '../../shared/modelExperiment';
+import {
+  M2_EXPERIMENT_ID,
+  M2_EXPERIMENT_VERSION,
+  M2_PER_DECISION_CONDITION_ID,
+} from '../../shared/m2Experiment';
 import { SCENARIO_END_TICK } from '../config';
 import { offeredAffordanceSchema } from '../events/eventSchemas';
 import { EXTERNAL_CONTEXT_LIMITS } from './externalContext';
@@ -248,13 +253,20 @@ export const externalDecisionRequestSchema = z
 
 /** Transport + experiment envelope the browser sends to the gateway. `runId`
  * is noncanonical experiment metadata minted with cryptographic randomness
- * OUTSIDE the simulation; it never touches canonical state or hashes. */
+ * OUTSIDE the simulation; it never touches canonical state or hashes.
+ *
+ * The experiment identity is an EXACT PAIRING with the condition (Phase 4):
+ * Milestone 1 conditions carry the frozen M1 identity, and the M2
+ * per-decision condition carries `sparse-cognition-policy-001` v1.0.0 —
+ * every other combination is refused. The schema version stays 1 because
+ * every previously valid envelope remains byte-identically valid; the
+ * pairing registry grew, the wire shape did not. */
 export const externalDecisionRequestEnvelopeSchema = z
   .object({
     schemaVersion: z.literal(EXTERNAL_REQUEST_SCHEMA_VERSION),
-    experimentId: z.literal(MODEL_EXPERIMENT_ID),
-    experimentVersion: z.literal(MODEL_EXPERIMENT_VERSION),
-    conditionId: z.enum([BASELINE_CONDITION_ID, MODEL_CONDITION_ID]),
+    experimentId: z.enum([MODEL_EXPERIMENT_ID, M2_EXPERIMENT_ID]),
+    experimentVersion: z.enum([MODEL_EXPERIMENT_VERSION, M2_EXPERIMENT_VERSION]),
+    conditionId: z.enum([BASELINE_CONDITION_ID, MODEL_CONDITION_ID, M2_PER_DECISION_CONDITION_ID]),
     runId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
     providerId: shortCode,
     promptVersion: z.string().min(1).max(100),
@@ -270,6 +282,25 @@ export const externalDecisionRequestEnvelopeSchema = z
         code: z.ZodIssueCode.custom,
         message: 'envelope providerId must equal request.providerId',
         path: ['providerId'],
+      });
+    }
+    const m2 = value.conditionId === M2_PER_DECISION_CONDITION_ID;
+    const expectedExperimentId = m2 ? M2_EXPERIMENT_ID : MODEL_EXPERIMENT_ID;
+    const expectedExperimentVersion = m2 ? M2_EXPERIMENT_VERSION : MODEL_EXPERIMENT_VERSION;
+    if (value.experimentId !== expectedExperimentId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `experimentId must be ${expectedExperimentId} for condition ${value.conditionId}`,
+        path: ['experimentId'],
+      });
+    }
+    if (value.experimentVersion !== expectedExperimentVersion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          `experimentVersion must be ${expectedExperimentVersion} ` +
+          `for condition ${value.conditionId}`,
+        path: ['experimentVersion'],
       });
     }
     // contextHash is shape-checked only here; the gateway RECOMPUTES it from

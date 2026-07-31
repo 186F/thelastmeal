@@ -292,3 +292,81 @@ describe('attempt profile and closed failure taxonomy gates (re-audit finding 3)
     );
   });
 });
+
+describe('Phase 4 M2 condition plan rules', () => {
+  function m2Plan(): OrchestratorPlan {
+    return orchestratorPlanSchema.parse(
+      JSON.parse(
+        readFileSync(join('experiments', 'm2', 'plans', 'm2-condition-rehearsal.json'), 'utf8'),
+      ),
+    );
+  }
+
+  it('accepts the committed M2-condition rehearsal plan', () => {
+    expect(() =>
+      parsePlan(readFileSync(join('experiments', 'm2', 'plans', 'm2-condition-rehearsal.json'))),
+    ).not.toThrow();
+  });
+
+  it('M2 attempts require a gateway and refuse Scenario F statically', () => {
+    const plan = m2Plan();
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        attempts: [{ ...plan.attempts[0]!, gatewayMode: 'off' }],
+      }),
+    ).toThrow(/model-attempt-requires-a-gateway/);
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        attempts: [{ ...plan.attempts[0]!, scenarioId: 'F' }],
+      }),
+    ).toThrow(/scenario-not-in-m2-condition:F/);
+  });
+
+  it('one sequence, one treatment: mixing model-backed conditions is refused', () => {
+    const plan = m2Plan();
+    const m1Plan = basePlan();
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        attempts: [plan.attempts[0]!, { ...m1Plan.attempts[1]!, attemptId: 'smuggled-m1' }],
+      }),
+    ).toThrow(/plan-mixes-model-conditions/);
+  });
+
+  it('an expected treatment contradicting the condition contract is refused statically', () => {
+    const plan = m2Plan();
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        expectedTreatment: {
+          ...plan.expectedTreatment!,
+          promptVersion: 'mara-action-selection-1.0.0',
+        },
+      }),
+    ).toThrow(/expected-treatment-contradicts-condition-contract:promptVersion/);
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        expectedTreatment: {
+          ...plan.expectedTreatment!,
+          experimentId: 'model-backed-npc-001',
+          experimentVersion: '1.2.0',
+        },
+      }),
+    ).toThrow(/expected-treatment-contradicts-condition-contract:experimentId,experimentVersion/);
+  });
+
+  it('trace-chunk rotation is bounded below and shapes the config fingerprint', () => {
+    const plan = m2Plan();
+    expect(() =>
+      orchestratorPlanSchema.parse({ ...plan, tracing: { chunkIntervalMs: 30_000 } }),
+    ).toThrow();
+    const rechunked = orchestratorPlanSchema.parse({
+      ...plan,
+      tracing: { chunkIntervalMs: 120_000 },
+    });
+    expect(planConfigFingerprint(plan)).not.toBe(planConfigFingerprint(rechunked));
+  });
+});

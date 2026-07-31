@@ -13,9 +13,10 @@ import {
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
-// Phase 3 drives the existing Milestone 1 experiment paths; the sequence
-// identity records THAT experiment. The M2 experiment identity joins in
-// Phase 4 when its condition becomes orchestratable.
+// The sequence identity records the experiment of the plan's model-backed
+// condition (Phase 4): Milestone 1 plans record model-backed-npc-001, M2
+// per-decision plans record sparse-cognition-policy-001. Deterministic-only
+// plans keep recording the M1 experiment, preserving Phase 3 behavior.
 import {
   EXTERNAL_MARA_PROVIDER_ID,
   MODEL_EXPERIMENT_ID,
@@ -23,6 +24,10 @@ import {
   MODEL_PROMPT_VERSION,
   MODEL_UPSTREAM_PLATFORM,
 } from '../../../src/shared/modelExperiment';
+import {
+  isModelBackedConditionId,
+  requireContractForCondition,
+} from '../../../src/shared/conditionContract';
 import {
   BEHAVIOR_FINGERPRINT_VERSION,
   BEHAVIOR_SIMILARITY_VERSION,
@@ -61,7 +66,7 @@ import {
   AUTOMATION_VITE_PORT,
   startVite,
 } from './viteDriver';
-import { runBrowserAttempt } from './browserDriver';
+import { DEFAULT_TRACE_CHUNK_INTERVAL_MS, runBrowserAttempt } from './browserDriver';
 import {
   AttemptFailure,
   FAILURE_TAXONOMY_VERSION,
@@ -73,6 +78,7 @@ import {
   finalizeDeterministicAttempt,
   finalizeModelAttempt,
   guardStage,
+  readBudgetExhaustedCalls,
   verifyFinalManifestTreatment,
 } from './runFinalizer';
 import { evaluateFromState, type SequenceEvaluation } from './evaluateSequence';
@@ -229,6 +235,7 @@ export function planConfigFingerprint(plan: OrchestratorPlan): string {
       timeouts: plan.timeouts,
       postSequenceBatch: plan.postSequenceBatch,
       evidenceSizeBudgetBytes: plan.evidenceSizeBudgetBytes ?? null,
+      tracing: plan.tracing ?? null,
     }),
   );
 }
@@ -488,6 +495,51 @@ export function checkFreeze(repoRoot: string, sequenceRoot: string, freeze: Free
 
 /** Pre-Start treatment verification (audit finding 2): the gateway's public
  * nonsecret configuration must match the reviewed plan exactly. */
+/**
+ * The registered contract of the plan's single model-backed condition, or
+ * null for deterministic-only plans. parsePlan already refuses plans mixing
+ * model conditions, so the first model attempt determines the treatment.
+ */
+export function planModelContract(plan: OrchestratorPlan) {
+  const modelAttempt = plan.attempts.find((attempt) =>
+    isModelBackedConditionId(attempt.conditionId),
+  );
+  return modelAttempt === undefined ? null : requireContractForCondition(modelAttempt.conditionId);
+}
+
+/**
+ * The experiment identity a sequence binds into its resume identity and
+ * study reconciliation (Phase 4): the identity of the plan's model-backed
+ * condition. Deterministic-only plans keep recording the Milestone 1
+ * experiment — the frozen baseline is a regression fixture of that family,
+ * and this preserves Phase 3 sequence identities byte-for-byte.
+ */
+export function planExperimentIdentity(plan: OrchestratorPlan): {
+  experimentId: string;
+  experimentVersion: string;
+  promptVersion: string;
+  externalProviderId: string;
+  upstreamPlatform: string;
+} {
+  const contract = planModelContract(plan);
+  if (contract === null) {
+    return {
+      experimentId: MODEL_EXPERIMENT_ID,
+      experimentVersion: MODEL_EXPERIMENT_VERSION,
+      promptVersion: MODEL_PROMPT_VERSION,
+      externalProviderId: EXTERNAL_MARA_PROVIDER_ID,
+      upstreamPlatform: MODEL_UPSTREAM_PLATFORM,
+    };
+  }
+  return {
+    experimentId: contract.experimentId,
+    experimentVersion: contract.experimentVersion,
+    promptVersion: contract.promptVersion,
+    externalProviderId: contract.providerId,
+    upstreamPlatform: contract.upstreamPlatform,
+  };
+}
+
 async function verifyGatewayTreatment(plan: OrchestratorPlan): Promise<Record<string, string>> {
   const expected = plan.expectedTreatment;
   if (!expected) {
@@ -513,6 +565,10 @@ async function verifyGatewayTreatment(plan: OrchestratorPlan): Promise<Record<st
       'treatment-verification',
     );
   }
+  // The provider id is not a plan field: it comes from the model-backed
+  // condition's registered contract (Phase 4) — M1 plans verify the M1
+  // provider, M2 plans the M2 provider.
+  const expectedProviderId = planModelContract(plan)?.providerId ?? EXTERNAL_MARA_PROVIDER_ID;
   const checks: Array<[string, unknown, unknown]> = [
     ['modelId', config.modelId, expected.modelId],
     ['servingProviderId', config.servingProviderId, expected.servingProviderId],
@@ -520,7 +576,7 @@ async function verifyGatewayTreatment(plan: OrchestratorPlan): Promise<Record<st
     ['conditionId', config.conditionId, expected.conditionId],
     ['experimentId', config.experimentId, expected.experimentId],
     ['experimentVersion', config.experimentVersion, expected.experimentVersion],
-    ['providerId', config.providerId, EXTERNAL_MARA_PROVIDER_ID],
+    ['providerId', config.providerId, expectedProviderId],
   ];
   for (const [field, actual, wanted] of checks) {
     if (actual !== wanted) {
@@ -611,6 +667,7 @@ async function executeAttempt(
   sequenceRoot: string,
   repoRoot: string,
   execution: AttemptExecution,
+  evidenceForecast: { budgetBytes: number; rootBytesAtStart: number },
 ): Promise<AttemptOutcome> {
   const attemptDir = join(sequenceRoot, execution.dir);
   let gateway: ManagedProcess | null = null;
@@ -633,6 +690,9 @@ async function executeAttempt(
           mode: attempt.gatewayMode,
           port: AUTOMATION_GATEWAY_PORT,
           allowedBrowserOrigin: AUTOMATION_ORIGIN,
+          // The fresh gateway child serves exactly the attempt's condition
+          // pairing (Phase 4) — nonsecret identity, never a credential.
+          servedConditionId: attempt.conditionId,
           traceDir,
           maxCallsPerRun: attempt.maxCallsPerRun,
           maxTotalCalls: attempt.maxTotalCalls,
@@ -668,6 +728,8 @@ async function executeAttempt(
       attempt,
       attemptDir,
       timeouts: { ...plan.timeouts, runTimeoutMs },
+      tracing: plan.tracing,
+      evidenceForecast,
       onGatewayStopTick:
         attempt.gatewayStopAtTick !== undefined && gateway !== null
           ? () =>
@@ -770,6 +832,26 @@ async function executeAttempt(
           `artifact-valid but below registered thresholds (${failing})`,
           'treatment-thresholds',
         );
+      }
+      // §23.1 per-run integrity gate (registered on the FORMAL profile):
+      // a primary run with any budget-exhausted upstream call is preserved
+      // as invalid-treatment, never completed primary evidence. The planned
+      // gateway-stop run is exempt (§23.8) — its post-stop failures are the
+      // drill's intended shape, not treatment evidence.
+      if (
+        profile.artifactGates.includes('no-budget-exhausted-failure') &&
+        attempt.gatewayStopAtTick === undefined
+      ) {
+        const budgetExhausted = readBudgetExhaustedCalls(evidence.runDir);
+        if (budgetExhausted > 0) {
+          execution.studyStatus = 'invalid-treatment';
+          throw new AttemptFailure(
+            'invalid-treatment',
+            `artifact-valid but ${budgetExhausted} upstream call(s) failed budget-exhausted ` +
+              '(§23.1 no-budget-exhausted-failure gate)',
+            'treatment-thresholds',
+          );
+        }
       }
       execution.studyStatus = 'study-valid';
     }
@@ -1201,13 +1283,14 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     }
     // Semantic reconciliation (re-audit finding 2): an authentic study is
     // not enough — the plan must IMPLEMENT it.
+    const reconcileIdentity = planExperimentIdentity(plan);
     reconcileStudyWithPlan(validated.study, plan, profile, {
       repoRoot: options.repoRoot,
       headSha: repositorySha,
       packageVersion: installedPackageVersion,
-      experimentId: MODEL_EXPERIMENT_ID,
-      experimentVersion: MODEL_EXPERIMENT_VERSION,
-      promptVersion: MODEL_PROMPT_VERSION,
+      experimentId: reconcileIdentity.experimentId,
+      experimentVersion: reconcileIdentity.experimentVersion,
+      promptVersion: reconcileIdentity.promptVersion,
       installedMetricVersions: {
         'behavior-fingerprint': BEHAVIOR_FINGERPRINT_VERSION,
         'behavior-similarity': BEHAVIOR_SIMILARITY_VERSION,
@@ -1223,15 +1306,16 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
   if (plan.evidentiary && worktreeDirty(options.repoRoot)) {
     throw new Error('dirty-worktree: an evidentiary sequence requires a clean tracked worktree');
   }
+  const experimentIdentity = planExperimentIdentity(plan);
   const identity = {
     planSha256: loaded.planSha256,
     repositorySha,
     packageVersion: installedPackageVersion,
-    experimentId: MODEL_EXPERIMENT_ID,
-    experimentVersion: MODEL_EXPERIMENT_VERSION,
-    promptVersion: MODEL_PROMPT_VERSION,
-    externalProviderId: EXTERNAL_MARA_PROVIDER_ID,
-    upstreamPlatform: MODEL_UPSTREAM_PLATFORM,
+    experimentId: experimentIdentity.experimentId,
+    experimentVersion: experimentIdentity.experimentVersion,
+    promptVersion: experimentIdentity.promptVersion,
+    externalProviderId: experimentIdentity.externalProviderId,
+    upstreamPlatform: experimentIdentity.upstreamPlatform,
     expectedModelId: plan.expectedTreatment?.modelId ?? 'none',
     expectedServingProviderId: plan.expectedTreatment?.servingProviderId ?? 'none',
     studyId: plan.study?.studyId ?? 'none',
@@ -1486,6 +1570,10 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
           tracingScreenshots: true,
           tracingSnapshots: true,
           tracingSources: false,
+          // Phase 4 bounded tracing (§8.2): rotation cadence and the
+          // explicit retention policy are execution provenance.
+          tracingChunkIntervalMs: plan.tracing?.chunkIntervalMs ?? DEFAULT_TRACE_CHUNK_INTERVAL_MS,
+          traceRetention: 'retain-all-chunks',
         },
       };
 
@@ -1508,11 +1596,34 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
           }
           // Evidence budget also gates BEFORE spending an execution
           // (re-audit §13.4).
-          if (directorySizeBytes(sequenceRoot) > evidenceBudgetBytes) {
+          const rootBytesBeforeExecution = directorySizeBytes(sequenceRoot);
+          if (rootBytesBeforeExecution > evidenceBudgetBytes) {
             sequenceFailed = true;
             state.sequenceFailureReason = `evidence-budget-exceeded: root over ${evidenceBudgetBytes} bytes`;
             persist('sequence-failed:evidence-budget');
             break;
+          }
+          // Sequence-level evidence forecast (Phase 4, §8.2): with at least
+          // one completed execution measured, project the remaining
+          // executions at the observed average and refuse to START an
+          // execution the budget cannot absorb.
+          {
+            const executionsDone = state.executions.filter(
+              (execution) => execution.endedAtUtc !== null,
+            ).length;
+            if (executionsDone > 0) {
+              const avgBytesPerExecution = Math.ceil(rootBytesBeforeExecution / executionsDone);
+              const projected = rootBytesBeforeExecution + avgBytesPerExecution;
+              if (projected > evidenceBudgetBytes) {
+                sequenceFailed = true;
+                state.sequenceFailureReason =
+                  `evidence-budget-exceeded: forecast ${projected} bytes ` +
+                  `(${rootBytesBeforeExecution} + avg ${avgBytesPerExecution}/execution) ` +
+                  `> ${evidenceBudgetBytes}`;
+                persist('sequence-failed:evidence-forecast');
+                break;
+              }
+            }
           }
           // Freeze recheck before every execution (finding 3).
           const executionId = nextExecutionId(state, attempt.attemptId);
@@ -1549,6 +1660,7 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
             sequenceRoot,
             options.repoRoot,
             execution,
+            { budgetBytes: evidenceBudgetBytes, rootBytesAtStart: rootBytesBeforeExecution },
           );
 
           // Freeze recheck AFTER the execution (finding 3): drift during an

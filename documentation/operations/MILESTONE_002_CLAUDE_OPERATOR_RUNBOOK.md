@@ -3,6 +3,27 @@
 **Audience:** a Claude Code session (optionally with Chrome/MCP tools) supervising an unattended Milestone 2 sequence.
 **Design principle (brief §20.1):** the repository-native orchestrator is the authoritative experiment runner. Claude supervises, monitors, and diagnoses — it never becomes the runner.
 
+## 0. Registering an evidentiary plan (Phase 4 ritual)
+
+Evidentiary/live sequences run ONLY from REGISTERED plan and study
+instances, never from the tracked templates (whose sentinel pins can never
+match a real HEAD). On the exact merged SHA the run is authorized for,
+with a clean worktree:
+
+```
+npm run m2:register -- --study-template experiments/m2/templates/<study>.study.template.json \
+                       --plan-template experiments/m2/templates/<plan>.plan.template.json \
+                       --out <directory OUTSIDE the repository>
+```
+
+This stamps HEAD into both files, validates the registered study (writing
+its freeze record beside it), stamps the study's real byte-sha256 and
+config fingerprint into the registered plan, parses the plan under the
+full orchestrator schema, and prints every hash. It is create-once per
+output directory and starts nothing. Launch with `--plan <registered plan
+path>`. Stage A order is fixed: the Stage A sequence must PASS before the
+calibration study is registered for execution (§19.16).
+
 ## 1. Before launch
 
 1. Verify the tracked worktree is clean and on the frozen SHA the plan pins:
@@ -21,7 +42,8 @@ The command runs the complete sequence unattended: preflight (ports, free disk v
 ## 3. Monitor
 
 - `<root>.control/sequence-state.json` (the CONTROL root beside the evidence root): `lastTransition`, per-execution `status`/`failureReason`/`failureStage`, `artifactStatus`/`studyStatus`, `replacementDisposition`, freeze checkpoints. The evidence root itself holds `sequence-manifest.json`, the immutable final evidence facts.
-- `attempt-*/heartbeat.jsonl`: machine-readable heartbeats (tick, run status, gateway state, call counters) at the plan's cadence.
+- `attempt-*/heartbeat.jsonl`: machine-readable heartbeats (tick, run status, gateway state, call counters, trace-chunk rotation counters) at the plan's cadence.
+- `attempt-*/trace-manifest.json` (Phase 4): every retained Playwright trace chunk with its size, the rotation cadence, and the `retain-all-chunks` policy. Rotated chunks live in `attempt-*/trace-chunks/`; the final chunk is `attempt-trace.zip` (or `failure-trace.zip`). A projected evidence-budget overrun fails the attempt EARLY as `evidence-budget-exceeded: forecast …` — treat it as a real budget failure, never delete chunks to make room.
 - `attempt-*/gateway.log` and `vite.log`: child-process health; the report records PIDs, exit codes, and process-provenance health.
 - Use Chrome tools ONLY to inspect semantic UI state or capture screenshots when the orchestrator itself reports a browser failure. Do not click controls in the automation browser.
 

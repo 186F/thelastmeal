@@ -147,16 +147,44 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       );
       return 0;
     }
+    case 'register': {
+      const studyTemplate = readOption(rest, 'study-template');
+      const planTemplate = readOption(rest, 'plan-template');
+      const outDir = readOption(rest, 'out');
+      if (!studyTemplate || !planTemplate || !outDir) {
+        console.error(
+          'usage: m2:register -- --study-template <path> --plan-template <path> --out <dir-outside-repo>',
+        );
+        return 1;
+      }
+      const { registerTemplates } = await import('./register');
+      const result = registerTemplates(
+        repoRoot,
+        resolve(repoRoot, studyTemplate),
+        resolve(repoRoot, planTemplate),
+        outDir,
+      );
+      console.log(
+        `m2:register — registered at HEAD ${result.headSha}\n` +
+          `  study: ${result.registeredStudyPath}\n` +
+          `    sha256 ${result.studySha256}\n` +
+          `    configFingerprint ${result.studyConfigFingerprint}\n` +
+          `  plan:  ${result.registeredPlanPath}\n` +
+          `    sha256 ${result.planSha256}\n` +
+          `Launch with m2:orchestrate -- --plan <registered plan path>. No run was started.`,
+      );
+      return 0;
+    }
     case 'pilot': {
       console.error(
-        'm2:pilot is not runnable in Phase 3: the pilot (brief §31 Phase 7, after the Phase 6 adversarial audit) requires the M2 ' +
-          'per-decision condition (Phase 4) and the policy system (Phase 5). This command exists ' +
+        'm2:pilot is not runnable in Phase 4: the pilot (brief §31 Phase 7, after the Phase 6 adversarial audit) requires ' +
+          'the policy system (Phase 5). This command exists ' +
           'so the §19.2 surface is stable; it will gain a plan when Phase 7 is authorized.',
       );
       return 1;
     }
     default:
-      console.error('usage: m2 <orchestrate|evaluate|package|pilot> …');
+      console.error('usage: m2 <orchestrate|evaluate|package|register|pilot> …');
       return 1;
   }
 }

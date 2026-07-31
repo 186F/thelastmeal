@@ -6,7 +6,7 @@ import { prepareRunDirectory } from '../../model/prepareRun';
 import { finalizeRunDirectory, type FinalizeResult } from '../../model/finalize';
 import { enrichFingerprintSet, loadEvaluationEvidence } from '../../evaluation/evidence';
 import { canonicalSerialize } from '../../../src/sim/replay/serialize';
-import { EXTERNAL_MARA_PROVIDER_ID } from '../../../src/shared/modelExperiment';
+import { requireContractForCondition } from '../../../src/shared/conditionContract';
 import type { BehaviorFingerprintSet } from '../../../src/shared/behaviorArtifacts';
 import type { ExpectedTreatment } from './planSchema';
 import { AttemptFailure } from './failureTaxonomy';
@@ -188,6 +188,17 @@ export function finalizeModelAttempt(
   });
 }
 
+/** Budget-exhausted upstream calls recorded in the finalized manifest
+ * (§23.1 per-run integrity gate; Phase 4 adversarial-review fix): the
+ * strict finalizer already aggregates gateway failure categories, so the
+ * gate needs no new plumbing — just an honest read. */
+export function readBudgetExhaustedCalls(runDir: string): number {
+  const manifest = JSON.parse(readFileSync(join(runDir, 'run-manifest.final.json'), 'utf8')) as {
+    callsFailedByCategory?: Record<string, number>;
+  };
+  return manifest.callsFailedByCategory?.['budget-exhausted'] ?? 0;
+}
+
 /** Post-finalization manifest cross-check (audit finding 2). The frozen
  * finalizer seeds `requestedModelId` from configuration per adapter kind:
  * the model SLUG for openrouter, the adapter id (`fake-decision-adapter-v1`)
@@ -207,11 +218,21 @@ export function verifyFinalManifestTreatment(
     ) as Record<string, unknown>;
     const expectedManifestModel =
       gatewayMode === 'fake' ? 'fake-decision-adapter-v1' : expected.modelId;
+    // The expected provider derives from the reviewed treatment's condition
+    // via the registered contract (Phase 4 adversarial-review fix): the plan
+    // schema already pins expected.conditionId/experimentId/experimentVersion/
+    // promptVersion to the plan's registered contract, so this stays a check
+    // against a REVIEWED identity, never a self-declared one — and it is
+    // strictly stronger than the old M1-only constant, which failed every
+    // M2 attempt at the final stage.
+    const contract = requireContractForCondition(expected.conditionId);
     const checks: Array<[string, unknown, unknown]> = [
       ['requestedModelId', manifest.requestedModelId, expectedManifestModel],
-      ['conditionId', manifest.conditionId, expected.conditionId],
-      ['promptVersion', manifest.promptVersion, expected.promptVersion],
-      ['externalProviderId', manifest.externalProviderId, EXTERNAL_MARA_PROVIDER_ID],
+      ['conditionId', manifest.conditionId, contract.conditionId],
+      ['promptVersion', manifest.promptVersion, contract.promptVersion],
+      ['externalProviderId', manifest.externalProviderId, contract.providerId],
+      ['experimentId', manifest.experimentId, contract.experimentId],
+      ['experimentVersion', manifest.experimentVersion, contract.experimentVersion],
     ];
     for (const [field, actual, wanted] of checks) {
       if (actual !== wanted) {

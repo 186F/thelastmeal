@@ -1,0 +1,65 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-condition-rehearsal",
+  "description": "Keyless rehearsal of the Phase 4 M2 per-decision condition through the complete unattended pipeline: one accelerated fake-gateway attempt plus one planned mid-run gateway-stop drill, both under the M2 experiment identity, with a one-minute trace-chunk rotation so chunked tracing is exercised in CI.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/m2-condition-rehearsal",
+  "attempts": [
+    {
+      "attemptId": "m2-model-fake",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 20,
+      "gatewayMode": "fake",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120
+    },
+    {
+      "attemptId": "m2-model-fake-gateway-stop",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 20,
+      "gatewayMode": "fake",
+      "gatewayStopAtTick": 900,
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-rehearsal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "expectedTreatment": {
+    "modelId": "fake-adapter",
+    "servingProviderId": "local",
+    "allowFallbacks": false,
+    "requireParameters": true,
+    "promptVersion": "mara-action-selection-m2-1.0.0",
+    "conditionId": "mara-model-per-decision-m2-v1",
+    "experimentId": "sparse-cognition-policy-001",
+    "experimentVersion": "1.0.0"
+  },
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "retryableFailureClasses": [
+      "run-timeout",
+      "simulation-stall",
+      "browser-error",
+      "gateway-not-connected",
+      "gateway-launch-failed",
+      "interrupted"
+    ]
+  },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 600000,
+    "gatewayStopRunTimeoutMs": 600000,
+    "stallTimeoutMs": 60000,
+    "stallGraceMs": 10000,
+    "heartbeatIntervalMs": 10000
+  },
+  "postSequenceBatch": false,
+  "tracing": {
+    "chunkIntervalMs": 60000
+  }
+}

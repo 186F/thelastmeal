@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { loadGatewayConfig, publicConfig } from '../../gateway/config';
 import {
   EXTERNAL_MARA_PROVIDER_ID,
-  MODEL_EXPERIMENT_VERSION,
+  MODEL_CONDITION_ID,
+  MODEL_PROMPT_VERSION,
 } from '../../src/shared/modelExperiment';
 
 describe('OpenRouter gateway configuration', () => {
@@ -20,14 +21,13 @@ describe('OpenRouter gateway configuration', () => {
     expect(config.openRouterApiKey).toBe('test-key');
     expect(config.openRouterModel).toBe('anthropic/claude-sonnet-test');
     expect(config.openRouterProvider).toBe('anthropic');
-    const view = publicConfig(
-      config,
-      EXTERNAL_MARA_PROVIDER_ID,
-      'prompt-v1',
-      1,
-      MODEL_EXPERIMENT_VERSION,
-    );
+    const view = publicConfig(config, 1);
     expect(view.modelId).toBe('anthropic/claude-sonnet-test');
+    // The advertised identity comes from the served condition's registered
+    // contract — defaulting to the frozen Milestone 1 pairing (Phase 4).
+    expect(view.conditionId).toBe(MODEL_CONDITION_ID);
+    expect(view.providerId).toBe(EXTERNAL_MARA_PROVIDER_ID);
+    expect(view.promptVersion).toBe(MODEL_PROMPT_VERSION);
     expect(JSON.stringify(view)).not.toContain('test-key');
   });
 

@@ -52,6 +52,19 @@ export async function startVite(
   const deadline = Date.now() + (launch.readyTimeoutMs ?? 60_000);
   let lastError = 'no-response';
   while (Date.now() < deadline) {
+    // The readiness probe is an HTTP GET that ANY server on the port could
+    // answer — including a stale IPv6-bound instance the IPv4 preflight
+    // cannot see (observed during Phase 4 rehearsals: our child died with
+    // EADDRINUSE while an imposter served the page, then vanished
+    // mid-attempt). A dead child makes the answering server definitionally
+    // not ours: refuse instead of proceeding against an imposter.
+    if (managedProcess.hasExited()) {
+      throw new Error(
+        `vite-start-failed: the vite child exited (${String(
+          managedProcess.terminalOutcome(),
+        )}) before readiness — any server answering on port ${port} is not ours`,
+      );
+    }
     try {
       const response = await fetch(origin, { method: 'GET' });
       if (response.ok) return { managedProcess, origin };

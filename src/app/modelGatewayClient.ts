@@ -12,14 +12,11 @@ import {
   gatewayDecisionResultSchema,
   validateGatewayResultForRequest,
 } from '../sim/decisions/externalSchemas';
+import { MODEL_CONDITION_ID } from '../shared/modelExperiment';
 import {
-  EXTERNAL_MARA_PROVIDER_ID,
-  MODEL_CONDITION_ID,
-  MODEL_EXPERIMENT_ID,
-  MODEL_EXPERIMENT_VERSION,
-  MODEL_PROMPT_VERSION,
-  MODEL_TARGET_NPC_ID,
-} from '../shared/modelExperiment';
+  requireContractForCondition,
+  type ModelConditionContract,
+} from '../shared/conditionContract';
 import { ModelClientTraceRecorder, type ModelClientTraceEntry } from './modelClientTraceRecorder';
 
 /**
@@ -84,19 +81,29 @@ type ExternalDecisionRequestEnvelope = z.infer<typeof externalDecisionRequestEnv
 
 export type GatewayConnectResult = 'ok' | 'unreachable' | 'contract-mismatch';
 
-/** Pinned contract fields, checked in order; the FIRST mismatch is recorded
- * for display. `modelId` is deliberately unchecked (operator-chosen). */
-const CONTRACT_PINS: readonly [keyof ProviderConfig, string | number][] = [
-  ['experimentId', MODEL_EXPERIMENT_ID],
-  ['experimentVersion', MODEL_EXPERIMENT_VERSION],
-  ['conditionId', MODEL_CONDITION_ID],
-  ['providerId', EXTERNAL_MARA_PROVIDER_ID],
-  ['promptVersion', MODEL_PROMPT_VERSION],
-  ['requestSchemaVersion', EXTERNAL_REQUEST_SCHEMA_VERSION],
-];
+/** Pinned contract fields for the ACTIVE condition, checked in order; the
+ * FIRST mismatch is recorded for display. The pins come from the condition's
+ * registered contract (src/shared/conditionContract.ts) — never from client
+ * input or the gateway's own advertisement. `modelId` is deliberately
+ * unchecked (operator-chosen). */
+function contractPins(
+  contract: ModelConditionContract,
+): readonly [keyof ProviderConfig, string | number][] {
+  return [
+    ['experimentId', contract.experimentId],
+    ['experimentVersion', contract.experimentVersion],
+    ['conditionId', contract.conditionId],
+    ['providerId', contract.providerId],
+    ['promptVersion', contract.promptVersion],
+    ['requestSchemaVersion', EXTERNAL_REQUEST_SCHEMA_VERSION],
+  ];
+}
 
-function firstContractMismatch(config: ProviderConfig): string | null {
-  for (const [field, pinned] of CONTRACT_PINS) {
+function firstContractMismatch(
+  config: ProviderConfig,
+  contract: ModelConditionContract,
+): string | null {
+  for (const [field, pinned] of contractPins(contract)) {
     if (config[field] !== pinned) return field;
   }
   return null;
@@ -138,6 +145,12 @@ export interface ModelGatewayClientOptions {
   maxCallsPerRun?: number;
   fetchImpl?: typeof fetch;
   makeRunId?: () => string;
+  /** The ACTIVE model-backed condition id (Phase 4). Evaluated at use time
+   * so one client instance follows the operator's selection; a condition
+   * change always passes through a run reset, so pins, envelopes, and the
+   * exact-request archive stay coherent within a run. Absent (or returning
+   * a non-model-backed id) means the frozen Milestone 1 condition. */
+  activeConditionId?: () => string;
   submitResponse: (response: DecisionResponse) => void;
   submitFailure: (failure: ExternalDecisionFailure) => void;
   onStatus?: (status: ModelGatewayStatus) => void;
@@ -237,6 +250,18 @@ export class ModelGatewayClient {
     return this.runId;
   }
 
+  /** The registered contract for the active condition. Falls back to the
+   * frozen Milestone 1 contract when no accessor is supplied or the current
+   * selection is not model-backed (matching pre-Phase-4 behavior). */
+  private contract(): ModelConditionContract {
+    const selected = this.options.activeConditionId?.();
+    try {
+      return requireContractForCondition(selected ?? MODEL_CONDITION_ID);
+    } catch {
+      return requireContractForCondition(MODEL_CONDITION_ID);
+    }
+  }
+
   /** Snapshot of the slim client trace (F4): one entry per request this
    * client ever saw for the current run, plus any late `discarded-stale-run`
    * entries recorded since the last newRun(). */
@@ -321,7 +346,7 @@ export class ModelGatewayClient {
       this.providerConfig = null;
       result = 'unreachable';
     } else {
-      const mismatch = firstContractMismatch(config);
+      const mismatch = firstContractMismatch(config, this.contract());
       if (mismatch !== null) {
         this.providerConfig = null;
         this.contractMismatchField = mismatch;
@@ -350,7 +375,8 @@ export class ModelGatewayClient {
     const parsed = externalDecisionRequestSchema.safeParse(external);
     if (!parsed.success) return;
     const { request } = external;
-    if (request.npcId !== MODEL_TARGET_NPC_ID || request.providerId !== EXTERNAL_MARA_PROVIDER_ID) {
+    const contract = this.contract();
+    if (request.npcId !== contract.targetNpcId || request.providerId !== contract.providerId) {
       return;
     }
 
@@ -395,16 +421,18 @@ export class ModelGatewayClient {
    * (handleDecisionRequest time) and the dispatch POST (C2) — the archived
    * and dispatched bytes cannot diverge. */
   private buildEnvelope(external: ExternalDecisionRequest): ExternalDecisionRequestEnvelope {
+    const contract = this.contract();
     return {
       schemaVersion: EXTERNAL_REQUEST_SCHEMA_VERSION,
-      experimentId: MODEL_EXPERIMENT_ID,
-      experimentVersion: MODEL_EXPERIMENT_VERSION,
-      conditionId: MODEL_CONDITION_ID,
+      experimentId: contract.experimentId,
+      experimentVersion: contract.experimentVersion,
+      conditionId: contract.conditionId,
       runId: this.runId,
       providerId: external.request.providerId,
-      // Pinned constant, NOT the gateway-advertised value: connect() already
-      // proved they match, and the envelope must never drift with a gateway.
-      promptVersion: MODEL_PROMPT_VERSION,
+      // Registered contract constants, NOT the gateway-advertised values:
+      // connect() already proved they match, and the envelope must never
+      // drift with a gateway.
+      promptVersion: contract.promptVersion,
       contextHash: external.contextHash,
       request: external.request,
       context: external.context,
@@ -649,14 +677,15 @@ export class ModelGatewayClient {
       'clientOutcome' | 'clientFailureCode' | 'responseId' | 'failureId' | 'gatewayResultObserved'
     >,
   ): ModelClientTraceEntry {
+    const contract = this.contract();
     return {
       runId,
-      conditionId: MODEL_CONDITION_ID,
+      conditionId: contract.conditionId,
       requestId: external.request.requestId,
       npcId: external.request.npcId,
       scenarioId: external.request.scenarioId,
       providerId: external.request.providerId,
-      promptVersionExpected: MODEL_PROMPT_VERSION,
+      promptVersionExpected: contract.promptVersion,
       requestedAtTick: external.request.requestedAtTick,
       contextHash: external.contextHash,
       queuedAtUtc: timing.queuedAtUtc,

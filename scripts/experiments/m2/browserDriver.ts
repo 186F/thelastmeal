@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
@@ -7,6 +7,7 @@ import {
   AUTOMATION_TEXT,
 } from '../../../src/shared/automationContract';
 import type { PlannedAttempt } from './planSchema';
+import { isModelBackedConditionId } from '../../../src/shared/conditionContract';
 import { AttemptFailure, type FailureClass } from './failureTaxonomy';
 
 /**
@@ -29,6 +30,15 @@ import { AttemptFailure, type FailureClass } from './failureTaxonomy';
 
 export { AttemptFailure } from './failureTaxonomy';
 
+/**
+ * Default Playwright trace-chunk rotation interval (Phase 4; focused
+ * re-audit §8.2): one unbounded trace across a multi-hour 1× attempt is not
+ * bounded evidence. Every chunk is retained (§19.12 — never discard raw
+ * traces); rotation bounds the OPEN chunk, persists forensics early, and
+ * gives the evidence forecaster real measurements.
+ */
+export const DEFAULT_TRACE_CHUNK_INTERVAL_MS = 10 * 60_000;
+
 export interface BrowserAttemptOptions {
   origin: string;
   attempt: PlannedAttempt;
@@ -38,6 +48,19 @@ export interface BrowserAttemptOptions {
     stallTimeoutMs: number;
     stallGraceMs: number;
     heartbeatIntervalMs: number;
+  };
+  /** Trace-chunk rotation (Phase 4). Absent means the default interval. */
+  tracing?: {
+    chunkIntervalMs: number;
+  };
+  /** Evidence-size forecasting inputs (Phase 4): at every chunk rotation
+   * the cumulative trace bytes are extrapolated to the attempt's full
+   * wall-clock allowance; a projection exceeding the sequence budget fails
+   * the attempt EARLY as `evidence-budget-exceeded` instead of discovering
+   * the overrun after hours of spend. */
+  evidenceForecast?: {
+    budgetBytes: number;
+    rootBytesAtStart: number;
   };
   /** Called once when the observed tick first reaches
    * `attempt.gatewayStopAtTick` (the planned mid-run gateway stop); resolves
@@ -113,10 +136,69 @@ export async function runBrowserAttempt(
 
   // Fresh context per attempt (§19.5): no cookies, storage, or page state
   // survives between attempts. Downloads are accepted and saved explicitly.
-  // Tracing is bounded (re-audit §13.4): screenshots + DOM snapshots, no
-  // source-file embedding — sources live in the pinned repository.
+  // Tracing is bounded two ways (re-audit §13.4; Phase 4 §8.2): screenshots
+  // + DOM snapshots with no source-file embedding, AND chunked rotation so
+  // no single open trace grows with attempt duration. Attempts shorter than
+  // one chunk interval produce exactly the pre-Phase-4 artifact shape (one
+  // attempt-trace.zip / failure-trace.zip and no trace-chunks/ directory).
   const context: BrowserContext = await browser.newContext({ acceptDownloads: true });
   await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+  await context.tracing.startChunk();
+  const chunkIntervalMs = options.tracing?.chunkIntervalMs ?? DEFAULT_TRACE_CHUNK_INTERVAL_MS;
+  const traceChunksDir = join(attemptDir, 'trace-chunks');
+  const traceChunks: { name: string; bytes: number; endedAtUtc: string }[] = [];
+  let traceChunkIndex = 0;
+  let traceBytesTotal = 0;
+  /** When tracing began — the byte-accumulation origin. The forecast must
+   * measure rate over THIS window, not over the post-Start run clock
+   * (adversarial-review fix: mismatched windows overstated the rate by
+   * interval/(interval − setup) without bound). */
+  const traceStartedAt = Date.now();
+  let chunkStartedAt = traceStartedAt;
+  let traceClosed = false;
+
+  /** Rotates the open trace chunk into a retained bounded file. */
+  const rotateTraceChunk = async (): Promise<void> => {
+    traceChunkIndex += 1;
+    mkdirSync(traceChunksDir, { recursive: true });
+    const name = `attempt-trace-chunk-${String(traceChunkIndex).padStart(3, '0')}.zip`;
+    const chunkPath = join(traceChunksDir, name);
+    await context.tracing.stopChunk({ path: chunkPath });
+    const bytes = statSync(chunkPath).size;
+    traceBytesTotal += bytes;
+    traceChunks.push({ name: `trace-chunks/${name}`, bytes, endedAtUtc: new Date().toISOString() });
+    await context.tracing.startChunk();
+    chunkStartedAt = Date.now();
+  };
+
+  /** Closes tracing: the final (often only) chunk lands at the contract
+   * artifact name; every earlier rotated chunk is already on disk. The
+   * trace manifest records the complete chunk set and the explicit
+   * retention policy. Runs at most once. */
+  const closeTraceInto = async (finalName: string): Promise<void> => {
+    if (traceClosed) return;
+    traceClosed = true;
+    const finalPath = join(attemptDir, finalName);
+    await context.tracing.stopChunk({ path: finalPath });
+    const bytes = statSync(finalPath).size;
+    traceBytesTotal += bytes;
+    traceChunks.push({ name: finalName, bytes, endedAtUtc: new Date().toISOString() });
+    await context.tracing.stop();
+    writeFileSync(
+      join(attemptDir, 'trace-manifest.json'),
+      `${JSON.stringify(
+        {
+          chunkIntervalMs,
+          retention: 'retain-all-chunks',
+          totalTraceBytes: traceBytesTotal,
+          chunks: traceChunks,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  };
   const page = await context.newPage();
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`console: ${message.text()}`);
@@ -163,7 +245,7 @@ export async function runBrowserAttempt(
           `${JSON.stringify({ consoleErrors }, null, 2)}\n`,
           'utf8',
         );
-        await context.tracing.stop({ path: join(attemptDir, 'failure-trace.zip') });
+        await closeTraceInto('failure-trace.zip');
         writeFileSync(
           join(attemptDir, 'diagnostics-manifest.json'),
           `${JSON.stringify(
@@ -264,7 +346,7 @@ export async function runBrowserAttempt(
       await fail('speed-not-applied', `speed radio ${attempt.speed} did not latch`);
     }
 
-    if (attempt.conditionId === 'mara-model-per-decision-v1') {
+    if (isModelBackedConditionId(attempt.conditionId)) {
       const gatewayStatus = field(page, AUTOMATION_FIELDS.gatewayStatus);
       try {
         await gatewayStatus.filter({ hasText: AUTOMATION_TEXT.gatewayConnected }).waitFor({
@@ -332,8 +414,39 @@ export async function runBrowserAttempt(
             AUTOMATION_FIELDS.acceptedModelResponses,
           ),
           lastModelLatency: await readFieldText(page, AUTOMATION_FIELDS.modelLatency),
+          traceChunksWritten: traceChunkIndex,
+          traceBytesWritten: traceBytesTotal,
         };
         appendFileSync(heartbeatPath, `${JSON.stringify(heartbeat)}\n`);
+      }
+
+      // Trace-chunk rotation + evidence forecast (Phase 4, §8.2): rotate
+      // the open chunk on the configured cadence; at each rotation,
+      // extrapolate cumulative trace bytes to the attempt's full wall-clock
+      // allowance and fail EARLY when the projection would exceed the
+      // sequence evidence budget.
+      if (now - chunkStartedAt >= chunkIntervalMs) {
+        await rotateTraceChunk();
+        const forecast = options.evidenceForecast;
+        if (forecast !== undefined) {
+          // Rate and horizon share one origin: bytes accumulated since
+          // tracing started, projected over the full tracing window the
+          // attempt may use (setup already spent + the run's wall-clock
+          // allowance).
+          const elapsedTraceMs = Math.max(now - traceStartedAt, 1);
+          const traceHorizonMs = startedAt - traceStartedAt + timeouts.runTimeoutMs;
+          const projectedTraceBytes = Math.ceil(
+            (traceBytesTotal * traceHorizonMs) / elapsedTraceMs,
+          );
+          const projectedRootBytes = forecast.rootBytesAtStart + projectedTraceBytes;
+          if (projectedRootBytes > forecast.budgetBytes) {
+            await fail(
+              'evidence-budget-exceeded',
+              `forecast: ${traceBytesTotal} trace bytes after ${elapsedTraceMs}ms project to ` +
+                `${projectedRootBytes} total bytes over the ${forecast.budgetBytes}-byte budget`,
+            );
+          }
+        }
       }
 
       if (
@@ -385,7 +498,7 @@ export async function runBrowserAttempt(
     const finalTick = (await readTick(page)) ?? -1;
     const runIdText = await readFieldText(page, AUTOMATION_FIELDS.runId);
     const runId =
-      attempt.conditionId === 'mara-model-per-decision-v1' && runIdText !== '—' && runIdText !== ''
+      isModelBackedConditionId(attempt.conditionId) && runIdText !== '—' && runIdText !== ''
         ? runIdText
         : null;
 
@@ -401,7 +514,7 @@ export async function runBrowserAttempt(
     // once the run is complete AND the gateway client is settled; the click
     // itself awaits settlement before producing the file.
     let bundlePath: string | null = null;
-    if (attempt.conditionId === 'mara-model-per-decision-v1') {
+    if (isModelBackedConditionId(attempt.conditionId)) {
       const exportButton = page.locator(`#${AUTOMATION_IDS.exportBundleButton}`);
       try {
         await exportButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -451,7 +564,7 @@ export async function runBrowserAttempt(
     const captured: Record<string, string> = {};
     const captureFailures: Record<string, string> = {};
     await captureArtifact(captured, captureFailures, 'attempt-trace.zip', async () => {
-      await context.tracing.stop({ path: join(attemptDir, 'attempt-trace.zip') });
+      await closeTraceInto('attempt-trace.zip');
     });
     await captureArtifact(captured, captureFailures, 'final-screenshot.png', async () => {
       await page.screenshot({ path: join(attemptDir, 'final-screenshot.png'), fullPage: true });

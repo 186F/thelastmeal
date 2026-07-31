@@ -7,6 +7,12 @@ import {
   MODEL_CONDITION_SCENARIOS,
   MODEL_TARGET_NPC_ID,
 } from '../../shared/modelExperiment';
+import {
+  M2_ACTION_PROVIDER_ID,
+  M2_CONDITION_SCENARIOS,
+  M2_PER_DECISION_CONDITION_ID,
+  M2_TARGET_NPC_ID,
+} from '../../shared/m2Experiment';
 import type { ScenarioDefinition } from '../scenarios/definitions';
 import { DeterministicProvider } from './deterministicProvider';
 import { ScriptedFailureProvider } from './failingProvider';
@@ -32,7 +38,11 @@ export {
   MODEL_EXPERIMENT_VERSION,
 } from '../../shared/modelExperiment';
 
-export const CONDITION_IDS = [BASELINE_CONDITION_ID, MODEL_CONDITION_ID] as const;
+export const CONDITION_IDS = [
+  BASELINE_CONDITION_ID,
+  MODEL_CONDITION_ID,
+  M2_PER_DECISION_CONDITION_ID,
+] as const;
 export type ConditionId = (typeof CONDITION_IDS)[number];
 
 export function isConditionId(value: string): value is ConditionId {
@@ -55,6 +65,17 @@ function validateModelConditionRequest(external: ExternalDecisionRequest): strin
   return null;
 }
 
+/** The M2 per-decision condition's request validator (brief §9.2): only
+ * Mara, only the M2 action provider, only M2-supported scenarios. */
+function validateM2ConditionRequest(external: ExternalDecisionRequest): string | null {
+  if (external.request.npcId !== M2_TARGET_NPC_ID) return 'npc-not-in-condition';
+  if (external.request.providerId !== M2_ACTION_PROVIDER_ID) return 'provider-not-in-condition';
+  if (!(M2_CONDITION_SCENARIOS as readonly string[]).includes(external.request.scenarioId)) {
+    return 'scenario-not-in-condition';
+  }
+  return null;
+}
+
 /**
  * Resolves a registered condition into a provider plan for a scenario.
  *
@@ -65,6 +86,11 @@ function validateModelConditionRequest(external: ExternalDecisionRequest): strin
  * - `mara-model-per-decision-v1` routes ONLY Mara to the external deferred
  *   provider; Jonas and Rin keep the deterministic provider and can never
  *   cause an outbound model call.
+ * - `mara-model-per-decision-m2-v1` (Phase 4) is behaviorally equivalent in
+ *   authority: the identical per-NPC wiring, bound to the M2 action
+ *   provider identity, under the M2 experiment (brief §9.2). The revised
+ *   diagnostic-output contract lives entirely at the gateway boundary —
+ *   engine-side authority is unchanged.
  */
 export function planForCondition(
   conditionId: ConditionId,
@@ -74,6 +100,24 @@ export function planForCondition(
   if (conditionId === BASELINE_CONDITION_ID) {
     const provider = defaultProvider();
     return singleProviderPlan(() => provider);
+  }
+  if (conditionId === M2_PER_DECISION_CONDITION_ID) {
+    if (!(M2_CONDITION_SCENARIOS as readonly string[]).includes(scenario.id)) {
+      throw new Error(`condition-not-supported-for-scenario: ${conditionId} on ${scenario.id}`);
+    }
+    const deterministic = new DeterministicProvider();
+    const mara = new ExternalDeferredProvider(M2_ACTION_PROVIDER_ID);
+    const providers: Record<NpcId, DecisionProvider> = {
+      mara,
+      jonas: deterministic,
+      rin: deterministic,
+    };
+    return perNpcPlan(
+      M2_PER_DECISION_CONDITION_ID,
+      providers,
+      [M2_ACTION_PROVIDER_ID],
+      validateM2ConditionRequest,
+    );
   }
   if (!MODEL_CONDITION_SCENARIOS.includes(scenario.id)) {
     throw new Error(`condition-not-supported-for-scenario: ${conditionId} on ${scenario.id}`);

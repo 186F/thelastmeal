@@ -6,7 +6,7 @@ technical statements were moved here **unchanged in meaning**. Milestone-level
 detail lives in the briefs and reports under `documentation/` (see the
 README's documentation map).
 
-Implementation release: **1.8.0**. Frozen experiment identity: **Vertical
+Implementation release: **1.9.0**. Frozen experiment identity: **Vertical
 Slice 001 — v1.0**, configuration version `vs001-1.0.0` (frozen identifiers
 never change with the package).
 
@@ -579,6 +579,26 @@ lists are recorded here.
   packaging-recovery drills; `m2:resume` is `m2:orchestrate -- --resume`
   (report:
   [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](../milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)).
+- **Phase 4 — M2 per-decision comparator (release 1.9.0, brief §31
+  Phase 4):** the registered condition-contract registry
+  (`src/shared/conditionContract.ts`) pairing each model-backed condition
+  with its complete experiment/provider/prompt identity and diagnostic
+  contract; the `mara-model-per-decision-m2-v1` condition under
+  `sparse-cognition-policy-001` v1.0.0 with the new
+  `mara-action-selection-m2-1.0.0` prompt and the §17.5 revised
+  diagnostic-output contract (rationale and self-reported confidence are
+  normalized diagnostics — `rationaleNormalized` and
+  `selfReportedConfidenceBp` are additive optional trace fields on M2 rows;
+  trace schema v2 unchanged); one gateway process serves one pairing
+  (nonsecret `MODEL_GATEWAY_CONDITION_ID`); the condition-aware finalizer;
+  the registered `m2-formal-attempt-profile` (§23.2 ≥ 90% upstream
+  completion, §24.2 one replacement); tracked study/plan TEMPLATES with the
+  `m2:register` SHA-pinning ritual for `m2-stage-a-acceptance-001` and
+  `m2-calibration-variance-a-001`; chunked Playwright tracing
+  (plan-configurable cadence, `trace-manifest.json`, retain-all-chunks)
+  with attempt- and sequence-level evidence-size forecasting; rehearsal
+  part 9 drives the M2 condition keylessly end to end (report:
+  [`MILESTONE_002_PHASE4_PER_DECISION_REPORT.md`](../milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)).
 
 ## Continuous integration details
 

@@ -108,9 +108,11 @@ jobs:
       # finding 1; focused re-audit finding 3): the versioned sealed
       # archive, its receipt, the final evidence manifest and reports
       # inside the immutable root, the control-root operational state, the
-      # failure-drill evidence, and the packaging-recovery drill — the
+      # failure-drill evidence, the packaging-recovery drill — the
       # superseded unreceipted archive 001 beside the recovered receipted
-      # archive 002 — with a hard failure if any path drifts.
+      # archive 002 — and the Phase 4 M2-condition rehearsal (part 9)
+      # under the sparse-cognition-policy-001 identity, with a hard
+      # failure if any path drifts.
       - name: Upload m2 rehearsal evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -133,6 +135,11 @@ jobs:
             artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip.receipt.json
             artifacts/m2-sequences/packaging-drill/sequence-manifest.json
             artifacts/m2-sequences/packaging-drill.control/sequence-state.json
+            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip
+            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip.sha256
+            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip.receipt.json
+            artifacts/m2-sequences/m2-condition-rehearsal/sequence-manifest.json
+            artifacts/m2-sequences/m2-condition-rehearsal.control/sequence-state.json
           if-no-files-found: error
 
       - name: Upload model-rehearsal report

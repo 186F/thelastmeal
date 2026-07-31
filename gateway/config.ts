@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MODEL_CONDITION_ID, MODEL_EXPERIMENT_ID } from '../src/shared/modelExperiment';
+import { MODEL_CONDITION_ID } from '../src/shared/modelExperiment';
+import { contractForCondition, requireContractForCondition } from '../src/shared/conditionContract';
 
 /**
  * Gateway configuration (model integration milestone 001, sections 10/19/26).
@@ -39,6 +40,13 @@ export interface GatewayConfig {
    * GatewayConfig literals stay valid; loadGatewayConfig always sets it and
    * an absent value means the default 400. */
   maxTotalCalls?: number;
+  /** The single model-backed condition this gateway process serves
+   * (Phase 4). One process serves exactly one registered condition pairing;
+   * the orchestrator spawns a fresh gateway per attempt and pins this via
+   * the nonsecret MODEL_GATEWAY_CONDITION_ID variable. Optional so existing
+   * GatewayConfig literals stay valid; absent means the frozen Milestone 1
+   * condition, preserving pre-Phase-4 behavior exactly. */
+  servedConditionId?: string;
 }
 
 export const DEFAULT_MAX_TOTAL_CALLS = 400;
@@ -124,7 +132,15 @@ export function loadGatewayConfig(
       DEFAULT_MAX_TOTAL_CALLS,
       'MODEL_MAX_TOTAL_CALLS',
     ),
+    servedConditionId: get('MODEL_GATEWAY_CONDITION_ID') ?? MODEL_CONDITION_ID,
   };
+
+  if (contractForCondition(config.servedConditionId ?? MODEL_CONDITION_ID) === null) {
+    throw new Error(
+      'gateway-config-invalid: MODEL_GATEWAY_CONDITION_ID must name a registered ' +
+        `model-backed condition, got '${config.servedConditionId}'`,
+    );
+  }
 
   if (adapterKind === 'openai') {
     if (!config.openaiApiKey) {
@@ -170,15 +186,15 @@ export function loadGatewayConfig(
 }
 
 /** Nonsecret view exposed by /health and /v1/provider-config. The advertised
- * experimentId/conditionId come straight from the shared experiment literals
- * so the browser client can pin the full contract. */
+ * experiment/condition/provider/prompt identity is resolved from the SERVED
+ * condition's registered contract (src/shared/conditionContract.ts) so the
+ * browser client can pin the full pairing — the gateway can never advertise
+ * a mixture of identities. */
 export function publicConfig(
   config: GatewayConfig,
-  providerId: string,
-  promptVersion: string,
   requestSchemaVersion: number,
-  experimentVersion: string,
 ): Record<string, unknown> {
+  const contract = requireContractForCondition(config.servedConditionId ?? MODEL_CONDITION_ID);
   const modelId =
     config.adapterKind === 'openrouter'
       ? (config.openRouterModel ?? null)
@@ -197,11 +213,11 @@ export function publicConfig(
         : null;
   return {
     status: 'ok',
-    experimentId: MODEL_EXPERIMENT_ID,
-    experimentVersion,
-    conditionId: MODEL_CONDITION_ID,
-    providerId,
-    promptVersion,
+    experimentId: contract.experimentId,
+    experimentVersion: contract.experimentVersion,
+    conditionId: contract.conditionId,
+    providerId: contract.providerId,
+    promptVersion: contract.promptVersion,
     requestSchemaVersion,
     modelId,
     servingProviderId,

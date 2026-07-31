@@ -1,10 +1,9 @@
+import { MODEL_CONDITION_ID } from '../shared/modelExperiment';
 import {
-  EXTERNAL_MARA_PROVIDER_ID,
-  MODEL_CONDITION_ID,
-  MODEL_EXPERIMENT_ID,
-  MODEL_EXPERIMENT_VERSION,
-  MODEL_PROMPT_VERSION,
-} from '../shared/modelExperiment';
+  contractForCondition,
+  isModelBackedConditionId,
+  requireContractForCondition,
+} from '../shared/conditionContract';
 import { runBundleSchema, type ClientTraceEntry, type RunBundle } from '../shared/modelArtifacts';
 import { externalDecisionRequestEnvelopeSchema } from '../sim/decisions/externalSchemas';
 import { externalContextHash } from '../sim/decisions/externalContext';
@@ -38,7 +37,7 @@ export function canExportRunBundle(
 ): boolean {
   return (
     s.runStatus === 'complete' &&
-    s.selectedConditionId === MODEL_CONDITION_ID &&
+    isModelBackedConditionId(s.selectedConditionId) &&
     s.runCompletedAtUtc !== null &&
     !(s.model.gateway?.archivePoisoned ?? false)
   );
@@ -53,16 +52,21 @@ export function buildRunBundle(
   archiveDiagnostics: string[],
 ): RunBundle {
   const gw = s.model.gateway;
+  // The handoff identity comes from the selected condition's registered
+  // contract (Phase 4); the M1 fallback only covers non-model states that
+  // canExportRunBundle already refuses.
+  const contract =
+    contractForCondition(s.selectedConditionId) ?? requireContractForCondition(MODEL_CONDITION_ID);
   return {
     bundleSchemaVersion: 2,
     handoff: {
       runId: gw?.runId ?? runIdFallback,
       conditionId: s.selectedConditionId,
       scenarioId: s.snapshot?.scenarioId ?? s.selectedScenarioId,
-      providerId: EXTERNAL_MARA_PROVIDER_ID,
-      promptVersion: MODEL_PROMPT_VERSION,
-      experimentId: MODEL_EXPERIMENT_ID,
-      experimentVersion: MODEL_EXPERIMENT_VERSION,
+      providerId: contract.providerId,
+      promptVersion: contract.promptVersion,
+      experimentId: contract.experimentId,
+      experimentVersion: contract.experimentVersion,
       worldStateHash: s.finalWorldHash ?? s.snapshot?.worldStateHash ?? null,
       canonicalLedgerHash: s.finalLedgerHash ?? s.snapshot?.canonicalLedgerHash ?? null,
       callsAttempted: gw?.callsAttempted ?? 0,
@@ -105,6 +109,26 @@ export function validateRunBundle(bundle: RunBundle): string[] {
   }
 
   const runId = bundle.handoff.runId;
+  // Pins derive from the bundle's OWN declared condition: the handoff and
+  // every archived envelope must agree with that condition's registered
+  // contract — a mixed-identity bundle can never validate.
+  const bundleContract = contractForCondition(bundle.handoff.conditionId);
+  if (bundleContract === null) {
+    errors.push(`handoff conditionId not model-backed: ${bundle.handoff.conditionId}`);
+    return errors;
+  }
+  if (bundle.handoff.providerId !== bundleContract.providerId) {
+    errors.push(`handoff providerId ${bundle.handoff.providerId}`);
+  }
+  if (bundle.handoff.promptVersion !== bundleContract.promptVersion) {
+    errors.push(`handoff promptVersion ${bundle.handoff.promptVersion}`);
+  }
+  if (bundle.handoff.experimentId !== bundleContract.experimentId) {
+    errors.push(`handoff experimentId ${bundle.handoff.experimentId}`);
+  }
+  if (bundle.handoff.experimentVersion !== bundleContract.experimentVersion) {
+    errors.push(`handoff experimentVersion ${bundle.handoff.experimentVersion}`);
+  }
   const envelopeIds = new Map<string, number>();
   bundle.exactRequestEnvelopes.forEach((raw, index) => {
     const parsed = externalDecisionRequestEnvelopeSchema.safeParse(raw);
@@ -122,13 +146,13 @@ export function validateRunBundle(bundle: RunBundle): string[] {
     if (envelope.runId !== runId) {
       errors.push(`envelope[${index}] (${requestId}): runId ${envelope.runId} != handoff ${runId}`);
     }
-    if (envelope.conditionId !== MODEL_CONDITION_ID) {
+    if (envelope.conditionId !== bundleContract.conditionId) {
       errors.push(`envelope[${index}] (${requestId}): conditionId ${envelope.conditionId}`);
     }
-    if (envelope.providerId !== EXTERNAL_MARA_PROVIDER_ID) {
+    if (envelope.providerId !== bundleContract.providerId) {
       errors.push(`envelope[${index}] (${requestId}): providerId ${envelope.providerId}`);
     }
-    if (envelope.promptVersion !== MODEL_PROMPT_VERSION) {
+    if (envelope.promptVersion !== bundleContract.promptVersion) {
       errors.push(`envelope[${index}] (${requestId}): promptVersion ${envelope.promptVersion}`);
     }
     const recomputed = externalContextHash(envelope.context);
