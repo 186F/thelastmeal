@@ -7,22 +7,44 @@
 
 Evidentiary/live sequences run ONLY from REGISTERED plan and study
 instances, never from the tracked templates (whose sentinel pins can never
-match a real HEAD). On the exact merged SHA the run is authorized for,
-with a clean worktree:
+match a real HEAD). Registration is CLOSED: only the registry's two
+template pairs can be stamped, and every source is authenticated against
+`git show HEAD` with its blob ID recorded in
+`registration-provenance.json`. On the exact merged SHA the run is
+authorized for, with a clean worktree:
 
 ```
-npm run m2:register -- --study-template experiments/m2/templates/<study>.study.template.json \
-                       --plan-template experiments/m2/templates/<plan>.plan.template.json \
-                       --out <directory OUTSIDE the repository>
+npm run m2:register -- --registration stage-a --out <dir OUTSIDE the repo>
 ```
 
-This stamps HEAD into both files, validates the registered study (writing
-its freeze record beside it), stamps the study's real byte-sha256 and
-config fingerprint into the registered plan, parses the plan under the
-full orchestrator schema, and prints every hash. It is create-once per
-output directory and starts nothing. Launch with `--plan <registered plan
-path>`. Stage A order is fixed: the Stage A sequence must PASS before the
-calibration study is registered for execution (§19.16).
+then, ONLY after the Stage A sequence has completed and PASSED:
+
+```
+npm run m2:register -- --registration calibration-variance-a \
+                       --stage-a <the completed Stage A sequence root> \
+                       --out <a NEW dir OUTSIDE the repo>
+```
+
+Calibration registration cryptographically VERIFIES the Stage A root
+(seals, inventory, manifest reconciliation, semantic revalidation,
+archive, sidecar, receipt, and SHA equality with the current HEAD — any
+source change after Stage A forces Stage A to run again) and stamps the
+prerequisite record's hash into the registered study and plan, where it
+joins the resume identity and every freeze checkpoint. Output is
+transactional and create-once; a failure leaves nothing. Never pass
+`--stage-a-drill` for a real registration — it is the keyless-drill flag
+and is permanently recorded in the provenance. Launch with
+`m2:orchestrate -- --plan <registered plan path>`.
+
+After a completed calibration sequence, produce the registered analysis:
+
+```
+npm run m2:analyze -- --sequence <completed calibration root>
+```
+
+writes `calibration-variance-analysis.{json,md}`
+(`m2-calibration-variance-analysis-1.0.0`) into the derived directory
+beside the immutable root.
 
 ## 1. Before launch
 

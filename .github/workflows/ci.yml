@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full-evidence:
+        description: >-
+          Upload the FULL keyless rehearsal evidence (sealed ZIPs and
+          Playwright traces) instead of only the routine compact proof
+          (Phase 4 audit finding 4). Routine PR/main runs never upload the
+          heavy payloads.
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -17,9 +26,10 @@ jobs:
   checks:
     name: Required checks (clean checkout)
     runs-on: ubuntu-latest
-    # 45 minutes: the Phase 3 keyless orchestrator rehearsal drives three
-    # complete paced browser runs (~8 minutes) on top of the frozen gates.
-    timeout-minutes: 45
+    # 55 minutes: the keyless orchestrator rehearsal drives paced browser
+    # runs across nine parts, and the Phase 4 remediation adds the real
+    # Stage A prerequisite drill sequence to the unit suite.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -104,42 +114,55 @@ jobs:
       - name: Keyless unattended-orchestrator rehearsal
         run: npm run m2:rehearse -- --ci
 
-      # The COMPLETE rehearsal evidence (audit finding 7; re-audit
-      # finding 1; focused re-audit finding 3): the versioned sealed
-      # archive, its receipt, the final evidence manifest and reports
-      # inside the immutable root, the control-root operational state, the
-      # failure-drill evidence, the packaging-recovery drill — the
-      # superseded unreceipted archive 001 beside the recovered receipted
-      # archive 002 — and the Phase 4 M2-condition rehearsal (part 9)
-      # under the sparse-cognition-policy-001 identity, with a hard
-      # failure if any path drifts.
-      - name: Upload m2 rehearsal evidence
+      # Routine COMPACT artifact profile (Phase 4 audit finding 4): the
+      # full rehearsal executed and verified its complete evidence ON THE
+      # RUNNER above; routine PR/main uploads carry only compact proof —
+      # manifests, reports, control state, inventories, digest sidecars,
+      # receipts, trace manifests, failure manifests, verdicts — assembled
+      # by an allowlist script that hard-refuses ZIP/trace payloads and
+      # enforces the registered <= 50 MiB budget BEFORE upload, emitting a
+      # machine-readable artifact-size-report.json.
+      - name: Prepare compact rehearsal artifact (size-budget gate)
+        if: always()
+        run: node scripts/ci/prepareCompactArtifact.mjs
+
+      - name: Upload m2 rehearsal compact proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: m2-orchestrator-rehearsal
-          path: |
-            artifacts/m2-rehearsal/m2-rehearsal-report.json
-            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip
-            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip.sha256
-            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip.receipt.json
-            artifacts/m2-sequences/rehearsal/sequence-manifest.json
-            artifacts/m2-sequences/rehearsal/sequence-report.json
-            artifacts/m2-sequences/rehearsal/sequence-report.md
-            artifacts/m2-sequences/rehearsal.control/sequence-state.json
-            artifacts/m2-sequences/failure-drill/
-            artifacts/m2-sequences/failure-drill.control/sequence-state.json
-            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-001.zip
-            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip
-            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip.sha256
-            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip.receipt.json
-            artifacts/m2-sequences/packaging-drill/sequence-manifest.json
-            artifacts/m2-sequences/packaging-drill.control/sequence-state.json
-            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip
-            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip.sha256
-            artifacts/m2-sequences/m2-condition-rehearsal-evidence-001.zip.receipt.json
-            artifacts/m2-sequences/m2-condition-rehearsal/sequence-manifest.json
-            artifacts/m2-sequences/m2-condition-rehearsal.control/sequence-state.json
+          name: m2-rehearsal-compact
+          path: artifacts/ci-compact/
+          retention-days: 21
+          if-no-files-found: error
+
+      # Explicit FULL-EVIDENCE profile: uploads ONLY on a failing run
+      # (complete diagnostics) or when a manual workflow_dispatch
+      # explicitly requests full evidence (audit-ready or milestone-sealing
+      # runs). The prepare step assembles each sequence payload exactly
+      # ONCE — sealed ZIP + digest sidecar + receipt for archived sequences
+      # (their raw trees are contained in the ZIPs and are excluded), raw
+      # trees only for never-archived sequences — under the registered
+      # <= 2 GiB full budget, emitting artifact-size-report.json with
+      # per-sequence uniqueness dispositions. Formal live evidence is never
+      # entrusted to expiring Actions artifacts — it is retained locally as
+      # sealed packages with independent durable backup.
+      - name: Prepare FULL evidence artifact (uniqueness + size-budget gate)
+        if: >-
+          failure() ||
+          (github.event_name == 'workflow_dispatch' && inputs.full-evidence)
+        run: node scripts/ci/prepareCompactArtifact.mjs --profile full
+
+      - name: Upload m2 rehearsal FULL evidence (failure or explicit dispatch only)
+        if: >-
+          failure() ||
+          (github.event_name == 'workflow_dispatch' && inputs.full-evidence)
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-rehearsal-full-evidence
+          path: artifacts/ci-full/
+          retention-days: 7
+          # The prepare step always writes artifact-size-report.json, so an
+          # empty upload here means the profile itself broke — fail loudly.
           if-no-files-found: error
 
       - name: Upload model-rehearsal report
@@ -153,6 +176,7 @@ jobs:
             artifacts/model-rehearsal/**/run-manifest.final.json
             artifacts/model-rehearsal/**/bundle-manifest.json
             artifacts/model-rehearsal/**/model-summary.json
+          retention-days: 21
           # Evidence artifact: a path drift must fail loudly, never upload
           # zero bytes behind a green step (A10 — never `ignore` here).
           if-no-files-found: error
@@ -165,6 +189,7 @@ jobs:
           path: |
             artifacts/report.json
             artifacts/report.md
+          retention-days: 21
           if-no-files-found: ignore
 
       - name: Upload Playwright report on failure
@@ -173,4 +198,5 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 7
           if-no-files-found: ignore

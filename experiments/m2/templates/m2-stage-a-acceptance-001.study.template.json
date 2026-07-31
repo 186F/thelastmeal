@@ -18,22 +18,24 @@
   "sampleSizeN": 2,
   "runOrderMethod": "plan-order",
   "primaryMetrics": [
-    "per-run-integrity-gates (section 23.1)",
-    "upstream-completion-ratio-bp >= 9000 (section 23.2)",
-    "in-browser-replay-hash-match",
-    "strict-finalization-status"
+    "per-run-integrity-gates",
+    "upstream-reliability-gate",
+    "in-browser-replay-verdict",
+    "strict-finalization-verdict"
   ],
   "secondaryMetrics": [
-    "measured 1x evidence size per attempt (trace chunks, total root bytes) - the section 8.2 measurement that gates the formal sequence",
-    "upstream latency distribution",
-    "rationale-normalization frequency",
-    "returned-model and serving-provider consistency"
+    "measured-evidence-size",
+    "latency-distribution",
+    "rationale-normalization-frequency",
+    "returned-model-consistency",
+    "serving-provider-consistency"
   ],
   "metricVersions": {
     "behavior-fingerprint": "behavior-fingerprint-1.0.0",
-    "behavior-similarity": "behavior-similarity-1.0.0"
+    "behavior-similarity": "behavior-similarity-1.0.0",
+    "m2-stage-a-acceptance-gates": "m2-stage-a-acceptance-gates-1.0.0"
   },
-  "analysisScriptVersion": "behavior-similarity-1.0.0",
+  "analysisScriptVersion": "m2-stage-a-acceptance-gates-1.0.0",
   "thresholds": {
     "attemptProfileId": "m2-formal-attempt-profile",
     "attemptProfileVersion": "1.0.0"
@@ -56,5 +58,10 @@
     "maxTotalCalls": 120
   },
   "outputRoot": "../thelastmeal-m2-sparse-cognition-001/stage-a",
-  "evidenceRetentionPolicy": "Retain everything (brief sections 19.12, 24.1, 25.3): every attempt directory including failures, all rotated Playwright trace chunks, gateway traces and sidecars, ledgers, bundles, finalized artifacts, and versioned evidence archives. Nothing is deleted, overwritten, or renamed."
+  "evidenceRetentionPolicy": "Retain everything (brief sections 19.12, 24.1, 25.3): every attempt directory including failures, all rotated Playwright trace chunks, gateway traces and sidecars, ledgers, bundles, finalized artifacts, and versioned evidence archives. Nothing is deleted, overwritten, or renamed. Formal live evidence stays local with independent durable backup, never in expiring CI artifacts.",
+  "registration": {
+    "registrationId": "stage-a",
+    "sourceBlobId": "5555555555555555555555555555555555555555",
+    "sourceSha256": "6666666666666666666666666666666666666666666666666666666666666666"
+  }
 }

@@ -32,6 +32,11 @@ import {
   BEHAVIOR_FINGERPRINT_VERSION,
   BEHAVIOR_SIMILARITY_VERSION,
 } from '../../../src/shared/behaviorArtifacts';
+import {
+  INSTALLED_ANALYSIS_VERSIONS,
+  M2_CALIBRATION_ANALYSIS_VERSION,
+  M2_STAGE_A_ACCEPTANCE_GATES_VERSION,
+} from '../../../src/shared/calibrationAnalysis';
 import { canonicalSerialize } from '../../../src/sim/replay/serialize';
 import { fnv1a64Hex } from '../../../src/sim/replay/hash';
 import { validateStudyFile } from './studyRegistry';
@@ -236,6 +241,7 @@ export function planConfigFingerprint(plan: OrchestratorPlan): string {
       postSequenceBatch: plan.postSequenceBatch,
       evidenceSizeBudgetBytes: plan.evidenceSizeBudgetBytes ?? null,
       tracing: plan.tracing ?? null,
+      registration: plan.registration ?? null,
     }),
   );
 }
@@ -1294,8 +1300,10 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
       installedMetricVersions: {
         'behavior-fingerprint': BEHAVIOR_FINGERPRINT_VERSION,
         'behavior-similarity': BEHAVIOR_SIMILARITY_VERSION,
+        'm2-calibration-variance-analysis': M2_CALIBRATION_ANALYSIS_VERSION,
+        'm2-stage-a-acceptance-gates': M2_STAGE_A_ACCEPTANCE_GATES_VERSION,
       },
-      installedAnalysisVersion: BEHAVIOR_SIMILARITY_VERSION,
+      installedAnalysisVersions: INSTALLED_ANALYSIS_VERSIONS,
     });
   }
   if (plan.repositorySha !== undefined && plan.repositorySha !== repositorySha) {

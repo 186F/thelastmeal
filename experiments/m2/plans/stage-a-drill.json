@@ -1,0 +1,61 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-stage-a-drill",
+  "description": "Keyless Stage A-SHAPED drill sequence (Phase 4 audit finding 2): the same two-attempt structure as the real Stage A — Scenario A deterministic baseline gateway-off, then the M2 per-decision condition — driven with the fake adapter at rehearsal pacing, so the Stage A prerequisite builder's complete verification path is exercised in CI without live spend.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/stage-a-drill",
+  "attempts": [
+    {
+      "attemptId": "stage-a-baseline",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 20,
+      "gatewayMode": "off"
+    },
+    {
+      "attemptId": "stage-a-per-decision",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 20,
+      "gatewayMode": "fake",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-rehearsal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "expectedTreatment": {
+    "modelId": "fake-adapter",
+    "servingProviderId": "local",
+    "allowFallbacks": false,
+    "requireParameters": true,
+    "promptVersion": "mara-action-selection-m2-1.0.0",
+    "conditionId": "mara-model-per-decision-m2-v1",
+    "experimentId": "sparse-cognition-policy-001",
+    "experimentVersion": "1.0.0"
+  },
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "retryableFailureClasses": [
+      "run-timeout",
+      "simulation-stall",
+      "browser-error",
+      "gateway-not-connected",
+      "gateway-launch-failed",
+      "interrupted"
+    ]
+  },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 600000,
+    "stallTimeoutMs": 60000,
+    "stallGraceMs": 10000,
+    "heartbeatIntervalMs": 10000
+  },
+  "postSequenceBatch": false,
+  "tracing": {
+    "chunkIntervalMs": 60000
+  }
+}

@@ -240,6 +240,24 @@ export const orchestratorPlanSchema = z
       })
       .strict()
       .optional(),
+    /** Git-authenticated registration binding (Phase 4 audit findings 2
+     * and 3), stamped by m2:register: the closed registration id, the
+     * SHA-256 of the registration-provenance record (which carries both
+     * source templates' blob ids and committed-byte hashes at the pinned
+     * HEAD), and — for the calibration plan — the SHA-256 of the verified
+     * Stage A prerequisite record. Part of the plan config fingerprint, so
+     * it joins the resume identity and every freeze checkpoint. */
+    registration: z
+      .object({
+        registrationId: nonEmpty,
+        provenanceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+        stageAPrerequisiteSha256: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((plan, ctx) => {

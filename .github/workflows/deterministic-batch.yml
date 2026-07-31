@@ -34,4 +34,5 @@ jobs:
             artifacts/report.json
             artifacts/report.md
             artifacts/ledgers/
+          retention-days: 21
           if-no-files-found: ignore

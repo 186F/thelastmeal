@@ -67,5 +67,9 @@
   "postSequenceBatch": true,
   "tracing": {
     "chunkIntervalMs": 600000
+  },
+  "registration": {
+    "registrationId": "stage-a",
+    "provenanceSha256": "7777777777777777777777777777777777777777777777777777777777777777"
   }
 }

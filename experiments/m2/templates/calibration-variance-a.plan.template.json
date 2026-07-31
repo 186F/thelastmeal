@@ -159,5 +159,10 @@
   "postSequenceBatch": true,
   "tracing": {
     "chunkIntervalMs": 600000
+  },
+  "registration": {
+    "registrationId": "calibration-variance-a",
+    "provenanceSha256": "7777777777777777777777777777777777777777777777777777777777777777",
+    "stageAPrerequisiteSha256": "8888888888888888888888888888888888888888888888888888888888888888"
   }
 }

@@ -1,10 +1,15 @@
 # Milestone 2 Phase 4 — per-decision comparator
 
-**Status: IMPLEMENTED — under Advisor audit.** The Phase 4 implementation
-(package 1.9.0) is complete and exercised keylessly; it awaits the
-Advisor's audit and merge. **No live model call has been made.** Stage A
-and the calibration study execute only after the implementation PR is
-audited, merged, and green on merged-`main` CI.
+**Status: AUDIT REMEDIATION COMPLETE — awaiting targeted re-audit.** The
+Advisor's [Phase 4 audit](audits/MILESTONE_002_PHASE4_PER_DECISION_AUDIT.md)
+accepted the comparator architecture and requested changes on four
+study-governance/operations findings (calibration analyzer, Stage A
+prerequisite, Git-authenticated registration, CI artifact profiles) — all
+four are remediated, and the remediation itself passed an independent
+adversarial verification round (report §6.1–§6.2). **No live model call
+has been made.**
+Stage A and the calibration study execute only after the PR is re-audited,
+merged, and green on merged-`main` CI.
 
 **Scope delivered** (implementation brief §31, scope ruling §14):
 

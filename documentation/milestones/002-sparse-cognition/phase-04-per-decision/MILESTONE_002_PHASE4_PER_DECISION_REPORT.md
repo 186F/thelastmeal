@@ -160,16 +160,31 @@ A registered study must pin ONE exact repository SHA (§21.2), but a
 tracked file cannot contain the SHA of the commit that introduces it. The
 resolution: the tracked, reviewed TEMPLATES
 (`experiments/m2/templates/*.template.json`) carry schema-valid sentinel
-pins that can never match a real HEAD; `npm run m2:register` stamps them —
-by pure text substitution of exactly the sentinels — into REGISTERED
-instances at the operator's clean HEAD, in a directory OUTSIDE the
-repository, immediately before execution. The registered study is
-re-validated through the registry pipeline (freeze record written beside
-it); the registered plan receives the study's real byte-sha256 and config
-fingerprint and is parsed under the complete orchestrator schema. The
-ritual is create-once per output directory and refuses dirty worktrees,
-double stamping, and in-repo output. The orchestrator's existing freeze
-machinery then enforces the pins for the sequence lifetime.
+pins that can never match a real HEAD; `npm run m2:register` stamps them
+into REGISTERED instances at the operator's clean HEAD, in a directory
+OUTSIDE the repository, immediately before execution. After the audit
+remediation round the ritual is CLOSED, GIT-AUTHENTICATED, and
+TRANSACTIONAL (§6.1 item 3): callers select a registration by id from the
+closed `REGISTRATION_REGISTRY` (`stage-a`, `calibration-variance-a`) —
+template paths never come from the command line; each template's committed
+bytes are loaded via `git show HEAD:<path>`, working-tree equality is
+judged by `git diff --quiet`, and the blob ids and SHA-256 digests enter a
+`registration-provenance.json` whose hash is stamped into the registered
+plan (and thereby the configuration fingerprint, resume identity, and every
+freeze checkpoint); the committed templates must BE the registered pair
+(study id/version, plan sequence id, study binding, and attempt profile
+are each enforced, with cross-pairing swaps refused by test); a
+calibration registration additionally requires a cryptographically
+verified Stage A prerequisite (§3.3); and every output is built and
+validated in a `.staging` sibling then atomically renamed into the
+create-once destination — a failure at any stage leaves no partial
+registration. The registered study is re-validated through the registry
+pipeline (freeze record written beside it, metric-producer completeness
+asserted); the registered plan receives the study's real byte-sha256 and
+config fingerprint and is parsed under the complete orchestrator schema.
+The ritual refuses dirty worktrees, double stamping, and in-repo output.
+The orchestrator's existing freeze machinery then enforces the pins for
+the sequence lifetime.
 
 ### 3.3 The two registered studies
 
@@ -189,10 +204,17 @@ machinery then enforces the pins for the sequence lifetime.
 Both plans use the exact formal timing profile (75 min / 120 s / ≤60 s
 heartbeat), 1× pacing, out-of-repo output roots under
 `../thelastmeal-m2-sparse-cognition-001/`, `postSequenceBatch: true`, and
-ten-minute trace chunks. Stage A execution order (§19.16 "both must pass
-before R2 begins") is operational sequencing enforced by the runbook and
-the study registrations; neither plan is runnable until registered at a
-merged SHA, and none was run.
+ten-minute trace chunks. Stage A ordering (§19.16 "both must pass before
+R2 begins") is MECHANICALLY enforced since the remediation round (§6.1
+item 2): the calibration registration refuses outright unless a completed
+Stage A sequence root passes end-to-end cryptographic verification at the
+same repository SHA, carries the registered `stage-a` identity (study,
+version, sequence, attempt profile — any other completed sequence
+refuses), and satisfied the live-model requirement; the resulting
+prerequisite record's SHA-256 is stamped into the registered calibration
+study and plan, entering the freeze projection, configuration fingerprint,
+resume identity, and every freeze checkpoint. Neither plan is runnable
+until registered at a merged SHA, and none was run.
 
 ## 4. Bounded tracing, forecasting, retention
 
@@ -345,10 +367,144 @@ since any server answering then is definitionally not ours.
 7. **Sequence identity of deterministic-only plans** continues to record
    the M1 experiment (Phase 3 behavior preserved); any plan containing a
    model-backed attempt records that condition's experiment.
-8. **Stage A ordering** (baseline before live, Stage A before R2) is
-   enforced operationally (runbook + study registration + the §19.16
-   gate), not by new plan-schema machinery: both Stage A runs live in one
-   reviewed plan whose attempt order is the run order (`plan-order`).
+8. **Stage A ordering** (baseline before live, Stage A before R2):
+   baseline-before-live lives in one reviewed plan whose attempt order is
+   the run order (`plan-order`); Stage-A-before-R2 was operational in the
+   audited head and is mechanically enforced since the remediation round —
+   calibration registration refuses without a verified Stage A prerequisite
+   bound to the registered `stage-a` identity at the same repository SHA
+   (§3.3, §6.1 item 2).
+
+## 6.1 Audit remediation round (audit commit `99eefbc`)
+
+The Advisor's Phase 4 audit accepted the comparator architecture (§7) and
+requested changes on four study-governance/operations findings; all four
+are remediated in this round:
+
+1. **Versioned calibration analyzer** (`m2-calibration-variance-analysis-1.0.0`,
+   `src/shared/calibrationAnalysis.ts` + `scripts/evaluation/calibrationVariance.ts`,
+   `npm run m2:analyze`): a distinct installed analysis program emitting
+   deterministic canonical JSON plus Markdown with every registered R2
+   output — the full pairwise matrix with distances and pairing
+   classifications; median/p10/p25/p75/p90 composite similarity under an
+   EXACTLY defined quantile algorithm (type-7 linear interpolation,
+   floor-rounded milli-units, integer arithmetic); first-divergence under
+   the matched-decision rule (ordinal pairs comparable only while context
+   hash — covering semantic world context, beliefs, memories, activity
+   state — hard-dependency fingerprint, and offered-affordance lists all
+   match; ordinal matching explicitly invalid after first divergence);
+   action-category/mode/transition entropies in milli-bits (base 2,
+   exact BigInt fixed-point logarithm — never `Math.log2` — floor-rounded
+   once, zero counts excluded, populations documented in the report
+   itself); outcome frequencies (commitment outcomes labeled as mechanical
+   terminal statuses, never moral blame); and the operational set reported
+   PER RUN and IN AGGREGATE (§3.4.F) — per-run request/acceptance counts,
+   coverage, failure categories, latency and token distributions, and a
+   per-run route-consistency verdict, plus aggregate emitted/accepted
+   totals, pooled floored coverage, summed failure categories, pooled
+   latency/token distributions, rationale-normalization frequency, and
+   distinct returned-model/serving-provider sets with an aggregate route
+   verdict. A CLOSED metric-producer registry
+   maps every registrable metric ID to its installed producer;
+   registration AND study reconciliation refuse a study declaring an
+   unimplemented metric or an uninstalled analysis version. Both study
+   templates now declare machine metric IDs. The §3.5 synthetic ten-run
+   fixture drives the pure analysis core: 45 pairs, quantile boundaries
+   and ties, entropy closed forms and floors (including transition
+   entropy asserted against its registered population), the divergence
+   matrix, returned-model inconsistency, exclusions, byte-identical
+   repetition, and the create-once write/render path; the filesystem
+   entry point (`analyzeCalibrationSequence`/`loadRunEvidence`) is
+   additionally drilled against REAL orchestrated evidence — the
+   validated-ledger decision-timeline join, the deterministic-run
+   exclusion, and refusals of non-completed sequences, doctored verdicts,
+   and non-strict-finalized run directories.
+2. **Authenticated Stage A prerequisite**
+   (`scripts/experiments/m2/stageAPrerequisite.ts`,
+   `m2-stage-a-prerequisite-1.0.0`): calibration registration VERIFIES a
+   completed Stage A root end to end (identity-checked archived plan,
+   every seal, strict inventory with recomputed aggregate, tree bytes,
+   immutable manifest reconciled against control state, semantic
+   revalidation, archive + digest sidecar + receipt + extraction) and
+   builds the canonical record — Stage A study/sequence identity,
+   repository SHA (must equal the calibration HEAD: any source change
+   after Stage A forces Stage A to run again), package/experiment/profile
+   identity, both execution IDs with conditions and gateway modes, prompt/
+   model/route identity, manifest/archive/receipt hashes, artifact/study/
+   replay/strict-finalization/threshold verdicts, the packaging-enforced
+   secret-scan witness, and the inventory aggregate. The record's SHA-256
+   is stamped into the registered calibration study (freeze projection)
+   and plan (configuration fingerprint → resume identity → every freeze
+   checkpoint). The ruling's live requirement is enforced: fake-gateway
+   Stage A evidence refuses unless the provenance-recorded drill flag is
+   set. The evidence must also BE the registered Stage A sequence: a real
+   calibration registration binds the prerequisite to the closed
+   registry's `stage-a` identity (study id/version, sequence id, attempt
+   profile), so any OTHER completed two-attempt sequence at the right SHA
+   refuses on identity. Drills run against ONE real keyless Stage
+   A-shaped sequence
+   (`plans/stage-a-drill.json`) with per-case tampered copies: missing
+   attempts, doctored verdicts, rewritten archived plan, modified
+   inventory, flipped archive byte, SHA mismatch, the identity-binding
+   refusal, plus the end-to-end registration binding.
+3. **Closed Git-authenticated transactional registration**
+   (`register.ts` rework): `m2:register` now takes `--registration
+   <stage-a|calibration-variance-a>` — template paths come from the closed
+   registry, never the command line. Every source is authenticated against
+   `git show HEAD:<path>` (working tree must match HEAD, git's own
+   eol-aware judgment), its blob ID and committed-byte SHA-256 recorded in
+   `registration-provenance.json`, whose hash is stamped into the
+   registered plan's fingerprint; the study instance carries its source
+   blob/hash in its own bytes and freeze projection. Pairing is enforced
+   (study id/version, plan sequence id, study binding, profile binding);
+   output is built in a staging sibling and atomically renamed into the
+   create-once destination — a failure leaves nothing, including failures
+   INSIDE the staging transaction (drilled with a committed template that
+   passes pairing but fails the metric-producer gate after staging
+   begins). Refusal tests cover unknown registrations, modified/untracked
+   sources, all four cross-pairing template swaps (each registration's
+   study and plan slots fed the OTHER pair's committed bytes, refused with
+   the offending field named), in-repo output, double registration, and
+   partial-output cleanup.
+4. **CI artifact profiles** (`scripts/ci/prepareCompactArtifact.mjs` +
+   workflow rework): routine PR/`main` runs execute and verify the FULL
+   rehearsal locally on the runner but upload only compact proof —
+   manifests, reports, control state, inventories, digest sidecars,
+   receipts, trace manifests, failure manifests — assembled by an
+   allowlist that hard-refuses ZIP/trace/image payloads, gated by a
+   registered ≤ 50 MiB budget with a machine-readable
+   `artifact-size-report.json` before upload (measured compact output:
+   ~0.2 MiB), retention 21 days. Full evidence uploads only on a failing
+   run or an explicit `workflow_dispatch` full-evidence input, retention
+   7 days, and is itself assembled by the same script under
+   `--profile full`: each sequence payload uploads exactly ONCE (sealed
+   ZIP + digest sidecar + receipt for archived sequences, whose raw trees
+   are contained in the ZIPs and excluded, plus the packaging-recovery
+   drill's preserved superseded archive as evidence; raw trees only for
+   never-archived sequences such as the failure drill), under a
+   registered ≤ 4 GiB full budget — measured ~2.7 GiB for the complete
+   keyless rehearsal set — with per-sequence uniqueness
+   dispositions in its own pre-upload `artifact-size-report.json`. Every
+   workflow upload now carries explicit `retention-days`.
+   Formal live evidence is retained locally as sealed packages with
+   independent durable backup — never entrusted to expiring Actions
+   artifacts.
+
+## 6.2 Remediation verification round
+
+The remediation itself was adversarially reviewed (27 read-only agents
+across the four finding areas plus regressions/documentation, each claim
+independently refuted or confirmed). Ten confirmed findings were applied
+before this head: analyzer §3.4.F per-run/aggregate completeness and §3.5
+entry-point/returned-model/transition-entropy coverage (item 1 above now
+describes the final state); the Stage A prerequisite's registered-identity
+binding (item 2); the staging-rollback and four cross-pairing registration
+drills (item 3); the full-evidence profile's uniqueness/budget rework
+(item 4); and the §3.2/§3.3/CI documentation corrections in this report,
+the technical reference, and the status pages. The real-evidence
+entry-point drill caught and fixed a genuine extraction defect (the
+decision-timeline reader filtered ledger events on a nonexistent field and
+returned zero decisions) — precisely the gap the coverage finding named.
 
 ## 7. Known limitations and scheduled work
 

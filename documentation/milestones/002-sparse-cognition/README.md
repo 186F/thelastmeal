@@ -8,9 +8,11 @@ upstream calls while preserving pre-registered behavioral similarity, with
 exact replay and no loss of simulation authority.
 
 **Status.** IN PROGRESS. Phases 1–3 are complete; the Phase 4
-implementation (package 1.9.0) is **complete and under Advisor audit**. No
+implementation (package 1.9.0) has its **audit remediation complete and
+awaits the Advisor's targeted re-audit of the four audit findings**
+(analyzer, Stage A prerequisite, registration, CI artifact profiles). No
 Milestone 2 live model calls have been made; Stage A and the calibration
-study execute only after the Phase 4 PR is audited, merged, and green on
+study execute only after the targeted re-audit, merge, and green
 merged-`main` CI, and only from `m2:register`-pinned instances of the
 reviewed study templates.
 
@@ -48,8 +50,9 @@ and the
    [re-audit](phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md) →
    [focused re-audit](phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md) →
    [**final targeted audit**](phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md) (final; authorized the merge)
-4. [Phase 4 per-decision comparator report](phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)
-   and [status](phase-04-per-decision/README.md)
+4. [Phase 4 per-decision comparator report](phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md),
+   its [audit](phase-04-per-decision/audits/MILESTONE_002_PHASE4_PER_DECISION_AUDIT.md)
+   (remediated; targeted re-audit pending), and [status](phase-04-per-decision/README.md)
 
 **Superseded documents.** Within each audit sequence, every document before
 the final one is SUPERSEDED — RETAINED FOR PROVENANCE: the progression of

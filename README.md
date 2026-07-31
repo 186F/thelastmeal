@@ -98,17 +98,17 @@ is future work — not a Milestone 2 claim.
 
 ## The project at a glance
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                         |
-| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                      |
-| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                         |
-| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                       |
-| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model. |
-| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); Phase 4 — the model-driven baseline arm of the experiment, its registered studies, and bounded tracing for long live runs — is implemented and under audit; the sparse policy system and the head-to-head comparison follow in later gated phases                           |
-| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                  |
-| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                    |
-| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                            |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                                              |
+| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                                           |
+| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                              |
+| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                            |
+| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                      |
+| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); Phase 4 — the model-driven baseline arm of the experiment, its registered studies, and bounded tracing for long live runs — has its audit remediation complete and awaits the Advisor's targeted re-audit; the sparse policy system and the head-to-head comparison follow in later gated phases |
+| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                       |
+| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                         |
+| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                 |
 
 This project deliberately versions several things separately. The three to
 keep apart while reading: the **software release** moves with every code
@@ -261,7 +261,7 @@ phases:
   entire pipeline, including deliberate failure drills
   ([report](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md),
   [operator runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)).
-- **Phase 4 (implemented, under audit):** the experiment's model-driven
+- **Phase 4 (audit remediation complete — awaiting targeted re-audit):** the experiment's model-driven
   baseline arm — the new AI condition and prompt under the Milestone 2
   experiment identity (with rationale and confidence downgraded to
   harmless diagnostic notes, so a chatty model can never invalidate a
@@ -275,7 +275,8 @@ phases:
 
 No live model calls have been made in any Milestone 2 phase so far; the
 first live runs (Stage A acceptance, then the calibration study) happen
-only after the Phase 4 implementation is audited and merged.
+only after the Phase 4 remediation passes its targeted re-audit and the
+PR is merged.
 
 ## Pre-registered success criteria
 
@@ -362,7 +363,8 @@ semantics are detailed in the
 | `npm run eval:reviewer-package` / `eval:score-reviews` | Blinded reviewer packages for validated live ledgers / score returned reviews                       |
 | `npm run study:validate`                               | Validate a registered study declaration file                                                        |
 | `npm run m2:orchestrate`                               | Run a planned experiment sequence unattended (`-- --plan <path>`; `-- --resume` resumes)            |
-| `npm run m2:register`                                  | Stamp reviewed plan/study templates to the exact current repository state before an evidentiary run |
+| `npm run m2:register`                                  | Register a reviewed template pair from the closed registry at the exact current repository state    |
+| `npm run m2:analyze`                                   | Produce the registered ten-run calibration variance analysis for a completed sequence               |
 | `npm run m2:evaluate` / `m2:package`                   | Re-derive evaluation outputs / produce the next versioned evidence archive for a completed sequence |
 | `npm run m2:rehearse`                                  | Self-verifying keyless rehearsal of the entire unattended pipeline, failure drills included         |
 | `npm run m2:pilot`                                     | Refusal stub until the pilot phase is authorized                                                    |

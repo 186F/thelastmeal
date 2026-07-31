@@ -41,6 +41,7 @@
     "m2:rehearse": "tsx scripts/experiments/m2/rehearse.ts",
     "m2:pilot": "tsx scripts/experiments/m2/cli.ts pilot",
     "m2:evaluate": "tsx scripts/experiments/m2/cli.ts evaluate",
+    "m2:analyze": "tsx scripts/experiments/m2/cli.ts analyze",
     "m2:package": "tsx scripts/experiments/m2/cli.ts package",
     "test:m2": "vitest run tests/unit/m2 tests/integration/m2"
   },

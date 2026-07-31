@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import type { StudyDeclaration } from '../../../src/shared/studyRegistry';
+import { assertMetricsProducible } from '../../../src/shared/calibrationAnalysis';
 import { SCENARIOS } from '../../../src/sim/scenarios/definitions';
 import type { AttemptProfile } from './attemptProfile';
 import type { OrchestratorPlan } from './planSchema';
@@ -56,7 +57,10 @@ export interface ReconciliationContext {
   /** Installed metric implementations, e.g. behavior-fingerprint →
    * behavior-fingerprint-1.0.0. */
   installedMetricVersions: Record<string, string>;
-  installedAnalysisVersion: string;
+  /** Installed analysis programs a study may declare (Phase 4 audit
+   * finding 1: the pairwise similarity metric, the calibration variance
+   * analyzer, the Stage A acceptance gates). */
+  installedAnalysisVersions: readonly string[];
 }
 
 export function reconcileStudyWithPlan(
@@ -209,11 +213,21 @@ export function reconcileStudyWithPlan(
       miss('metricVersions', `study pins ${metric}@${version}, installed is ${installed}`);
     }
   }
-  if (study.analysisScriptVersion !== context.installedAnalysisVersion) {
+  if (!context.installedAnalysisVersions.includes(study.analysisScriptVersion)) {
     miss(
       'analysisScriptVersion',
-      `study ${study.analysisScriptVersion} != installed ${context.installedAnalysisVersion}`,
+      `study ${study.analysisScriptVersion} is not among the installed analyses ` +
+        `[${context.installedAnalysisVersions.join(', ')}]`,
     );
+  }
+  // Metric-producer completeness (Phase 4 audit finding 1): every declared
+  // primary and secondary metric must resolve to an INSTALLED producer in
+  // the closed registry — a study can never promise an output the
+  // installed analysis surface cannot generate.
+  try {
+    assertMetricsProducible(study);
+  } catch (error) {
+    miss('metrics', error instanceof Error ? error.message : String(error));
   }
 
   // Threshold profile binding (the versioned mapping for thresholds).
