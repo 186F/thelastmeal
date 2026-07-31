@@ -90,8 +90,15 @@ export function loadGatewayConfig(
   env: Record<string, string | undefined> = process.env,
   root: string = process.cwd(),
 ): GatewayConfig {
-  const fileEnv = loadEnvFile(root);
+  // The FAKE adapter never reads `.env.gateway` (Phase 3 audit finding 9):
+  // a keyless rehearsal process must be provably incapable of observing live
+  // credentials or route configuration from a developer's local file. Only
+  // explicitly passed environment variables configure a fake gateway.
+  const fileEnv = adapterKind === 'fake' ? {} : loadEnvFile(root);
   const get = (name: string): string | undefined => env[name] ?? fileEnv[name];
+  // Fake mode also refuses to CARRY credentials that leak in via the
+  // process environment: the fields are blanked below regardless of env.
+  const secretsAllowed = adapterKind !== 'fake';
 
   const config: GatewayConfig = {
     adapterKind,
@@ -103,11 +110,11 @@ export function loadGatewayConfig(
     allowedBrowserOrigin: normalizeAllowedOrigin(
       get('ALLOWED_BROWSER_ORIGIN') ?? 'http://localhost:5173',
     ),
-    openaiApiKey: optional(get('OPENAI_API_KEY')),
+    openaiApiKey: secretsAllowed ? optional(get('OPENAI_API_KEY')) : null,
     openaiModel: optional(get('OPENAI_MODEL')),
-    openRouterApiKey: optional(get('OPENROUTER_API_KEY')),
-    openRouterModel: optional(get('OPENROUTER_MODEL')),
-    openRouterProvider: optional(get('OPENROUTER_PROVIDER')),
+    openRouterApiKey: secretsAllowed ? optional(get('OPENROUTER_API_KEY')) : null,
+    openRouterModel: secretsAllowed ? optional(get('OPENROUTER_MODEL')) : null,
+    openRouterProvider: secretsAllowed ? optional(get('OPENROUTER_PROVIDER')) : null,
     openRouterHttpReferer: optional(get('OPENROUTER_HTTP_REFERER')),
     openRouterAppTitle: optional(get('OPENROUTER_APP_TITLE')) ?? 'The Last Meal',
     maxRequestBodyBytes: 512 * 1024,
@@ -178,6 +185,16 @@ export function publicConfig(
       : config.adapterKind === 'openai'
         ? config.openaiModel
         : 'fake-adapter';
+  // Nonsecret serving route (Phase 3 audit finding 2): the pinned OpenRouter
+  // provider slug for live routes, 'local' for the fake adapter — exposed so
+  // the orchestrator can verify the reviewed plan's route BEFORE any run
+  // starts, without ever reading the gateway's own configuration files.
+  const servingProviderId =
+    config.adapterKind === 'openrouter'
+      ? (config.openRouterProvider ?? null)
+      : config.adapterKind === 'fake'
+        ? 'local'
+        : null;
   return {
     status: 'ok',
     experimentId: MODEL_EXPERIMENT_ID,
@@ -187,5 +204,6 @@ export function publicConfig(
     promptVersion,
     requestSchemaVersion,
     modelId,
+    servingProviderId,
   };
 }

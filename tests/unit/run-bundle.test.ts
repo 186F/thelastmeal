@@ -40,6 +40,7 @@ const PROVIDER_CONFIG = JSON.stringify({
   promptVersion: MODEL_PROMPT_VERSION,
   requestSchemaVersion: 1,
   modelId: 'fake-adapter',
+  servingProviderId: 'local',
 });
 
 let requestPool: ExternalDecisionRequest[] | null = null;

@@ -68,6 +68,11 @@ const providerConfigSchema = z
     promptVersion: z.string().min(1),
     requestSchemaVersion: z.number().int(),
     modelId: z.string().min(1).nullable(),
+    /** Nonsecret serving route ('local' for the fake adapter; the pinned
+     * OpenRouter provider slug for live). Deliberately NOT a client contract
+     * pin — the unattended orchestrator verifies it against the reviewed
+     * plan; the browser only displays what the gateway advertises. */
+    servingProviderId: z.string().min(1).nullable(),
   })
   .strict();
 

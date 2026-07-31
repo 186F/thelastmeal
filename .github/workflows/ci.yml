@@ -17,7 +17,9 @@ jobs:
   checks:
     name: Required checks (clean checkout)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45 minutes: the Phase 3 keyless orchestrator rehearsal drives three
+    # complete paced browser runs (~8 minutes) on top of the frozen gates.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +43,13 @@ jobs:
       - name: Validate frozen experiment data
         run: npm run validate
 
+      # The Chromium binary is needed BEFORE the unit suite: the
+      # packaging-recovery drills (focused re-audit finding 3) drive the
+      # real orchestrator resume, whose ordinary failing leg launches the
+      # real browser. The e2e step later reuses the same install.
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+
       - name: Unit and integration tests
         run: npm run test:run
 
@@ -59,9 +68,6 @@ jobs:
       - name: Build-secret scan (dist)
         run: npm run check:dist
 
-      - name: Install Playwright browser
-        run: npm run test:e2e:install
-
       - name: Browser end-to-end tests
         run: npm run test:e2e
 
@@ -78,6 +84,53 @@ jobs:
       # limitations; any unregistered finding fails.
       - name: Affordance and interruption-contract audit (known-gap registry)
         run: npm run audit:affordances
+
+      # Phase 3 unattended-orchestrator gates (M2 brief §19), after the
+      # audit per the A10 ordering rule. test:m2 is the fast logic suite;
+      # m2:rehearse drives the COMPLETE keyless unattended pipeline —
+      # Vite + Chromium + fresh fake-gateway children — and self-verifies
+      # the §19 properties plus the re-audit's evidence governance: the
+      # gateway-stop drill, the verified no-op resume (seals + inventory +
+      # manifest + semantic revalidation + archive + receipt),
+      # identity-refused resume, the sealed preserved-failure drill with
+      # its recorded forbidden disposition, the disposition-refused resume,
+      # and derived-output immutability.
+      - name: Orchestrator unit and integration tests
+        run: npm run test:m2
+
+      - name: Keyless unattended-orchestrator rehearsal
+        run: npm run m2:rehearse -- --ci
+
+      # The COMPLETE rehearsal evidence (audit finding 7; re-audit
+      # finding 1; focused re-audit finding 3): the versioned sealed
+      # archive, its receipt, the final evidence manifest and reports
+      # inside the immutable root, the control-root operational state, the
+      # failure-drill evidence, and the packaging-recovery drill — the
+      # superseded unreceipted archive 001 beside the recovered receipted
+      # archive 002 — with a hard failure if any path drifts.
+      - name: Upload m2 rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-orchestrator-rehearsal
+          path: |
+            artifacts/m2-rehearsal/m2-rehearsal-report.json
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip.sha256
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence-001.zip.receipt.json
+            artifacts/m2-sequences/rehearsal/sequence-manifest.json
+            artifacts/m2-sequences/rehearsal/sequence-report.json
+            artifacts/m2-sequences/rehearsal/sequence-report.md
+            artifacts/m2-sequences/rehearsal.control/sequence-state.json
+            artifacts/m2-sequences/failure-drill/
+            artifacts/m2-sequences/failure-drill.control/sequence-state.json
+            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-001.zip
+            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip
+            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip.sha256
+            artifacts/m2-sequences/m2-packaging-recovery-drill-evidence-002.zip.receipt.json
+            artifacts/m2-sequences/packaging-drill/sequence-manifest.json
+            artifacts/m2-sequences/packaging-drill.control/sequence-state.json
+          if-no-files-found: error
 
       - name: Upload model-rehearsal report
         if: always()
