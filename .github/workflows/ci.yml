@@ -40,6 +40,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Documentation link check
+        run: node scripts/docs/checkLinks.mjs
+
       - name: Validate frozen experiment data
         run: npm run validate
 

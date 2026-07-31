@@ -2,7 +2,7 @@
 
 **Repository:** `186F/thelastmeal`  
 **Pull request:** [#8](https://github.com/186F/thelastmeal/pull/8) — `agent/artifact-event-semantics-1.6.1` → `main`  
-**Brief:** [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md) (merged as PR #7), as amended below  
+**Brief:** [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md`](../briefs/MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_REMEDIATION_BRIEF.md) (merged as PR #7), as amended below  
 **Base commit:** `6a1ea5cb41bb1342d95a59e03d1a58d14666a5c3` (`main` after PR #7)  
 **Final commit:** `b8b2d775cd5704c3a405661b3234be5eb28c877a` (PR head; merged as `219079be739928ab00c7847ced35987d5e11fdd9`)  
 **Package version:** `1.6.1`  
@@ -142,7 +142,7 @@ still exactly one outcome ladder.
 
 ## Superseded prior documentation
 
-[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md)
+[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](../briefs/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md)
 §4.7 describes the per-request engine resolution set as `accepted / rejected / expired`.
 That ladder is **SUPERSEDED** by this work: the canonical request resolutions are
 `accepted / expired / superseded`, and a rejection is a verdict about one submitted

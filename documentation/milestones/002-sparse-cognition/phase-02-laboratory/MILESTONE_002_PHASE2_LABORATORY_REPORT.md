@@ -1,12 +1,12 @@
 # Milestone 2 — Phase 2 Laboratory Foundation — Implementation Report
 
 **Package:** `1.7.0` (first Milestone 2 source PR)
-**Governing documents:** [`MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md`](MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) §10, §21, §27.6–§27.8, §31 Phase 2, and the authoritative [`MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)
+**Governing documents:** [`MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md`](../MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) §10, §21, §27.6–§27.8, §31 Phase 2, and the authoritative [`MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](../MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)
 **Scope discipline:** no canonical simulation-mechanics change; no orchestrator, no M2 conditions, no policy system, no prompts, no commitment repair, no live API calls. All fourteen deterministic golden hashes are byte-identical (batch + explicit golden test at the implementation head).
 
 ## 0. Remediation record — Phase 2 audit (July 30, 2026)
 
-[`MILESTONE_002_PHASE2_LABORATORY_AUDIT.md`](MILESTONE_002_PHASE2_LABORATORY_AUDIT.md) requested changes on four blocking findings. All four are remediated in this head; the four version-1 contracts retain their `1.0.0` literals per the audit's explicit allowance (nothing had merged).
+[`MILESTONE_002_PHASE2_LABORATORY_AUDIT.md`](audits/MILESTONE_002_PHASE2_LABORATORY_AUDIT.md) requested changes on four blocking findings. All four are remediated in this head; the four version-1 contracts retain their `1.0.0` literals per the audit's explicit allowance (nothing had merged).
 
 | Audit finding | Resolution |
 | --- | --- |
@@ -19,7 +19,7 @@ Non-blocking corrections in the same head: strict reviewer-score schema with `re
 
 ## 0.1 Re-audit remediation record (July 30, 2026)
 
-[`MILESTONE_002_PHASE2_LABORATORY_REAUDIT.md`](MILESTONE_002_PHASE2_LABORATORY_REAUDIT.md) accepted the first remediation's architecture and requested three targeted version-1 contract completions, all resolved in this head:
+[`MILESTONE_002_PHASE2_LABORATORY_REAUDIT.md`](audits/MILESTONE_002_PHASE2_LABORATORY_REAUDIT.md) accepted the first remediation's architecture and requested three targeted version-1 contract completions, all resolved in this head:
 
 | Re-audit blocker | Resolution |
 | --- | --- |
@@ -31,7 +31,7 @@ Minor items in the same head: exact-head test count updated (§7.1 of the re-aud
 
 ## 0.2 Targeted re-audit remediation record (July 30, 2026)
 
-[`MILESTONE_002_PHASE2_LABORATORY_TARGETED_REAUDIT.md`](MILESTONE_002_PHASE2_LABORATORY_TARGETED_REAUDIT.md) accepted every prior remediation and named one focused evidence-integrity blocker, resolved in this head:
+[`MILESTONE_002_PHASE2_LABORATORY_TARGETED_REAUDIT.md`](audits/MILESTONE_002_PHASE2_LABORATORY_TARGETED_REAUDIT.md) accepted every prior remediation and named one focused evidence-integrity blocker, resolved in this head:
 
 - **Exact trace-to-ledger request join (§4.4):** the evidence loader now builds the canonical external-request map from the validated ledger (`requestId → {npcId, providerId, requestedAtLogicalTick}`) and requires the finalized trace to be a **bijection** onto it — exactly one row per canonical requestId, no missing, extra, duplicated, or substituted ids — with every row reproducing its request's NPC, provider, and logical request tick. Violations fail with `run-evidence-conflict`; nothing is repaired, deduplicated, or downgraded. Seven reseal-style regression tests cover the §4.5 matrix, including the two aggregate-preserving tampers the ruling highlighted (deleting a `gatewayOutcome: null` row in the gateway-stop shape; substituting one null-outcome request id for another). All five sealed M1 r2 finalized runs pass the exact join.
 - **§5.1:** exact-head counts corrected below (the CI log is authoritative: 61 Vitest files).

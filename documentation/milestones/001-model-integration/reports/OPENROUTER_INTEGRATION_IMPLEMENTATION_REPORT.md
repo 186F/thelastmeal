@@ -287,7 +287,7 @@ The live acceptance report must record the requested model, returned model ident
 
 ## Known limitations and next gate
 
-1. OpenRouter's Responses API is beta; one disposable live smoke request is required before formal collection. **Satisfied 2026-07-28:** the disposable smoke test was executed after merge — a first request failed on an upstream 429 shared-pool rate limit, the second passed — and both attempts are recorded as non-formal evidence in [`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
+1. OpenRouter's Responses API is beta; one disposable live smoke request is required before formal collection. **Satisfied 2026-07-28:** the disposable smoke test was executed after merge — a first request failed on an upstream 429 shared-pool rate limit, the second passed — and both attempts are recorded as non-formal evidence in [`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](../acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
 2. Router metadata is additive and may be absent in some early API-edge or cache/error cases. The integration decodes it permissively and never lets metadata absence affect canonical simulation behavior.
 3. The existing finalized-trace field named `engineResolutionEventId` still carries the pre-1.6.0 semantics identified in the prior audit. That artifact-only correction should be merged before the formal six-run acceptance dataset is collected. **Closed by release 1.6.1:** finalized-trace schema v3 separates the engine submission (`engineSubmissionEventId`), the response verdict (`responseVerdictEventId`), and the canonical request resolution (`engineResolutionEventId`); the implementation PR, commits, CI runs, and schema-version evidence are recorded in [`MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_EVENT_SEMANTICS_IMPLEMENTATION_REPORT.md).
 4. No live OpenRouter request has been executed by this implementation. The live acceptance report remains `PENDING`. **Superseded by later live traffic (flag added in release 1.6.2):** the two disposable smoke requests of 2026-07-28 (item 1) and the 54 upstream calls of the aborted 2026-07-29 v1.1.0 acceptance attempt (addendum below) have since been executed through this implementation; the live acceptance report itself remains `PENDING` and no formal live acceptance is claimed.
@@ -332,7 +332,7 @@ zero failed criteria — but 12 of its 54 upstream calls failed as
 `upstream-error`, putting upstream completion and accepted-model coverage at
 77.8% against the pre-registered ≥ 90% / ≥ 80% thresholds. Diagnosis (recorded
 with the attempt in
-[`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)):
+[`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](../acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)):
 `inclusionai/ling-2.6-flash` is served by exactly one OpenRouter endpoint
 (`novita`), and because this integration pins the route with
 `allow_fallbacks: false`, exhausting that single shared-pool allocation leaves
