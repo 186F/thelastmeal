@@ -104,15 +104,70 @@ describe('terminal state for every exit shape (§4.4)', () => {
     expect(manager.health().runningChildren).toEqual([]);
   });
 
-  it('a post-spawn error event is terminal as spawn-error, never a running child', async () => {
+  it('a post-spawn error is a NONTERMINAL diagnostic: the live child stays running until a genuine exit (final audit blocker 1)', async () => {
     const manager = new ProcessManager();
     const managed = spawnNode(manager, 'error-event', LONG_RUNNING);
-    managed.child.emit('error', new Error('injected process error'));
-    await expect(managed.exited).resolves.toBe('spawn-error');
-    expect(managed.hasExited()).toBe(true);
-    expect(managed.terminalOutcome()).toBe('spawn-error');
-    expect(manager.health().runningChildren).toEqual([]);
+    // An operation error on a live child — e.g. a failed kill or IPC call —
+    // must never be treated as proof of process termination.
+    managed.child.emit('error', new Error('injected operation error'));
+    expect(managed.hasExited()).toBe(false);
+    expect(managed.terminalOutcome()).toBeNull();
+    expect(manager.health().runningChildren).toEqual(['error-event']);
+    // The diagnostic is recorded and visible, per child and in health.
+    expect(managed.processErrors()).toEqual(['injected operation error']);
+    expect(manager.health().processErrorCount).toBe(1);
+    expect(manager.health().lastProcessError).toBe('error-event: injected operation error');
+    // Only the GENUINE exit establishes terminal state.
     managed.child.kill('SIGKILL');
+    await expect(managed.exited).resolves.toBe('signal:SIGKILL');
+    expect(managed.hasExited()).toBe(true);
+    expect(manager.health().runningChildren).toEqual([]);
+    // The diagnostic remains visible in provenance after the exit.
+    expect(manager.health().processErrorCount).toBe(1);
+    expect(manager.health().lastProcessError).toBe('error-event: injected operation error');
+  });
+
+  it('a failed-kill error followed by a later real exit records the true outcome, never spawn-error', async () => {
+    const manager = new ProcessManager();
+    const managed = spawnNode(manager, 'kill-fails-first', LONG_RUNNING);
+    managed.child.emit('error', new Error('kill EPERM (simulated failed kill)'));
+    managed.child.emit('error', new Error('second operation error'));
+    expect(managed.hasExited()).toBe(false);
+    expect(managed.processErrors()).toHaveLength(2);
+    managed.child.kill('SIGTERM');
+    await expect(managed.exited).resolves.toBe('signal:SIGTERM');
+    expect(managed.terminalOutcome()).toBe('signal:SIGTERM');
+    expect(managed.exitSignal()).toBe('SIGTERM');
+    expect(manager.health().runningChildren).toEqual([]);
+  });
+
+  it('a stop that cannot CONFIRM termination reports stop-unconfirmed, counts a stop failure, and keeps the child unreconciled', async () => {
+    const manager = new ProcessManager();
+    // A hand-built unkillable child: every kill operation is a no-op and no
+    // exit event ever arrives — the shutdown contract must FAIL provenance
+    // rather than report success.
+    const unkillable: ManagedProcess = {
+      name: 'unkillable',
+      child: {
+        exitCode: null,
+        signalCode: null,
+        kill: () => true,
+      } as unknown as ManagedProcess['child'],
+      pid: 999_999_999,
+      logPath: join(scratchDir(), 'unkillable.log'),
+      exited: new Promise<string>(() => undefined),
+      hasExited: () => false,
+      terminalOutcome: () => null,
+      numericExitCode: () => null,
+      exitSignal: () => null,
+      processErrors: () => [],
+      stopRequested: () => false,
+    };
+    const before = manager.health().stopFailures;
+    const outcome = await manager.stop(unkillable, 200);
+    expect(outcome).toBe('stop-unconfirmed');
+    expect(manager.health().stopFailures).toBe(before + 1);
+    expect(unkillable.hasExited()).toBe(false);
   });
 });
 
@@ -139,6 +194,16 @@ describe('gateway-death classification uses terminal state (§4.3)', () => {
     const gateway = spawnNode(manager, 'gateway-fake', LONG_RUNNING);
     expect(classifyChildTerminalState(gateway, false)).toBe('still-running');
     await manager.stop(gateway, 500);
+  });
+
+  it('gateway death is classified ONLY after genuine termination: an operation error alone stays still-running', async () => {
+    const manager = new ProcessManager();
+    const gateway = spawnNode(manager, 'gateway-fake', LONG_RUNNING);
+    gateway.child.emit('error', new Error('operation error on a live gateway'));
+    expect(classifyChildTerminalState(gateway, false)).toBe('still-running');
+    gateway.child.kill('SIGKILL');
+    await gateway.exited;
+    expect(classifyChildTerminalState(gateway, false)).toBe('unexpected-terminal-exit');
   });
 
   it('an EXTERNALLY signal-terminated gateway classifies unexpected-terminal-exit (gateway-died-unexpectedly)', async () => {

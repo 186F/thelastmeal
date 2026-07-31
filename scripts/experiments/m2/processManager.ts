@@ -5,22 +5,36 @@ import { helperEnv } from './childEnv';
 
 /**
  * Child-process management for the orchestrator (M2 brief §19.5;
- * re-audit findings 6 and 13.1; focused re-audit finding 1).
+ * re-audit findings 6 and 13.1; focused re-audit finding 1; final audit
+ * blocker 1).
  *
  * Every managed child records its PID, captured stdout/stderr (to a log
- * file), and its TERMINAL STATE. A child can end three ways — a numeric
- * exit code, a signal (numeric code null), or a spawn error — and all
- * three are terminal: liveness is decided by `hasExited()`, never by the
- * numeric exit code alone, so a signal-killed child is never mistaken for
- * a running one and a signal-killed gateway never evades death detection.
- * Shutdown is graceful first (SIGTERM / Windows taskkill without /F), then
- * force-kill after a fixed timeout. The orchestrator never leaves children
- * running: `stopAll` runs in `finally` on success and failure alike.
+ * file), and its TERMINAL STATE. A child ends by a numeric exit code or a
+ * signal (numeric code null) — both established ONLY by a genuine `exit`
+ * event. A post-spawn `error` event is NOT proof of process termination:
+ * it may describe a failed kill, IPC, or abort operation on a child that
+ * is still alive, so it is recorded as a PROCESS-OPERATION DIAGNOSTIC
+ * (counted, message retained, per-child list) and the child stays in
+ * `runningChildren` until it actually exits. Liveness is decided by
+ * `hasExited()`, never by the numeric exit code alone, so a signal-killed
+ * child is never mistaken for a running one and a signal-killed gateway
+ * never evades death detection. A command that never spawns (no PID) is
+ * refused immediately and never becomes a managed child.
  *
- * Provenance is a GATE, not best-effort: record-write and stop failures
- * are counted in `health()`, and the sequence report carries them
- * explicitly instead of implying complete provenance. The Windows
- * `taskkill` helpers run under the nonsecret helper environment.
+ * Shutdown is graceful first (SIGTERM / Windows taskkill without /F), then
+ * force-kill, then a BOUNDED confirmation wait: if genuine termination
+ * cannot be established within the shutdown contract, `stop()` returns
+ * `stop-unconfirmed`, counts a stop failure, and the child remains an
+ * unreconciled running child — process provenance FAILS rather than
+ * reporting a successful shutdown that never happened. The orchestrator
+ * never leaves children running: `stopAll` runs in `finally` on success
+ * and failure alike.
+ *
+ * Provenance is a GATE, not best-effort: record-write failures, stop
+ * failures, and process-operation errors are counted in `health()`, and
+ * the sequence report carries them explicitly instead of implying complete
+ * provenance. The Windows `taskkill` helpers run under the nonsecret
+ * helper environment.
  */
 
 export interface ProcessManagerHealth {
@@ -28,8 +42,13 @@ export interface ProcessManagerHealth {
   recordWriteFailures: number;
   lastRecordWriteError: string | null;
   stopFailures: number;
-  /** Managed children with no observed TERMINAL state (exit code, signal,
-   * or spawn error) at reconciliation time (focused re-audit finding 1). */
+  /** Post-spawn process-operation `error` events (final audit blocker 1):
+   * diagnostics, never terminal proof — but always VISIBLE. */
+  processErrorCount: number;
+  lastProcessError: string | null;
+  /** Managed children with no GENUINE terminal exit observed at
+   * reconciliation time. A child that emitted only operation errors is
+   * still here (final audit blocker 1). */
   runningChildren: string[];
 }
 
@@ -39,18 +58,21 @@ export interface ManagedProcess {
   pid: number;
   logPath: string;
   /** Resolves with the terminal outcome — the numeric exit code as a
-   * string, `signal:<NAME>`, or `spawn-error` — once the child ends. */
+   * string or `signal:<NAME>` — once the child GENUINELY exits. */
   exited: Promise<string>;
-  /** True once ANY terminal state was observed: numeric exit, signal
-   * termination, or spawn error (focused re-audit finding 1). */
+  /** True only once a genuine terminal exit was observed (final audit
+   * blocker 1): a post-spawn `error` event never sets this. */
   hasExited: () => boolean;
   /** The exact terminal outcome string, or null while running. */
   terminalOutcome: () => string | null;
-  /** The numeric exit code; null while running AND for signal/spawn-error
+  /** The numeric exit code; null while running AND for signal
    * terminations — never a liveness signal on its own. */
   numericExitCode: () => number | null;
   /** The terminating signal name, or null. */
   exitSignal: () => string | null;
+  /** Post-spawn process-operation errors observed for THIS child (final
+   * audit blocker 1): diagnostics, never terminal proof. */
+  processErrors: () => readonly string[];
   /** True once the ORCHESTRATOR requested a stop through `stop()` — used
    * to separate orchestrator-initiated shutdown from an unexpected death. */
   stopRequested: () => boolean;
@@ -98,6 +120,8 @@ export class ProcessManager {
   private recordWriteFailures = 0;
   private lastRecordWriteError: string | null = null;
   private stopFailures = 0;
+  private processErrorCount = 0;
+  private lastProcessError: string | null = null;
   /** Per-child setter that marks an orchestrator-initiated stop
    * (focused re-audit finding 1 §4.3). */
   private readonly stopIntent = new WeakMap<ManagedProcess, () => void>();
@@ -132,6 +156,8 @@ export class ProcessManager {
       recordWriteFailures: this.recordWriteFailures,
       lastRecordWriteError: this.lastRecordWriteError,
       stopFailures: this.stopFailures,
+      processErrorCount: this.processErrorCount,
+      lastProcessError: this.lastProcessError,
       runningChildren: this.managed
         .filter((managedProcess) => !managedProcess.hasExited())
         .map((managedProcess) => managedProcess.name),
@@ -162,12 +188,16 @@ export class ProcessManager {
     child.stdout?.on('data', (chunk: Buffer) => log('stdout', chunk));
     child.stderr?.on('data', (chunk: Buffer) => log('stderr', chunk));
     this.record({ event: 'spawned', name: options.name, pid: child.pid });
-    // Terminal state (focused re-audit finding 1): recorded ONCE from
-    // whichever terminal event fires first. A signal exit keeps its numeric
-    // code null but is fully terminal; a spawn error is terminal too —
-    // neither may linger as a phantom running child.
+    // Terminal state (focused re-audit finding 1; final audit blocker 1):
+    // established ONLY by a genuine `exit` event, recorded once. A signal
+    // exit keeps its numeric code null but is fully terminal. A post-spawn
+    // `error` event is a PROCESS-OPERATION DIAGNOSTIC — a failed kill or
+    // IPC operation on a possibly-still-alive child — recorded and counted
+    // but NEVER terminal proof: declaring such a child dead could orphan a
+    // live Vite/gateway process behind a false-green provenance gate.
     let terminal: { outcome: string; code: number | null; signal: string | null } | null = null;
     let stopWasRequested = false;
+    const childProcessErrors: string[] = [];
     const exited = new Promise<string>((resolve) => {
       child.on('exit', (exitCode, signal) => {
         if (terminal !== null) return;
@@ -176,11 +206,17 @@ export class ProcessManager {
         this.record({ event: 'exited', name: options.name, pid: child.pid, exit: outcome });
         resolve(outcome);
       });
-      child.on('error', () => {
-        if (terminal !== null) return;
-        terminal = { outcome: 'spawn-error', code: null, signal: null };
-        this.record({ event: 'spawn-error', name: options.name, pid: child.pid });
-        resolve('spawn-error');
+      child.on('error', (error: Error) => {
+        const message = error.message || String(error);
+        childProcessErrors.push(message);
+        this.processErrorCount += 1;
+        this.lastProcessError = `${options.name}: ${message}`;
+        this.record({
+          event: 'process-error',
+          name: options.name,
+          pid: child.pid,
+          error: message,
+        });
       });
     });
     const managedProcess: ManagedProcess = {
@@ -193,6 +229,7 @@ export class ProcessManager {
       terminalOutcome: () => terminal?.outcome ?? null,
       numericExitCode: () => terminal?.code ?? null,
       exitSignal: () => terminal?.signal ?? null,
+      processErrors: () => [...childProcessErrors],
       stopRequested: () => stopWasRequested,
     };
     // `stop()` flags intent through this seam so the flag stays private to
@@ -235,9 +272,16 @@ export class ProcessManager {
     });
   }
 
-  /** Graceful stop, then force-kill after `graceMs`. Windows has no POSIX
-   * signal delivery to detached consoles, so graceful = taskkill (no /F)
-   * and force = child.kill() plus taskkill /F /T. Marks the stop as
+  /** Graceful stop, then force-kill after `graceMs`, then a BOUNDED
+   * confirmation wait (final audit blocker 1): a kill operation that
+   * errors is a recorded diagnostic, never termination proof, so `stop()`
+   * keeps waiting for the GENUINE exit — and when termination cannot be
+   * established within the shutdown contract it returns
+   * `stop-unconfirmed`, counts a stop failure, and leaves the child in
+   * `runningChildren`, failing process provenance rather than reporting a
+   * shutdown that never happened. Windows has no POSIX signal delivery to
+   * detached consoles, so graceful = taskkill (no /F) and force =
+   * child.kill() plus taskkill /F /T. Marks the stop as
    * orchestrator-initiated BEFORE acting, so classification never mistakes
    * this shutdown for an unexpected death (focused re-audit finding 1). */
   async stop(managedProcess: ManagedProcess, graceMs = 5_000): Promise<string> {
@@ -246,21 +290,27 @@ export class ProcessManager {
     if (child.exitCode !== null || child.signalCode !== null) {
       return managedProcess.exited;
     }
+    const waitBounded = (boundMs: number): Promise<string | 'timeout'> =>
+      Promise.race([
+        managedProcess.exited,
+        new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), boundMs)),
+      ]);
     if (process.platform === 'win32') {
       this.taskkill(managedProcess.pid, false);
     } else {
       child.kill('SIGTERM');
     }
-    const raceResult = await Promise.race([
-      managedProcess.exited,
-      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), graceMs)),
-    ]);
-    if (raceResult !== 'timeout') return raceResult;
+    const graceful = await waitBounded(graceMs);
+    if (graceful !== 'timeout') return graceful;
     if (process.platform === 'win32') {
       this.taskkill(managedProcess.pid, true);
     }
     child.kill('SIGKILL');
-    return managedProcess.exited;
+    const forced = await waitBounded(graceMs);
+    if (forced !== 'timeout') return forced;
+    this.stopFailures += 1;
+    this.record({ event: 'stop-unconfirmed', name: managedProcess.name, pid: managedProcess.pid });
+    return 'stop-unconfirmed';
   }
 
   async stopAll(graceMs = 5_000): Promise<void> {

@@ -223,10 +223,93 @@ async function scanNestedArchives(
   return findings;
 }
 
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/**
+ * Strict inventory authentication (final audit blocker 2): ONE shared
+ * validator used everywhere inventory evidence is consumed — completed
+ * resume, standalone packaging, packaging recovery, and archive
+ * extraction verification all flow through `readInventory` and/or
+ * `verifyTreeAgainstInventory`, which both call this. The aggregate is
+ * RECOMPUTED from the exact validated entries and must equal the stored
+ * `aggregateSha256`: an aggregate-preserving entry rewrite (alter a file,
+ * update only that entry's hash) can no longer self-certify, because the
+ * stored aggregate stops recomputing. Entry hygiene is structural:
+ * relative forward-slash paths only, no traversal or dot segments, no
+ * duplicates, canonical sorted order, well-formed SHA-256 everywhere.
+ */
+export function validateInventory(raw: unknown, context: string): InventoryFile {
+  const refuse: (detail: string) => never = (detail) => {
+    throw new Error(`inventory-invalid (${context}): ${detail}`);
+  };
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    refuse('not a JSON object');
+  }
+  const record = raw as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (keys.length !== 2 || keys[0] !== 'aggregateSha256' || keys[1] !== 'files') {
+    refuse(`unexpected shape (keys: ${keys.join(', ')})`);
+  }
+  const aggregate = record.aggregateSha256;
+  if (typeof aggregate !== 'string' || !SHA256_PATTERN.test(aggregate)) {
+    refuse('aggregateSha256 is not a well-formed lowercase sha256');
+  }
+  if (!Array.isArray(record.files) || record.files.length === 0) {
+    refuse('files must be a nonempty array');
+  }
+  const files: { name: string; sha256: string }[] = [];
+  for (const entry of record.files as unknown[]) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      refuse('entry is not an object');
+    }
+    const entryRecord = entry as Record<string, unknown>;
+    const entryKeys = Object.keys(entryRecord).sort();
+    if (entryKeys.length !== 2 || entryKeys[0] !== 'name' || entryKeys[1] !== 'sha256') {
+      refuse(`entry has unexpected shape (keys: ${entryKeys.join(', ')})`);
+    }
+    const { name, sha256 } = entryRecord;
+    if (typeof name !== 'string' || name.length === 0) refuse('entry name empty');
+    if (typeof sha256 !== 'string' || !SHA256_PATTERN.test(sha256)) {
+      refuse(`entry sha256 malformed for '${name}'`);
+    }
+    if (name.includes('\\')) refuse(`entry path uses backslashes: '${name}'`);
+    if (name.startsWith('/') || /^[A-Za-z]:/.test(name)) {
+      refuse(`entry path is absolute: '${name}'`);
+    }
+    for (const segment of name.split('/')) {
+      if (segment === '' || segment === '.' || segment === '..') {
+        refuse(`entry path is not normalized: '${name}'`);
+      }
+    }
+    files.push({ name, sha256 });
+  }
+  const names = files.map((file) => file.name);
+  if (new Set(names).size !== names.length) refuse('duplicate entry paths');
+  const sorted = [...names].sort();
+  for (let index = 0; index < names.length; index += 1) {
+    if (names[index] !== sorted[index]) {
+      refuse('entries are not in canonical sorted order');
+    }
+  }
+  const recomputed = createHash('sha256')
+    .update(files.map((file) => `${file.name}:${file.sha256}`).join('\n'))
+    .digest('hex');
+  if (recomputed !== aggregate) {
+    refuse('aggregateSha256 does not recompute from the entries');
+  }
+  return { files, aggregateSha256: aggregate };
+}
+
 export function readInventory(sequenceRoot: string): InventoryFile | null {
   const path = join(sequenceRoot, INVENTORY_FILE_NAME);
   if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, 'utf8')) as InventoryFile;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    throw new Error(`inventory-invalid (read): ${path} is not parseable JSON`);
+  }
+  return validateInventory(parsed, 'read');
 }
 
 /**
@@ -241,6 +324,9 @@ export function verifyTreeAgainstInventory(
   inventory: InventoryFile,
   context: string,
 ): void {
+  // Every consumer authenticates the inventory itself first (final audit
+  // blocker 2): entries validated, aggregate recomputed.
+  validateInventory(inventory, context);
   const actual = walkFiles(root).sort();
   for (const name of actual) {
     if (name.includes('\\') || name.includes('..')) {

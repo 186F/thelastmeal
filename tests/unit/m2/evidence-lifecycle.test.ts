@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { completedRun } from '../../helpers';
@@ -352,6 +353,30 @@ describe('derived commands never mutate the completed root (re-audit §9.4/§5.5
     writeFileSync(join(fixture.root, 'planted.md'), 'mutation', 'utf8');
     await expect(runCli(['package', '--sequence', fixture.root])).rejects.toThrow(
       /inventory-tree-mismatch/,
+    );
+  });
+
+  it('an aggregate-preserving inventory entry rewrite refuses completed resume AND standalone packaging alike (final audit §4.4)', async () => {
+    // The §4.2 bypass on the COMPLETED paths: mutate an inventoried
+    // non-attempt file, rewrite only its entry hash, keep the aggregate.
+    // The recomputed aggregate stops matching, so every consumer that
+    // reads the inventory refuses consistently.
+    const fixture = await completedSequenceFixture();
+    const manifestPath = join(fixture.root, 'sequence-manifest.json');
+    writeFileSync(manifestPath, `${readFileSync(manifestPath, 'utf8')} `, 'utf8');
+    const inventoryPath = join(fixture.root, 'sha256-inventory.json');
+    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8')) as {
+      files: { name: string; sha256: string }[];
+      aggregateSha256: string;
+    };
+    const entry = inventory.files.find((file) => file.name === 'sequence-manifest.json')!;
+    entry.sha256 = createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
+    writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, 'utf8');
+    await expect(
+      verifyCompletedSequence(fixture.root, fixture.state, fixture.plan),
+    ).rejects.toThrow(/inventory-invalid.*aggregateSha256 does not recompute/);
+    await expect(runCli(['package', '--sequence', fixture.root])).rejects.toThrow(
+      /inventory-invalid.*aggregateSha256 does not recompute/,
     );
   });
 

@@ -40,6 +40,7 @@ import {
   SEQUENCE_STATE_VERSION,
   readSequenceState,
   sealExecution,
+  stateFilePath,
   writeSequenceState,
   type SequenceState,
 } from '../../../scripts/experiments/m2/sequenceState';
@@ -440,9 +441,11 @@ describe('every late packaging failure recovers through the packaging-only resum
     { timeout: 300_000 },
     async () => {
       const fixture = attemptsCompleteFixture();
-      // Fabricate a fully self-consistent inventory over the current tree
-      // and a packaging-failure state that never recorded an aggregate.
-      const names = ['plan.archived.json', 'attempt-a-rec-e1/behavior-fingerprint.json'];
+      // Fabricate a fully VALIDATOR-PASSING inventory over the current tree
+      // (canonical order, recomputing aggregate) and a packaging-failure
+      // state that never recorded an aggregate — only the control-state
+      // authentication gate can refuse it.
+      const names = ['attempt-a-rec-e1/behavior-fingerprint.json', 'plan.archived.json'].sort();
       const files = names.map((name) => ({
         name,
         sha256: sha256(readFileSync(join(fixture.root, name))),
@@ -479,6 +482,138 @@ describe('every late packaging failure recovers through the packaging-only resum
       state.executions[0]!.navigationCount = 7;
       writeSequenceState(fixture.root, state);
       await expect(resume(fixture.planPath)).rejects.toThrow(/completed-manifest-state-divergence/);
+      expect(readSequenceState(fixture.root)!.status).not.toBe('completed');
+    },
+  );
+
+  it(
+    'an entry-hash rewrite with an UNCHANGED aggregate refuses recovery before any archive or state mutation (final audit §4.4)',
+    { timeout: 300_000 },
+    async () => {
+      const fixture = await strandThroughOrchestrator(POINTS.find((p) => p.key === 'receipt')!);
+      // The §4.2 bypass: mutate an inventoried log, cover it by rewriting
+      // ONLY that entry's hash, and leave aggregateSha256 unchanged — the
+      // control-state aggregate comparison alone would still pass.
+      appendFileSync(fixture.viteLogPath, 'covered tamper\n');
+      const inventoryPath = join(fixture.root, 'sha256-inventory.json');
+      const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8')) as {
+        files: { name: string; sha256: string }[];
+        aggregateSha256: string;
+      };
+      inventory.files.find((file) => file.name === 'vite.log')!.sha256 = sha256(
+        readFileSync(fixture.viteLogPath),
+      );
+      writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, 'utf8');
+      const stateBefore = readFileSync(stateFilePath(fixture.root), 'utf8');
+      await expect(resume(fixture.planPath)).rejects.toThrow(
+        /inventory-invalid.*aggregateSha256 does not recompute/,
+      );
+      // Refused BEFORE archive creation or any recovery-state mutation.
+      expect(readFileSync(stateFilePath(fixture.root), 'utf8')).toBe(stateBefore);
+      expect(existsSync(join(fixture.base, 'packaging-recovery-fixture-evidence-002.zip'))).toBe(
+        false,
+      );
+      expect(readSequenceState(fixture.root)!.status).toBe('failed');
+    },
+  );
+
+  it(
+    'a competing invocation that completes first turns the delayed one into a verified NO-OP (final audit §5.4)',
+    { timeout: 300_000 },
+    async () => {
+      const fixture = await strandThroughOrchestrator(POINTS.find((p) => p.key === 'receipt')!);
+      let competitor: Awaited<ReturnType<typeof resume>> | null = null;
+      let stateAfterCompetitor: string | null = null;
+      // Invocation B passes the recovery dispatch on the FAILED state, then
+      // — before acquiring the writer lock — invocation A runs the complete
+      // recovery. B must re-read under the lock and become a verified no-op.
+      const delayed = await orchestrateSequence({
+        planPath: fixture.planPath,
+        resume: true,
+        acknowledgeLiveCost: false,
+        allowSleepRisk: true,
+        headed: false,
+        repoRoot: REPO_ROOT,
+        onBeforeRecoveryLock: async () => {
+          competitor = await resume(fixture.planPath);
+          stateAfterCompetitor = readFileSync(stateFilePath(fixture.root), 'utf8');
+        },
+      });
+      expect(competitor!.packagingRecovery).toBe(true);
+      expect(competitor!.status).toBe('completed');
+      expect(delayed.status).toBe('completed');
+      expect(delayed.noOpResume).toBe(true);
+      expect(delayed.packagingRecovery).toBe(false);
+      // No additional archive was created and nothing was overwritten from
+      // the delayed invocation's stale pre-lock view: checkpoints,
+      // supersededArchives, archive identity, and timestamps are untouched.
+      expect(existsSync(join(fixture.base, 'packaging-recovery-fixture-evidence-003.zip'))).toBe(
+        false,
+      );
+      expect(readFileSync(stateFilePath(fixture.root), 'utf8')).toBe(stateAfterCompetitor);
+    },
+  );
+
+  it(
+    'an INVENTORY mutation made while WAITING for the lock is observed by the post-lock re-read and refused (§5.4)',
+    { timeout: 300_000 },
+    async () => {
+      const fixture = await strandThroughOrchestrator(POINTS.find((p) => p.key === 'receipt')!);
+      const stateBefore = readFileSync(stateFilePath(fixture.root), 'utf8');
+      // The pre-lock dispatch read sees the VALID inventory; only the
+      // post-lock RE-READ can observe this seam-time entry rewrite. The
+      // refusal must be a REJECTION before any recovery-state write — a
+      // stale pre-lock inventory object would instead reach the packaging
+      // transaction and mutate control state first.
+      await expect(
+        orchestrateSequence({
+          planPath: fixture.planPath,
+          resume: true,
+          acknowledgeLiveCost: false,
+          allowSleepRisk: true,
+          headed: false,
+          repoRoot: REPO_ROOT,
+          onBeforeRecoveryLock: () => {
+            const inventoryPath = join(fixture.root, 'sha256-inventory.json');
+            const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8')) as {
+              files: { name: string; sha256: string }[];
+              aggregateSha256: string;
+            };
+            inventory.files.find((file) => file.name === 'vite.log')!.sha256 = 'f'.repeat(64);
+            writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, 'utf8');
+          },
+        }),
+      ).rejects.toThrow(/inventory-invalid.*aggregateSha256 does not recompute/);
+      expect(readFileSync(stateFilePath(fixture.root), 'utf8')).toBe(stateBefore);
+      expect(readSequenceState(fixture.root)!.status).toBe('failed');
+      expect(existsSync(join(fixture.base, 'packaging-recovery-fixture-evidence-002.zip'))).toBe(
+        false,
+      );
+    },
+  );
+
+  it(
+    'a state mutation made while WAITING for the lock is observed and refused after acquisition (§5.4)',
+    { timeout: 300_000 },
+    async () => {
+      const fixture = await strandThroughOrchestrator(POINTS.find((p) => p.key === 'receipt')!);
+      await expect(
+        orchestrateSequence({
+          planPath: fixture.planPath,
+          resume: true,
+          acknowledgeLiveCost: false,
+          allowSleepRisk: true,
+          headed: false,
+          repoRoot: REPO_ROOT,
+          onBeforeRecoveryLock: () => {
+            // The dispatch prechecks passed on the untampered state; only
+            // the post-lock RE-READ can observe this edit.
+            const state = readSequenceState(fixture.root)!;
+            state.executions[0]!.navigationCount = 9;
+            writeSequenceState(fixture.root, state);
+          },
+        }),
+      ).rejects.toThrow(/completed-manifest-state-divergence/);
       expect(readSequenceState(fixture.root)!.status).not.toBe('completed');
     },
   );

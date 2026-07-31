@@ -50,7 +50,7 @@ import {
   SEQUENCE_STATE_VERSION,
   type AttemptExecution,
   type BrowserProvenance,
-  type SequenceState,
+  type ResumeIdentity,
 } from './sequenceState';
 import { ProcessManager, classifyChildTerminalState, type ManagedProcess } from './processManager';
 import { startGateway, portIsFree, tsxCliPath } from './gatewayDriver';
@@ -83,7 +83,6 @@ import {
   readInventory,
   removeStaleStagedArchives,
   verifyTreeAgainstInventory,
-  type InventoryFile,
   type PackagingStage,
 } from './packageEvidence';
 import { writeSequenceManifest, writeSequenceReport, type SequenceFinalFacts } from './reporting';
@@ -145,6 +144,12 @@ export interface OrchestrateOptions {
    * failure. Used by the rehearsal's recovery drill and the failure-
    * injection tests; absent in normal operation. */
   onPackagingStage?: (stage: PackagingStage) => void;
+  /** Determinism seam for the recovery lock-ordering race drills (final
+   * audit blocker 3 §5.4): fires after the recovery dispatch decides this
+   * invocation is packaging-ready, immediately BEFORE the writer lock is
+   * acquired — a drill can run a competing invocation or mutate state here
+   * and the post-lock re-read must observe it. Absent in normal operation. */
+  onBeforeRecoveryLock?: () => void | Promise<void>;
 }
 
 export interface OrchestrateResult {
@@ -960,59 +965,104 @@ export async function runPostSequencePipeline(
 async function resumePackagingReady(context: {
   options: OrchestrateOptions;
   sequenceRoot: string;
-  state: SequenceState;
   plan: OrchestratorPlan;
   planSha256: string;
   repositorySha: string;
   freeze: FreezeIdentity;
-  inventory: InventoryFile;
+  identity: ResumeIdentity;
 }): Promise<OrchestrateResult> {
-  const { options, sequenceRoot, state, plan, inventory } = context;
-  if (state.status !== 'packaging' && state.status !== 'failed') {
-    throw new Error(
-      `packaging-recovery-unexpected-status: an inventory exists but the sequence state is ` +
-        `'${state.status}' — an inventoried root is final and only reaches this path from a ` +
-        'packaging-stage failure',
-    );
-  }
-  for (const attempt of plan.attempts) {
-    if (completedExecution(state, attempt.attemptId) === null) {
-      throw new Error(
-        `packaging-recovery-blocked: an inventory exists but planned attempt ` +
-          `'${attempt.attemptId}' has no completed execution — refusing to package an ` +
-          'incomplete attempt set',
-      );
-    }
-  }
-
-  // ---- Read-only verification: nothing below this comment writes until
-  // every check passes. --------------------------------------------------
-  verifySealedExecutions(sequenceRoot, state);
-  revalidateCompletedExecutions(sequenceRoot, state, plan);
-  // The on-disk inventory must be AUTHENTICATED, never self-certifying
-  // (adversarial round): the aggregate recorded in control state before
-  // the inventory file was written is required and must agree exactly — a
-  // rewritten inventory matching a mutated root cannot pass, and a planted
-  // inventory with no recorded aggregate is refused outright.
-  if (state.inventoryAggregateSha256 === null) {
-    throw new Error(
-      'packaging-recovery-blocked: no inventory aggregate is recorded in the control state — ' +
-        'the evidence-root inventory cannot be authenticated',
-    );
-  }
-  if (state.inventoryAggregateSha256 !== inventory.aggregateSha256) {
-    throw new Error(
-      'packaging-recovery-blocked: the recorded inventory aggregate disagrees with the ' +
-        'inventory file',
-    );
-  }
-  verifyTreeAgainstInventory(sequenceRoot, inventory, 'packaging-recovery');
-  reconcileManifestWithState(readSequenceManifestFile(sequenceRoot), state, plan);
-
+  const { options, sequenceRoot, plan } = context;
+  // ---- Lock BEFORE authoritative verification (final audit blocker 3):
+  // only immutable identity/path prechecks ran before dispatch. The
+  // single-writer lock is acquired FIRST; the control state and inventory
+  // are then RE-READ and every authoritative check runs on those fresh
+  // objects, so a competing invocation's writes can never be verified
+  // against stale data. The seam below exists solely for the §5.4 race
+  // drills. ---------------------------------------------------------------
+  await options.onBeforeRecoveryLock?.();
   const releaseLock = acquireSequenceLock(sequenceRoot);
   let zipPath: string | null = null;
   let recoveryFailed = false;
+  let executionCount = 0;
+  let failedExecutionCount = 0;
   try {
+    const state = readSequenceState(sequenceRoot);
+    if (!state) {
+      throw new Error('packaging-recovery-blocked: sequence state vanished before recovery');
+    }
+    assertResumeIdentity(state, context.identity);
+    assertResumable(state);
+    const inventory = readInventory(sequenceRoot);
+    if (!inventory) {
+      throw new Error('packaging-recovery-blocked: inventory vanished before recovery');
+    }
+
+    // Completed while this invocation waited for the lock (§5.3.8): the
+    // winning invocation already packaged and receipted — verify the
+    // completed sequence whole and return a no-op, creating no additional
+    // archive and writing nothing from stale state.
+    if (
+      state.status === 'completed' &&
+      plan.attempts.every((attempt) => completedExecution(state, attempt.attemptId) !== null)
+    ) {
+      await verifyCompletedSequence(sequenceRoot, state, plan);
+      console.log(
+        'packaging recovery: sequence completed while waiting for the lock; verified whole as ' +
+          'a no-op; no additional archive created',
+      );
+      return {
+        sequenceRoot,
+        status: 'completed',
+        executions: state.executions.length,
+        failedExecutions: state.executions.filter((execution) => execution.status === 'failed')
+          .length,
+        zipPath: state.archivePath,
+        noOpResume: true,
+        packagingRecovery: false,
+      };
+    }
+
+    if (state.status !== 'packaging' && state.status !== 'failed') {
+      throw new Error(
+        `packaging-recovery-unexpected-status: an inventory exists but the sequence state is ` +
+          `'${state.status}' — an inventoried root is final and only reaches this path from a ` +
+          'packaging-stage failure',
+      );
+    }
+    for (const attempt of plan.attempts) {
+      if (completedExecution(state, attempt.attemptId) === null) {
+        throw new Error(
+          `packaging-recovery-blocked: an inventory exists but planned attempt ` +
+            `'${attempt.attemptId}' has no completed execution — refusing to package an ` +
+            'incomplete attempt set',
+        );
+      }
+    }
+
+    // ---- Read-only verification under the lock: nothing below writes
+    // until every check passes on the freshly read state. -----------------
+    verifySealedExecutions(sequenceRoot, state);
+    revalidateCompletedExecutions(sequenceRoot, state, plan);
+    // The on-disk inventory must be AUTHENTICATED, never self-certifying
+    // (adversarial round; final audit blocker 2): `readInventory` already
+    // recomputed the aggregate from the validated entries, and the value
+    // recorded in control state before the inventory file was written must
+    // agree exactly — a rewritten inventory cannot pass, and a planted
+    // inventory with no recorded aggregate is refused outright.
+    if (state.inventoryAggregateSha256 === null) {
+      throw new Error(
+        'packaging-recovery-blocked: no inventory aggregate is recorded in the control state — ' +
+          'the evidence-root inventory cannot be authenticated',
+      );
+    }
+    if (state.inventoryAggregateSha256 !== inventory.aggregateSha256) {
+      throw new Error(
+        'packaging-recovery-blocked: the recorded inventory aggregate disagrees with the ' +
+          'inventory file',
+      );
+    }
+    verifyTreeAgainstInventory(sequenceRoot, inventory, 'packaging-recovery');
+    reconcileManifestWithState(readSequenceManifestFile(sequenceRoot), state, plan);
     const persist = (transition: string): void => {
       state.lastTransition = transition;
       state.updatedAtUtc = nowUtc();
@@ -1096,14 +1146,18 @@ async function resumePackagingReady(context: {
       }`;
       persist('sequence-failed:packaging-recovery');
     }
+    executionCount = state.executions.length;
+    failedExecutionCount = state.executions.filter(
+      (execution) => execution.status === 'failed',
+    ).length;
   } finally {
     releaseLock();
   }
   return {
     sequenceRoot,
     status: recoveryFailed ? 'failed' : 'completed',
-    executions: state.executions.length,
-    failedExecutions: state.executions.filter((execution) => execution.status === 'failed').length,
+    executions: executionCount,
+    failedExecutions: failedExecutionCount,
     zipPath,
     noOpResume: false,
     packagingRecovery: true,
@@ -1258,20 +1312,16 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
   // inventory in the evidence root means the root is FINAL — the ordinary
   // resume path (which launches processes and regenerates evidence) must
   // never touch it. Only the packaging transaction may run again. ----------
-  if (state) {
-    const packagingInventory = readInventory(sequenceRoot);
-    if (packagingInventory !== null) {
-      return resumePackagingReady({
-        options,
-        sequenceRoot,
-        state,
-        plan,
-        planSha256: loaded.planSha256,
-        repositorySha,
-        freeze,
-        inventory: packagingInventory,
-      });
-    }
+  if (state && readInventory(sequenceRoot) !== null) {
+    return resumePackagingReady({
+      options,
+      sequenceRoot,
+      plan,
+      planSha256: loaded.planSha256,
+      repositorySha,
+      freeze,
+      identity,
+    });
   }
 
   // Keep-awake is LIVE-ONLY and acquired after every read-only refusal
