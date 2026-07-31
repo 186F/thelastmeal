@@ -1,12 +1,12 @@
 # Milestone 2 — Phase 3 Unattended Orchestrator — Implementation Report
 
 **Package:** `1.8.0`
-**Governing documents:** [`MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md`](MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) §19–§20, and [`MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md) Phase 3 ("Build R1 first against existing deterministic and per-decision paths").
+**Governing documents:** [`MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md`](../MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) §19–§20, and [`MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md`](../MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md) Phase 3 ("Build R1 first against existing deterministic and per-decision paths").
 **Scope discipline:** no M2 action prompt or per-decision condition (Phase 4); no policy patches, compiler, interpreter, or novelty broker (Phase 5); no live API calls anywhere in Phase 3 — every model-backed path is exercised keylessly through the fake-adapter gateway. No canonical simulation-mechanics change; all fourteen golden hashes byte-identical.
 
 ## 0. Audit remediation record (July 30, 2026)
 
-[`MILESTONE_002_PHASE3_ORCHESTRATOR_AUDIT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_AUDIT.md) requested changes on nine blockers plus mediums. All are remediated in this head; the accepted architecture (§3 of the audit) is unchanged.
+[`MILESTONE_002_PHASE3_ORCHESTRATOR_AUDIT.md`](audits/MILESTONE_002_PHASE3_ORCHESTRATOR_AUDIT.md) requested changes on nine blockers plus mediums. All are remediated in this head; the accepted architecture (§3 of the audit) is unchanged.
 
 | Audit finding | Resolution |
 | --- | --- |
@@ -24,7 +24,7 @@ Mediums: process provenance is an append-only `process-log.jsonl`; the lock uses
 
 ## 0.2 Re-audit remediation record (July 30, 2026)
 
-[`MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md) accepted the §4 remediations and requested changes on nine remaining formal-evidence problems. All are remediated in this head; the accepted architecture is unchanged.
+[`MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md`](audits/MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md) accepted the §4 remediations and requested changes on nine remaining formal-evidence problems. All are remediated in this head; the accepted architecture is unchanged.
 
 | Re-audit finding | Resolution |
 | --- | --- |
@@ -40,7 +40,7 @@ Mediums: process provenance is an append-only `process-log.jsonl`; the lock uses
 
 ## 0.3 Focused re-audit remediation record (July 31, 2026)
 
-[`MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md) accepted the second remediation's architecture and requested changes on four focused issues. All four are remediated in this head; the accepted architecture is unchanged.
+[`MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md`](audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md) accepted the second remediation's architecture and requested changes on four focused issues. All four are remediated in this head; the accepted architecture is unchanged.
 
 | Focused finding | Resolution |
 | --- | --- |
@@ -59,7 +59,7 @@ Mediums: process provenance is an append-only `process-log.jsonl`; the lock uses
 
 ## 0.4 Final targeted audit remediation record (July 31, 2026)
 
-[`MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md) accepted all prior remediation areas and requested changes on three final merge blockers. All three are remediated in this head; no accepted subsystem is redesigned.
+[`MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md`](audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md) accepted all prior remediation areas and requested changes on three final merge blockers. All three are remediated in this head; no accepted subsystem is redesigned.
 
 | Final blocker | Resolution |
 | --- | --- |

@@ -438,7 +438,7 @@ model-backed ledger replays to the same `worldStateHash` without the model.
 `38026cc986f59e8526053417666c921826dd34e9` and PASSED — six of six runs,
 every pre-registered threshold met, every acceptance criterion checked, with
 sealed evidence archives; see
-[`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
+[`MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](../milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md).
 The earlier live traffic is also recorded there, not erased: the disposable
 smoke test of 2026-07-28 (a failed first attempt, then a pass) and the
 aborted formal sequence of 2026-07-29 under experiment v1.1.0 — Run 1
@@ -503,9 +503,9 @@ pre-finalization inspection; it refuses to run on an already-finalized
 directory — re-run `npm run model:finalize` instead, which regenerates
 `model-summary.json` and `bundle-manifest.json`). Follow the run discipline
 in the
-[implementation brief](MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md)
+[implementation brief](../milestones/001-model-integration/briefs/MODEL_INTEGRATION_MILESTONE_001_IMPLEMENTATION_BRIEF.md)
 and the
-[re-audit remediation brief](MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_BRIEF.md)
+[re-audit remediation brief](../milestones/001-model-integration/briefs/MODEL_INTEGRATION_MILESTONE_001_REAUDIT_REMEDIATION_BRIEF.md)
 (1× speed first; never pause awaiting the model; never edit the prompt
 between a paired B1/B2 comparison; a fresh `runId` every run). An opt-in live
 smoke test exists as `RUN_LIVE_MODEL_TESTS=1 npm run test:model:live` — it is
@@ -552,9 +552,9 @@ substantial semantics:
   command (`m2:resume` is `m2:orchestrate -- --resume`), including the
   packaging-only recovery path for sequences that failed during evidence
   packaging. See
-  [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)
+  [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](../milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)
   and the operator runbook
-  [`MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md`](MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md).
+  [`MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md`](../operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md).
 
 ## Milestone 2 phase summaries
 
@@ -566,7 +566,7 @@ lists are recorded here.
   study-local freezes, the affordance/interruption-contract auditors with
   the VS001 known-gap registry, blinded reviewer packages for validated live
   ledgers, and the `liveSmoke.ts` shutdown-race repair (report:
-  [`MILESTONE_002_PHASE2_LABORATORY_REPORT.md`](MILESTONE_002_PHASE2_LABORATORY_REPORT.md)).
+  [`MILESTONE_002_PHASE2_LABORATORY_REPORT.md`](../milestones/002-sparse-cognition/phase-02-laboratory/MILESTONE_002_PHASE2_LABORATORY_REPORT.md)).
 - **Phase 3 — unattended orchestrator (release 1.8.0, brief §19):** one
   command runs a complete planned sequence — strict fixed ports, a fresh
   gateway child process and fresh browser context per attempt, paced runs
@@ -578,7 +578,7 @@ lists are recorded here.
   self-verifies the whole pipeline keylessly, including the gateway-stop and
   packaging-recovery drills; `m2:resume` is `m2:orchestrate -- --resume`
   (report:
-  [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)).
+  [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](../milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)).
 
 ## Continuous integration details
 

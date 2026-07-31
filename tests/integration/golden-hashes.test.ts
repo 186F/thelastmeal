@@ -6,7 +6,7 @@ import { completedRun } from '../helpers';
  * Golden pin on the hash projections (adversarial-review fix).
  *
  * These are the published remediation-1.1.0 baselines from
- * documentation/AUDIT_REMEDIATION_REPORT.md. Any change to the world-state
+ * documentation/history/vertical-slice-001-remediation/AUDIT_REMEDIATION_REPORT.md. Any change to the world-state
  * projection, the canonical event-stream projection, the serializer, the
  * event vocabulary, or engine behavior fails HERE first — hash semantics can
  * never drift silently. Updating these values is a documented re-baselining

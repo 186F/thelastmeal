@@ -1,6 +1,6 @@
 # Model-Run Artifact Integrity, CI Verification, and Keyless Rehearsal — Implementation Report (1.5.0)
 
-**Implements:** [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md), as amended by the ten recorded amendments A1–A10 in section 4 of this report.
+**Implements:** [`documentation/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md`](../briefs/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_CI_REHEARSAL_BRIEF.md), as amended by the ten recorded amendments A1–A10 in section 4 of this report.
 **Base commit:** `5c1f755` (`main`, release 1.4.0) — the brief was cherry-picked onto the working branch at `55afa2b`.
 **Branch:** `agent/model-artifact-integrity-1.5.0`
 **Final implementation commit:** `4e903538e39a7474118029cef4c396e4decee346` (tagged `v1.5.0`)
@@ -752,6 +752,6 @@ date before merging”.
 **No live OpenAI call was made during this release.** Every result in this
 report comes from deterministic fixtures, the local fake adapter, or the
 keyless rehearsal. The live milestone remains **open**:
-[`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)
+[`documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md`](../acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)
 is still a PENDING template, and no fake-adapter or rehearsal result may ever
 be transcribed into it as live evidence.

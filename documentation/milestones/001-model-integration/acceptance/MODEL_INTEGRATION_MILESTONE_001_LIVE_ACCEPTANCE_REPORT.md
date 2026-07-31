@@ -21,7 +21,7 @@ file.
 ## Prerequisite: 1.5.0 artifact-integrity and CI gates
 
 The release 1.5.0 artifact-integrity work and its CI gates passed — see
-[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
+[`MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md`](../reports/MODEL_INTEGRATION_ARTIFACT_INTEGRITY_IMPLEMENTATION_REPORT.md).
 The registered live route was subsequently migrated in release 1.6.0 to
 OpenRouter Responses under model experiment version 1.1.0; release 1.6.2
 advanced the experiment to version 1.2.0 when the formal treatment changed
@@ -30,7 +30,7 @@ from `inclusionai/ling-2.6-flash` via `novita` to
 2026-07-29 attempt recorded below. Formal runs must use
 one exact `OPENROUTER_MODEL`, one exact `OPENROUTER_PROVIDER`, fallbacks disabled,
 and router metadata enabled; see
-[`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
+[`OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md`](../reports/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md).
 Release 1.5.0 makes version-2 run bundles preserve every exact client request,
 runs the complete ledger validator in both model CLIs, makes `model:finalize`
 strict by default, and adds the keyless three-case rehearsal to the required
