@@ -93,6 +93,9 @@ jobs:
       - name: Keyless unattended-orchestrator rehearsal
         run: npm run m2:rehearse -- --ci
 
+      # The COMPLETE rehearsal evidence (audit finding 7): the sealed
+      # archive, its receipt, the sequence state/reports, and the
+      # failure-drill evidence — with a hard failure if any path drifts.
       - name: Upload m2 rehearsal evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,10 +103,14 @@ jobs:
           name: m2-orchestrator-rehearsal
           path: |
             artifacts/m2-rehearsal/m2-rehearsal-report.json
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence.zip
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence.zip.sha256
+            artifacts/m2-sequences/m2-orchestrator-rehearsal-evidence.zip.receipt.json
             artifacts/m2-sequences/rehearsal/sequence-report.json
             artifacts/m2-sequences/rehearsal/sequence-report.md
             artifacts/m2-sequences/rehearsal/sequence-state.json
-          if-no-files-found: ignore
+            artifacts/m2-sequences/failure-drill/
+          if-no-files-found: error
 
       - name: Upload model-rehearsal report
         if: always()

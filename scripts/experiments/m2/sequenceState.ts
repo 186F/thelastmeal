@@ -1,6 +1,15 @@
 import { z } from 'zod';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname, join, relative } from 'node:path';
 
 /**
  * Atomic sequence state (M2 brief §19.11–§19.12).
@@ -24,12 +33,27 @@ export const SEQUENCE_STATE_VERSION = 'm2-sequence-state-1.0.0';
 
 const nonEmpty = z.string().min(1);
 
+/** Immutable per-execution evidence seal (audit finding 4): the sha256 of
+ * every file that proves the execution's completion, written WITH the
+ * completed status and revalidated before any resume may skip the attempt. */
+export const executionSealSchema = z
+  .object({
+    files: z
+      .array(z.object({ path: nonEmpty, sha256: z.string().regex(/^[0-9a-f]{64}$/) }).strict())
+      .min(1),
+    aggregateSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  })
+  .strict();
+export type ExecutionSeal = z.infer<typeof executionSealSchema>;
+
 export const attemptExecutionSchema = z
   .object({
     /** `<attemptId>-e<N>` — every execution gets a fresh directory. */
     executionId: nonEmpty,
     attemptId: nonEmpty,
     status: z.enum(['in-progress', 'completed', 'failed']),
+    /** Non-null exactly when status is 'completed'. */
+    seal: executionSealSchema.nullable(),
     /** Failure classification when status = failed (e.g. simulation-stall,
      * run-timeout, replay-mismatch, finalize-failed, interrupted). */
     failureReason: z.string().nullable(),
@@ -66,9 +90,33 @@ export const sequenceStateSchema = z
     promptVersion: nonEmpty,
     externalProviderId: nonEmpty,
     upstreamPlatform: nonEmpty,
+    /** Reviewed treatment identity (audit finding 2): the plan's expected
+     * model and serving route, gateway-verified before Start. `none` for
+     * plans with no model-backed attempts. */
+    expectedModelId: nonEmpty,
+    expectedServingProviderId: nonEmpty,
+    /** Pre-registered study binding for evidentiary sequences; `none`
+     * markers otherwise. */
+    studyId: nonEmpty,
+    studyVersion: nonEmpty,
+    studyPlanSha256: nonEmpty,
     /** Nonsecret configuration fingerprint over the plan's frozen fields. */
     configFingerprint: nonEmpty,
-    status: z.enum(['in-progress', 'completed', 'failed']),
+    /** Sequence finalization lifecycle (audit finding 5): `completed` is
+     * written ONLY after every gate, the archive, and its receipt succeed. */
+    status: z.enum([
+      'in-progress',
+      'attempts-complete',
+      'validating',
+      'packaging',
+      'completed',
+      'failed',
+    ]),
+    /** Typed reason + failed stage when status is 'failed'. */
+    sequenceFailureReason: z.string().nullable(),
+    /** Durable archive receipt data once packaging succeeds. */
+    archivePath: z.string().nullable(),
+    archiveSha256: z.string().nullable(),
     executions: z.array(attemptExecutionSchema),
     /** Last fully persisted transition, for diagnosis after a crash. */
     lastTransition: nonEmpty,
@@ -108,6 +156,11 @@ export interface ResumeIdentity {
   promptVersion: string;
   externalProviderId: string;
   upstreamPlatform: string;
+  expectedModelId: string;
+  expectedServingProviderId: string;
+  studyId: string;
+  studyVersion: string;
+  studyPlanSha256: string;
   configFingerprint: string;
 }
 
@@ -123,6 +176,11 @@ export function assertResumeIdentity(state: SequenceState, identity: ResumeIdent
     'promptVersion',
     'externalProviderId',
     'upstreamPlatform',
+    'expectedModelId',
+    'expectedServingProviderId',
+    'studyId',
+    'studyVersion',
+    'studyPlanSha256',
     'configFingerprint',
   ] as const) {
     if (state[key] !== identity[key]) {
@@ -151,6 +209,59 @@ export function completedExecution(
       (execution) => execution.attemptId === attemptId && execution.status === 'completed',
     ) ?? null
   );
+}
+
+/** Walks an execution directory and seals every file (audit finding 4). */
+export function sealExecution(sequenceRoot: string, executionDir: string): ExecutionSeal {
+  const root = join(sequenceRoot, executionDir);
+  const files: { path: string; sha256: string }[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else {
+        files.push({
+          path: relative(root, full).replaceAll('\\', '/'),
+          sha256: createHash('sha256').update(readFileSync(full)).digest('hex'),
+        });
+      }
+    }
+  };
+  walk(root);
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const aggregateSha256 = createHash('sha256')
+    .update(files.map((file) => `${file.path}:${file.sha256}`).join('\n'))
+    .digest('hex');
+  return { files, aggregateSha256 };
+}
+
+/** Revalidates every completed execution's seal (audit finding 4): missing
+ * or altered evidence is a typed refusal, never a silent skip or rerun. */
+export function verifySealedExecutions(sequenceRoot: string, state: SequenceState): void {
+  for (const execution of state.executions) {
+    if (execution.status !== 'completed') continue;
+    if (execution.seal === null) {
+      throw new Error(`resume-evidence-invalid: ${execution.executionId} has no seal`);
+    }
+    const recomputed = sealExecution(sequenceRoot, execution.dir);
+    if (recomputed.aggregateSha256 !== execution.seal.aggregateSha256) {
+      const recorded = new Map(execution.seal.files.map((file) => [file.path, file.sha256]));
+      const current = new Map(recomputed.files.map((file) => [file.path, file.sha256]));
+      const problems: string[] = [];
+      for (const [path, hash] of recorded) {
+        if (!current.has(path)) problems.push(`missing:${path}`);
+        else if (current.get(path) !== hash) problems.push(`altered:${path}`);
+      }
+      for (const path of current.keys()) {
+        if (!recorded.has(path)) problems.push(`added:${path}`);
+      }
+      throw new Error(
+        `resume-evidence-invalid: ${execution.executionId} seal mismatch (${problems
+          .slice(0, 5)
+          .join('; ')})`,
+      );
+    }
+  }
 }
 
 /** Executions left 'in-progress' by a crash or kill are marked failed as

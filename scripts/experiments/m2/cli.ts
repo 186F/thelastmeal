@@ -4,6 +4,7 @@ import { hasFlag, readOption } from '../../cli/args';
 import { orchestrateSequence } from './orchestrate';
 import { evaluateSequence } from './evaluateSequence';
 import { packageSequence } from './packageEvidence';
+import { readSequenceState, verifySealedExecutions } from './sequenceState';
 
 /**
  * Orchestrator command surface (M2 brief §19.2).
@@ -12,7 +13,7 @@ import { packageSequence } from './packageEvidence';
  *                              [--allow-sleep-risk] [--headed]
  *   npm run m2:evaluate    -- --sequence <sequence-root>
  *   npm run m2:package     -- --sequence <sequence-root> [--zip <path>]
- *   npm run m2:pilot        (refusal stub until Phase 6)
+ *   npm run m2:pilot        (refusal stub until Phase 7)
  *
  * `m2:orchestrate -- --resume` IS the resume command (§19.2 allows this in
  * place of a separate m2:resume, documented here and in the README):
@@ -71,19 +72,31 @@ export async function runCli(argv: readonly string[]): Promise<number> {
         return 1;
       }
       const root = resolve(repoRoot, sequenceRoot);
+      // Standalone packaging requires a COMPLETED, seal-valid sequence
+      // (audit finding 7.6): arbitrary directories are refused.
+      const state = readSequenceState(root);
+      if (!state) throw new Error(`package-requires-sequence-state: ${root}`);
+      if (state.status !== 'completed') {
+        throw new Error(`package-requires-completed-sequence: status is '${state.status}'`);
+      }
+      verifySealedExecutions(root, state);
       const zipPath = readOption(rest, 'zip') ?? resolve(root, '..', 'sequence-evidence.zip');
-      const result = await packageSequence(root, resolve(repoRoot, zipPath));
+      const result = await packageSequence(root, resolve(repoRoot, zipPath), {
+        sequenceId: state.sequenceId,
+        planSha256: state.planSha256,
+        repositorySha: state.repositorySha,
+      });
       console.log(
         `m2:package — ${result.fileCount} file(s) inventoried; zip ${result.zipPath} ` +
-          `(sha256 ${result.zipSha256}); secret scan clean`,
+          `(sha256 ${result.zipSha256}); receipt ${result.receiptPath}; secret scan clean`,
       );
       return 0;
     }
     case 'pilot': {
       console.error(
-        'm2:pilot is not runnable in Phase 3: the pilot (brief §31 Phase 6) requires the M2 ' +
+        'm2:pilot is not runnable in Phase 3: the pilot (brief §31 Phase 7, after the Phase 6 adversarial audit) requires the M2 ' +
           'per-decision condition (Phase 4) and the policy system (Phase 5). This command exists ' +
-          'so the §19.2 surface is stable; it will gain a plan when Phase 6 is authorized.',
+          'so the §19.2 surface is stable; it will gain a plan when Phase 7 is authorized.',
       );
       return 1;
     }

@@ -13,7 +13,7 @@
       "gatewayMode": "off"
     }
   ],
-  "replacementPolicy": { "maxReplacementAttempts": 0 },
+  "replacementPolicy": { "maxReplacementAttempts": 0, "retryableFailureClasses": [] },
   "liveCallBudget": 0,
   "timeouts": {
     "runTimeoutMs": 20000,

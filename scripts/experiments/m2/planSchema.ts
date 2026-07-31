@@ -28,6 +28,51 @@ export const ORCHESTRATABLE_CONDITION_IDS = [
 const nonEmpty = z.string().min(1);
 const positiveInt = z.number().int().positive();
 
+/**
+ * Reviewed treatment identity (Phase 3 audit finding 2): the exact nonsecret
+ * model and serving route the sequence is REVIEWED to run. Before Start, the
+ * orchestrator queries the gateway's public provider-config and refuses on
+ * any mismatch — a live gateway started with the wrong `.env.gateway` model
+ * or route can never produce an attempt. For keyless rehearsals the expected
+ * values are the fake adapter's (`fake-adapter` / `local`), so the
+ * verification path itself is exercised in CI.
+ */
+export const expectedTreatmentSchema = z
+  .object({
+    modelId: nonEmpty,
+    servingProviderId: nonEmpty,
+    allowFallbacks: z.literal(false),
+    requireParameters: z.literal(true),
+    promptVersion: nonEmpty,
+    conditionId: nonEmpty,
+    experimentId: nonEmpty,
+    experimentVersion: nonEmpty,
+  })
+  .strict();
+export type ExpectedTreatment = z.infer<typeof expectedTreatmentSchema>;
+
+/** Pre-registered study binding (audit finding 2): an evidentiary sequence
+ * must name its validated Phase 2 study declaration and freeze artifacts. */
+export const studyBindingSchema = z
+  .object({
+    studyId: nonEmpty,
+    studyVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+    studyPlanPath: nonEmpty,
+    studyPlanSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    studyConfigFingerprint: nonEmpty,
+  })
+  .strict();
+export type StudyBinding = z.infer<typeof studyBindingSchema>;
+
+/** Formal execution profile (audit finding 8 / §19.9–§19.10): evidentiary
+ * plans must use exactly these values; test plans may scale down. */
+export const FORMAL_TIMING = {
+  maxHeartbeatIntervalMs: 60_000,
+  stallTimeoutMs: 120_000,
+  normalRunTimeoutMs: 75 * 60_000,
+  gatewayStopRunTimeoutMs: 90 * 60_000,
+} as const;
+
 export const plannedAttemptSchema = z
   .object({
     /** Stable plan-level attempt id (kebab-case). Executions of this attempt
@@ -111,18 +156,30 @@ export const orchestratorPlanSchema = z
       .regex(/^[0-9a-f]{40}$/)
       .optional(),
     attempts: z.array(plannedAttemptSchema).min(1),
+    /** Required whenever any model-backed attempt exists: the reviewed
+     * treatment identity verified against the gateway before Start. */
+    expectedTreatment: expectedTreatmentSchema.optional(),
+    /** Required for evidentiary plans: the pre-registered study binding. */
+    study: studyBindingSchema.optional(),
     replacementPolicy: z
       .object({
         maxReplacementAttempts: z.number().int().nonnegative(),
+        /** The ONLY failure classes eligible for automatic replacement
+         * (audit finding 8): integrity failures — replay-mismatch,
+         * freeze-violation, evidence contradictions, treatment violations —
+         * must halt the sequence, never spend another run. */
+        retryableFailureClasses: z.array(nonEmpty),
       })
       .strict(),
     /** Acknowledged live-call budget (§19.14). Zero for keyless plans. */
     liveCallBudget: z.number().int().nonnegative(),
     timeouts: z
       .object({
-        /** Wall-clock cap per attempt (§19.10: 75 min normal, 90 min
-         * gateway-stop for 1× live runs; test plans scale down). */
+        /** Wall-clock cap for a NORMAL attempt (§19.10: 75 min formal). */
         runTimeoutMs: positiveInt,
+        /** Wall-clock cap for a planned gateway-stop attempt (§19.10:
+         * 90 min formal). Required when any attempt plans a stop. */
+        gatewayStopRunTimeoutMs: positiveInt.optional(),
         /** Stall watchdog: tick unchanged this long while 'running' →
          * diagnostics, grace, failed attempt (§19.9: 120 s formal). */
         stallTimeoutMs: positiveInt,
@@ -156,6 +213,65 @@ export const orchestratorPlanSchema = z
           });
         }
       }
+      // Evidentiary plans pin the frozen SHA, bind a registered study, and
+      // use EXACTLY the formal §19.9–§19.10 execution profile.
+      if (plan.repositorySha === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-plan-requires-pinned-repository-sha',
+        });
+      }
+      if (plan.study === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-plan-requires-study-binding',
+        });
+      }
+      if (plan.timeouts.heartbeatIntervalMs > FORMAL_TIMING.maxHeartbeatIntervalMs) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-heartbeat-exceeds-60s',
+        });
+      }
+      if (plan.timeouts.stallTimeoutMs !== FORMAL_TIMING.stallTimeoutMs) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-stall-timeout-must-be-120s',
+        });
+      }
+      if (plan.timeouts.runTimeoutMs !== FORMAL_TIMING.normalRunTimeoutMs) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-run-timeout-must-be-75min',
+        });
+      }
+      if (
+        plan.attempts.some((attempt) => attempt.gatewayStopAtTick !== undefined) &&
+        plan.timeouts.gatewayStopRunTimeoutMs !== FORMAL_TIMING.gatewayStopRunTimeoutMs
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'evidentiary-gateway-stop-timeout-must-be-90min',
+        });
+      }
+    }
+    const hasModelAttempt = plan.attempts.some(
+      (attempt) => attempt.conditionId === 'mara-model-per-decision-v1',
+    );
+    if (hasModelAttempt && plan.expectedTreatment === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'model-attempts-require-expected-treatment',
+      });
+    }
+    if (
+      plan.attempts.some((attempt) => attempt.gatewayStopAtTick !== undefined) &&
+      plan.timeouts.gatewayStopRunTimeoutMs === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'gateway-stop-attempts-require-stop-timeout',
+      });
     }
     for (const attempt of plan.attempts) {
       if (attempt.gatewayMode === 'live') {

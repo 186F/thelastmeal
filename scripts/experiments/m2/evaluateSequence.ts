@@ -40,7 +40,13 @@ export function evaluateFromState(sequenceRoot: string, state: SequenceState): S
   for (const execution of state.executions) {
     if (execution.status !== 'completed') continue;
     const path = join(sequenceRoot, execution.dir, 'behavior-fingerprint.json');
-    if (!existsSync(path)) continue;
+    // A completed observation with missing derived evidence must FAIL the
+    // evaluation, never be silently omitted (audit finding 4).
+    if (!existsSync(path)) {
+      throw new Error(
+        `evaluation-missing-fingerprint: completed execution ${execution.executionId} has no behavior-fingerprint.json`,
+      );
+    }
     fingerprints.push({
       executionId: execution.executionId,
       set: behaviorFingerprintSetSchema.parse(JSON.parse(readFileSync(path, 'utf8'))),

@@ -102,7 +102,47 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
       execution.verdicts['strict-finalized'] === 'completed',
       `model execution ${execution.executionId} not strict-finalized`,
     );
+    check(
+      execution.verdicts['verified-model'] === 'fake-adapter' &&
+        execution.verdicts['verified-serving-provider'] === 'local',
+      `model execution ${execution.executionId} missing pre-Start treatment verification`,
+    );
   }
+  // Audit remediation: every completed execution is sealed and carries its
+  // always-saved diagnostics (trace, final DOM/screenshot, console log,
+  // diagnostic manifest).
+  for (const execution of state.executions) {
+    check(execution.seal !== null, `execution ${execution.executionId} has no seal`);
+    for (const artifact of [
+      'attempt-trace.zip',
+      'final-screenshot.png',
+      'final-dom.html',
+      'console-log.json',
+      'diagnostics-manifest.json',
+    ]) {
+      check(
+        existsSync(join(rehearsalRoot, execution.dir, artifact)),
+        `execution ${execution.executionId} missing ${artifact}`,
+      );
+    }
+  }
+  // Archive receipt (audit finding 5/7): sibling sha256 + receipt verify.
+  check(existsSync(`${first.zipPath!}.sha256`), 'archive .sha256 receipt missing');
+  const receipt = JSON.parse(readFileSync(`${first.zipPath!}.receipt.json`, 'utf8')) as {
+    archiveSha256: string;
+  };
+  check(
+    state.archiveSha256 === receipt.archiveSha256,
+    'archive receipt sha does not match sequence state',
+  );
+  // Planned-stop evidence (audit finding 8).
+  const stopVerdict = state.executions.find(
+    (execution) => execution.attemptId === 'a-model-fake-gateway-stop',
+  )!.verdicts['gateway-stop'];
+  check(
+    typeof stopVerdict === 'string' && (JSON.parse(stopVerdict) as { fired: boolean }).fired,
+    'planned gateway stop was not evidenced as fired',
+  );
 
   // The gateway-stop drill must preserve the emitted-versus-called
   // distinction in its ENRICHED fingerprint (the M1 Run 6 shape, keyless).
@@ -129,8 +169,10 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
       `completed ${String(stopMara.upstreamActionCallsCompleted)}`,
   );
 
-  // --- 2. Idempotent resume on the completed sequence. ----------------------
-  await waitForAutomationPortsFree();
+  // --- 2. No-op resume on the completed sequence (audit finding 4): seals
+  // verified, NOTHING launched, no byte of evidence changed. ----------------
+  const processLogBefore = readFileSync(join(rehearsalRoot, 'process-log.jsonl'), 'utf8');
+  const stateBytesBefore = readFileSync(join(rehearsalRoot, 'sequence-state.json'), 'utf8');
   const resumed = await orchestrateSequence({
     planPath: rehearsalPlan,
     resume: true,
@@ -140,11 +182,20 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
     repoRoot,
   });
   check(resumed.status === 'completed', `resume status ${resumed.status}`);
+  check(resumed.noOpResume, 'completed-sequence resume was not a no-op');
   check(
     resumed.executions === 3,
     `resume created new executions: ${resumed.executions} (expected 3)`,
   );
-  notes.push('resume on completed sequence: idempotent (no new executions; reports regenerated)');
+  check(
+    readFileSync(join(rehearsalRoot, 'process-log.jsonl'), 'utf8') === processLogBefore,
+    'no-op resume spawned processes (process log changed)',
+  );
+  check(
+    readFileSync(join(rehearsalRoot, 'sequence-state.json'), 'utf8') === stateBytesBefore,
+    'no-op resume changed the sequence state bytes',
+  );
+  notes.push('resume on completed sequence: NO-OP (seals verified; nothing launched or changed)');
 
   // --- 3. Resume under a modified plan is refused. --------------------------
   const mutatedPlanPath = join(reportDir, 'rehearsal-mutated-plan.json');

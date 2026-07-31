@@ -40,6 +40,7 @@ const PROVIDER_CONFIG_SHAPE = {
   promptVersion: MODEL_PROMPT_VERSION,
   requestSchemaVersion: 1,
   modelId: 'fake-adapter',
+  servingProviderId: 'local',
 };
 const PROVIDER_CONFIG = JSON.stringify(PROVIDER_CONFIG_SHAPE);
 

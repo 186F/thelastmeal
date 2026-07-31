@@ -51,13 +51,82 @@ describe('orchestrator plan schema', () => {
     expect(() => orchestratorPlanSchema.parse({ ...plan, evidentiary: true })).toThrow(
       /evidentiary-plan-requires-1x-pacing/,
     );
+  });
+
+  it('evidentiary plans require pinned SHA, study binding, and the exact formal profile', () => {
+    const plan = basePlan();
+    const evidentiaryBase = {
+      ...plan,
+      evidentiary: true,
+      attempts: plan.attempts.map((attempt) => ({ ...attempt, speed: 1 })),
+    };
+    expect(() => orchestratorPlanSchema.parse(evidentiaryBase)).toThrow(
+      /evidentiary-plan-requires-pinned-repository-sha/,
+    );
+    expect(() => orchestratorPlanSchema.parse(evidentiaryBase)).toThrow(
+      /evidentiary-plan-requires-study-binding/,
+    );
+    expect(() => orchestratorPlanSchema.parse(evidentiaryBase)).toThrow(
+      /evidentiary-heartbeat-exceeds-60s|evidentiary-stall-timeout-must-be-120s|evidentiary-run-timeout-must-be-75min/,
+    );
+    const formal = {
+      ...evidentiaryBase,
+      repositorySha: 'a'.repeat(40),
+      study: {
+        studyId: 'm2-calibration-variance-a-001',
+        studyVersion: '1.0.0',
+        studyPlanPath: 'experiments/m2/studies/calibration.json',
+        studyPlanSha256: 'b'.repeat(64),
+        studyConfigFingerprint: 'c'.repeat(16),
+      },
+      timeouts: {
+        runTimeoutMs: 75 * 60_000,
+        gatewayStopRunTimeoutMs: 90 * 60_000,
+        stallTimeoutMs: 120_000,
+        stallGraceMs: 30_000,
+        heartbeatIntervalMs: 60_000,
+      },
+    };
+    expect(() => orchestratorPlanSchema.parse(formal)).not.toThrow();
+    // Formal profile is EXACT: a 74-minute normal timeout is refused.
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...formal,
+        timeouts: { ...formal.timeouts, runTimeoutMs: 74 * 60_000 },
+      }),
+    ).toThrow(/evidentiary-run-timeout-must-be-75min/);
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...formal,
+        timeouts: { ...formal.timeouts, heartbeatIntervalMs: 61_000 },
+      }),
+    ).toThrow(/evidentiary-heartbeat-exceeds-60s/);
+  });
+
+  it('model attempts require the reviewed expected treatment; stop attempts require the stop timeout', () => {
+    const plan = basePlan();
+    const withoutTreatment = { ...plan } as Record<string, unknown>;
+    delete withoutTreatment.expectedTreatment;
+    expect(() => orchestratorPlanSchema.parse(withoutTreatment)).toThrow(
+      /model-attempts-require-expected-treatment/,
+    );
+    const withoutStopTimeout = {
+      ...plan,
+      timeouts: { ...plan.timeouts, gatewayStopRunTimeoutMs: undefined },
+    };
+    expect(() => orchestratorPlanSchema.parse(withoutStopTimeout)).toThrow(
+      /gateway-stop-attempts-require-stop-timeout/,
+    );
+  });
+
+  it('rejects a model attempt on a scenario outside the registered condition (statically)', () => {
+    const plan = basePlan();
     expect(() =>
       orchestratorPlanSchema.parse({
         ...plan,
-        evidentiary: true,
-        attempts: plan.attempts.map((attempt) => ({ ...attempt, speed: 1 })),
+        attempts: [{ ...plan.attempts[1]!, scenarioId: 'F' }],
       }),
-    ).not.toThrow();
+    ).toThrow(/scenario-not-in-model-condition:F/);
   });
 
   it('rejects duplicate attempt ids and non-operator speeds', () => {
@@ -84,7 +153,7 @@ describe('orchestrator plan schema', () => {
         plan.attempts[0]!,
         { ...plan.attempts[1]!, gatewayMode: 'live', maxCallsPerRun: 120, maxTotalCalls: 100 },
       ],
-      replacementPolicy: { maxReplacementAttempts: 2 },
+      replacementPolicy: { maxReplacementAttempts: 2, retryableFailureClasses: ['run-timeout'] },
       liveCallBudget: 300,
     });
     // min(120, 100) × (1 primary + 2 replacements) = 300.
@@ -98,7 +167,7 @@ describe('orchestrator plan schema', () => {
       attempts: [
         { ...plan.attempts[1]!, gatewayMode: 'live', maxCallsPerRun: 120, maxTotalCalls: 120 },
       ],
-      replacementPolicy: { maxReplacementAttempts: 1 },
+      replacementPolicy: { maxReplacementAttempts: 1, retryableFailureClasses: ['run-timeout'] },
       liveCallBudget: 200, // worst case = 240
     };
     expect(() => parsePlan(Buffer.from(JSON.stringify(overBudget)))).toThrow(

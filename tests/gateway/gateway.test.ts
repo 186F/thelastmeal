@@ -230,6 +230,8 @@ describe('gateway endpoints and validation (fake adapter)', () => {
       expect(body.promptVersion).toBe(PROMPT_VERSION);
       expect(body.requestSchemaVersion).toBe(EXTERNAL_REQUEST_SCHEMA_VERSION);
       // Exactly the shape the browser client's strict schema pins — no more.
+      // servingProviderId (Phase 3 audit finding 2): the nonsecret route the
+      // unattended orchestrator verifies against a reviewed plan.
       expect(Object.keys(body).sort()).toEqual([
         'conditionId',
         'experimentId',
@@ -238,8 +240,10 @@ describe('gateway endpoints and validation (fake adapter)', () => {
         'promptVersion',
         'providerId',
         'requestSchemaVersion',
+        'servingProviderId',
         'status',
       ]);
+      expect(body.servingProviderId).toBe('local');
       expect(JSON.stringify(body)).not.toContain('OPENAI');
       expect(JSON.stringify(body)).not.toContain('sk-');
     }

@@ -33,6 +33,9 @@ export interface GatewayLaunch {
   repoRoot: string;
   logPath: string;
   readyTimeoutMs?: number;
+  /** Base child environment (audit finding 9): allowlisted for fake mode,
+   * the full parent environment only for the authorized live gateway. */
+  env: NodeJS.ProcessEnv;
 }
 
 export function tsxCliPath(repoRoot: string): string {
@@ -60,7 +63,7 @@ export async function startGateway(
     throw new Error(`preflight-port-occupied: gateway port ${launch.port}`);
   }
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...launch.env,
     MODEL_GATEWAY_PORT: String(launch.port),
     ALLOWED_BROWSER_ORIGIN: launch.allowedBrowserOrigin,
     MODEL_TRACE_DIR: launch.traceDir,

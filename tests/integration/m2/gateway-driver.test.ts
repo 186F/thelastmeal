@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProcessManager } from '../../../scripts/experiments/m2/processManager';
+import { fakeGatewayEnv } from '../../../scripts/experiments/m2/childEnv';
 import {
   GATEWAY_READY_PREFIX,
   portIsFree,
@@ -45,6 +46,7 @@ describe('gateway driver', () => {
           maxCallsPerRun: 10,
           maxTotalCalls: 10,
           repoRoot: process.cwd(),
+          env: fakeGatewayEnv(process.env),
           logPath: join(workDir, 'gateway.log'),
         });
         expect(gateway.pid).toBeGreaterThan(0);
@@ -80,6 +82,7 @@ describe('gateway driver', () => {
           allowedBrowserOrigin: 'http://localhost:5199',
           traceDir: join(workDir, 'traces-a'),
           repoRoot: process.cwd(),
+          env: fakeGatewayEnv(process.env),
           logPath: join(workDir, 'gateway-a.log'),
         });
         await expect(
@@ -89,6 +92,7 @@ describe('gateway driver', () => {
             allowedBrowserOrigin: 'http://localhost:5199',
             traceDir: join(workDir, 'traces-b'),
             repoRoot: process.cwd(),
+            env: fakeGatewayEnv(process.env),
             logPath: join(workDir, 'gateway-b.log'),
           }),
         ).rejects.toThrow(/preflight-port-occupied/);

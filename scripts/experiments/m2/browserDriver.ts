@@ -42,8 +42,20 @@ export interface BrowserAttemptOptions {
     heartbeatIntervalMs: number;
   };
   /** Called once when the observed tick first reaches
-   * `attempt.gatewayStopAtTick` (the planned mid-run gateway stop). */
-  onGatewayStopTick?: () => Promise<void>;
+   * `attempt.gatewayStopAtTick` (the planned mid-run gateway stop); resolves
+   * with the gateway child's exit outcome so the stop is EVIDENCED. */
+  onGatewayStopTick?: () => Promise<string>;
+}
+
+/** Evidence that a planned gateway stop actually fired (audit finding 8):
+ * a stop-planned attempt whose trigger never fired is an invalid treatment
+ * observation, never a silent completion. */
+export interface GatewayStopEvidence {
+  fired: boolean;
+  observedTick: number | null;
+  atUtc: string | null;
+  acceptedResponsesAtStop: string | null;
+  gatewayExit: string | null;
 }
 
 export interface BrowserAttemptResult {
@@ -54,6 +66,7 @@ export interface BrowserAttemptResult {
   heartbeatCount: number;
   consoleErrors: string[];
   replayVerdict: string;
+  gatewayStop: GatewayStopEvidence | null;
 }
 
 function field(page: Page, name: string) {
@@ -118,10 +131,53 @@ export async function runBrowserAttempt(
       );
       if (terminal && !terminalDiagnosticsCaptured) {
         terminalDiagnosticsCaptured = true;
+        writeFileSync(
+          join(attemptDir, 'console-log.json'),
+          `${JSON.stringify({ consoleErrors }, null, 2)}\n`,
+          'utf8',
+        );
         await context.tracing.stop({ path: join(attemptDir, 'failure-trace.zip') });
+        writeFileSync(
+          join(attemptDir, 'diagnostics-manifest.json'),
+          `${JSON.stringify(
+            {
+              captured: {
+                [`${prefix}-screenshot.png`]: 'captured',
+                [`${prefix}-dom.html`]: 'captured',
+                [`${prefix}.json`]: 'captured',
+                'console-log.json': 'captured',
+                'failure-trace.zip': 'captured',
+              },
+              captureFailures: {},
+            },
+            null,
+            2,
+          )}\n`,
+          'utf8',
+        );
       }
-    } catch {
-      // Diagnostics capture must never mask the original failure.
+    } catch (captureError: unknown) {
+      // Diagnostics capture must never mask the original failure — but a
+      // capture failure is itself recorded rather than silently absorbed.
+      try {
+        writeFileSync(
+          join(attemptDir, 'diagnostics-manifest.json'),
+          `${JSON.stringify(
+            {
+              captured: {},
+              captureFailures: {
+                [reason]:
+                  captureError instanceof Error ? captureError.message : String(captureError),
+              },
+            },
+            null,
+            2,
+          )}\n`,
+          'utf8',
+        );
+      } catch {
+        // Nothing more can be done without masking the original failure.
+      }
     }
   };
 
@@ -181,6 +237,16 @@ export async function runBrowserAttempt(
     let lastHeartbeatAt = 0;
     let gatewayStopFired = false;
     let stallDiagnosed = false;
+    let gatewayStopEvidence: GatewayStopEvidence | null =
+      attempt.gatewayStopAtTick !== undefined
+        ? {
+            fired: false,
+            observedTick: null,
+            atUtc: null,
+            acceptedResponsesAtStop: null,
+            gatewayExit: null,
+          }
+        : null;
 
     for (;;) {
       const now = Date.now();
@@ -224,7 +290,15 @@ export async function runBrowserAttempt(
         tick >= attempt.gatewayStopAtTick
       ) {
         gatewayStopFired = true;
-        await options.onGatewayStopTick();
+        const acceptedAtStop = await readFieldText(page, AUTOMATION_FIELDS.acceptedModelResponses);
+        const gatewayExit = await options.onGatewayStopTick();
+        gatewayStopEvidence = {
+          fired: true,
+          observedTick: tick,
+          atUtc: new Date().toISOString(),
+          acceptedResponsesAtStop: acceptedAtStop,
+          gatewayExit,
+        };
       }
 
       if (status === AUTOMATION_TEXT.runStatusComplete) break;
@@ -314,7 +388,44 @@ export async function runBrowserAttempt(
       await fail('replay-mismatch', `in-browser replay verdict: '${replayVerdict.trim()}'`);
     }
 
-    await context.tracing.stop().catch(() => undefined);
+    // Always-saved attempt diagnostics (audit finding 6): the trace, final
+    // screenshot, final DOM, and console/page errors are preserved for EVERY
+    // attempt — a later finalization-stage failure can reference them even
+    // though this context is already closed. A diagnostic manifest records
+    // exactly what was captured and any capture failure.
+    const captured: Record<string, string> = {};
+    const captureFailures: Record<string, string> = {};
+    const tryCapture = async (name: string, action: () => Promise<void>): Promise<void> => {
+      try {
+        await action();
+        captured[name] = 'captured';
+      } catch (captureError: unknown) {
+        captureFailures[name] =
+          captureError instanceof Error ? captureError.message : String(captureError);
+      }
+    };
+    await tryCapture('attempt-trace.zip', async () => {
+      await context.tracing.stop({ path: join(attemptDir, 'attempt-trace.zip') });
+    });
+    await tryCapture('final-screenshot.png', async () => {
+      await page.screenshot({ path: join(attemptDir, 'final-screenshot.png'), fullPage: true });
+    });
+    await tryCapture('final-dom.html', async () => {
+      writeFileSync(join(attemptDir, 'final-dom.html'), await page.content(), 'utf8');
+    });
+    await tryCapture('console-log.json', async () => {
+      writeFileSync(
+        join(attemptDir, 'console-log.json'),
+        `${JSON.stringify({ consoleErrors }, null, 2)}\n`,
+        'utf8',
+      );
+    });
+    writeFileSync(
+      join(attemptDir, 'diagnostics-manifest.json'),
+      `${JSON.stringify({ captured, captureFailures }, null, 2)}\n`,
+      'utf8',
+    );
+
     return {
       runId,
       ledgerPath,
@@ -323,6 +434,7 @@ export async function runBrowserAttempt(
       heartbeatCount: countLines(heartbeatPath),
       consoleErrors,
       replayVerdict: replayVerdict.trim(),
+      gatewayStop: gatewayStopEvidence,
     };
   } catch (error: unknown) {
     // Every failure path — including raw Playwright throws (selector

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ManagedProcess, ProcessManager } from './processManager';
 import { portIsFree } from './gatewayDriver';
+import { viteChildEnv } from './childEnv';
 
 /**
  * Vite dev-server driver (M2 brief §19.5–§19.6): started ONCE per sequence
@@ -42,10 +43,9 @@ export async function startVite(
     command: process.execPath,
     args: [viteCli, '--port', String(port), '--strictPort'],
     cwd: launch.repoRoot,
-    env: {
-      ...process.env,
-      VITE_MODEL_GATEWAY_URL: launch.gatewayUrl ?? AUTOMATION_GATEWAY_URL,
-    },
+    // Allowlisted environment (audit finding 9): the dev server never sees
+    // credential variables from the operator shell.
+    env: viteChildEnv(process.env, launch.gatewayUrl ?? AUTOMATION_GATEWAY_URL),
     logPath: launch.logPath,
   });
   const origin = `http://localhost:${port}`;
