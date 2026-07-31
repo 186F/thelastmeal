@@ -31,6 +31,71 @@ controlling runs, the AI "gateway" (a small local server) that connects one
 character to a language model, and a growing automated laboratory that runs
 whole experiments unattended.
 
+## The big idea: sparse cognition
+
+When a language model drives Mara today, the simulation asks it what to do
+at each genuine decision point: it describes her situation and the concrete
+actions on offer, then folds the model's choice in when the answer arrives.
+The world never stops to wait — the clock keeps running, and a
+deterministic fallback covers her if a reply is late — but every question
+is a paid model call, dozens of them in every 45-minute story. That works;
+the first milestone proved it with a passing live sequence. It just cannot
+be the affordable long-term shape of an AI-driven character.
+
+**Sparse cognition** is the alternative this research program exists to
+test. "Sparse" is the opposite of "constant": rather than being consulted
+at every step, the model is occasionally asked to write a **policy** — a
+short set of standing "in situations like this, prefer actions like that"
+rules, expressed as plain data in a small fixed vocabulary the simulation
+owns. From then on the simulation applies those rules itself,
+deterministically and instantly, at each decision point. The model is
+consulted again only when a **novelty trigger** fires: something happens
+that the standing rules were never written to cover.
+
+An everyday picture: instead of phoning an expert before every small
+choice, the character asks once for brief written instructions and only
+calls back when events go beyond what the instructions anticipated.
+
+|                          | Per-decision (today's baseline)        | Policy-patch (sparse cognition)                                 |
+| ------------------------ | -------------------------------------- | --------------------------------------------------------------- |
+| When the model is called | At every genuine decision opportunity  | Only when a fixed, inspectable novelty trigger fires            |
+| What the model returns   | One chosen action                      | A short standing policy — data, not code                        |
+| Who decides in between   | Nobody: every decision is a model call | A local, deterministic policy interpreter in the simulation     |
+| Who has final authority  | The simulation's action gate           | The same gate — a policy has no more power than a direct choice |
+
+The crucial constraint: this hands the model **less** authority, not more.
+A policy is a piece of data that the simulation validates and installs
+through its normal event system. It cannot contain code, invent new kinds
+of actions, change the world directly, or bypass the legality gate that
+every decision already passes through. And because installed policies live
+inside the recorded event stream, a finished run still replays exactly —
+with no model connected at all.
+
+How the milestones build toward it:
+
+- **Milestone 1 (complete)** built the expensive baseline: Mara driven
+  decision-by-decision by a live model, with the evidence pipeline proving
+  every run valid and replayable.
+- **Milestone 2 (in progress)** builds the automated laboratory and then
+  runs the head-to-head experiment (`sparse-cognition-policy-001`): the
+  same story, with Mara driven both ways, judged on criteria pre-registered
+  before any data is collected:
+
+| Pre-registered bar    | What it demands                                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fewer calls**       | The policy condition uses at most **25%** of the baseline's model calls, and no single scenario exceeds 35%                                                               |
+| **Real coverage**     | At least **80%** of Mara's decision opportunities are resolved by an installed policy — savings must not come from her quietly collapsing into scripted fallback behavior |
+| **Still Mara**        | Her behavior stays measurably close to the per-decision baseline, judged by pre-registered similarity thresholds over behavioral "fingerprints" of each run               |
+| **Honest thinking**   | Nearly every policy-writing call traces to a named novelty trigger — no hidden "ask the model every minute anyway" loop                                                   |
+| **No safety erosion** | No new illegal actions, no replay divergence, no untreated lethal injury when Mara is the only possible helper — the hard guarantees hold exactly as before               |
+
+If the experiment passes, the supported claim is deliberately modest: in
+this one small simulation, a model-written policy preserved a
+pre-registered level of behavioral similarity while using at most a quarter
+as many model calls, with exact replay and no loss of simulation authority.
+Whether that generalizes to larger worlds, other models, or many characters
+is future work — not a Milestone 2 claim.
+
 ## The project at a glance
 
 |                                 |                                                                                                                                                                                                                                                                                                                   |
@@ -40,7 +105,7 @@ whole experiments unattended.
 | **Implementation release**      | 1.8.0                                                                                                                                                                                                                                                                                                             |
 | **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                           |
 | **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model. |
-| **Current work**                | Milestone 2: an unattended experiment orchestrator (Phase 3, under audit in pull request #13)                                                                                                                                                                                                                     |
+| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); next is Phase 4 — the model-driven baseline arm of the experiment, plus a calibration study of how much Mara varies from herself; the sparse policy system and the head-to-head comparison follow in later gated phases         |
 | **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                      |
 | **Authoritative specification** | [`documentation/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                            |
 | **Deep technical contract**     | [`documentation/TECHNICAL_REFERENCE.md`](documentation/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                    |
@@ -175,7 +240,7 @@ Live-run setup and the operator walkthrough live in the
 
 Milestone 2 turns the project from "an experiment you run by hand" into "a
 laboratory that runs experiments unattended" — and is being built in audited
-phases (currently Phase 3, under review in PR #13):
+phases:
 
 - **Phase 2 (landed):** the measurement tools. Behavioral "fingerprints" — a
   versioned numerical profile of how a character behaved in a run, so two
@@ -185,7 +250,7 @@ phases (currently Phase 3, under review in PR #13):
   contracts promise; and blinded review packages, so a human can judge
   behavior without knowing which character produced it
   ([report](documentation/MILESTONE_002_PHASE2_LABORATORY_REPORT.md)).
-- **Phase 3 (built, under audit):** one command
+- **Phase 3 (landed):** one command
   (`npm run m2:orchestrate -- --plan <plan>`) runs a whole planned sequence
   of runs unattended — it starts the real app and a real browser, drives the
   actual on-screen controls, downloads and validates the evidence, seals
