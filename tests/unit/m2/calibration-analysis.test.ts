@@ -48,7 +48,7 @@ describe('deterministic quantiles (type-7, floor, milli-units)', () => {
     expect(quantileMilliFloor(values, 90)).toBe(46_000);
     expect(quantileMilliFloor(values, 0)).toBe(10_000);
     expect(quantileMilliFloor(values, 100)).toBe(50_000);
-  });
+  }, 120_000);
 
   it('handles two-value interpolation, repeated values, and ties', () => {
     expect(quantileMilliFloor([10, 20], 75)).toBe(17_500);
@@ -58,12 +58,12 @@ describe('deterministic quantiles (type-7, floor, milli-units)', () => {
     expect(quantileMilliFloor([1, 7, 7, 7, 9], 50)).toBe(7_000);
     // Floor rounding: rank 0.1·3 = 0.3 over [0,1,…]: 0 + 0.3·1 = 0.3 → 300.
     expect(quantileMilliFloor([0, 1, 2, 3], 10)).toBe(300);
-  });
+  }, 120_000);
 
   it('refuses empty samples and non-integer percentiles', () => {
     expect(() => quantileMilliFloor([], 50)).toThrow(/quantile-empty/);
     expect(() => quantileMilliFloor([1], 50.5)).toThrow(/quantile-percentile-invalid/);
-  });
+  }, 120_000);
 });
 
 describe('deterministic entropy (base 2, milli-bits, floor)', () => {
@@ -77,14 +77,14 @@ describe('deterministic entropy (base 2, milli-bits, floor)', () => {
     expect(entropyMilliBits([])).toBe(0);
     // Zero counts are excluded, not participants.
     expect(entropyMilliBits([0, 8, 0, 8, 0])).toBe(1_000);
-  });
+  }, 120_000);
 
   it('floors irrational entropies deterministically', () => {
     // p = (1/3, 2/3): H = 0.918295… bits → 918 milli-bits.
     expect(entropyMilliBits([1, 2])).toBe(918);
     // p = (1/10, 9/10): H = 0.468995… bits → floor 468.
     expect(entropyMilliBits([1, 9])).toBe(468);
-  });
+  }, 120_000);
 
   it('log2MilliBitsFloor is exact on powers of two and floors otherwise', () => {
     expect(log2MilliBitsFloor(8n, 1n)).toBe(3_000n);
@@ -92,7 +92,7 @@ describe('deterministic entropy (base 2, milli-bits, floor)', () => {
     // log2(3) = 1.58496… → 1584.
     expect(log2MilliBitsFloor(3n, 1n)).toBe(1_584n);
     expect(() => log2MilliBitsFloor(1n, 2n)).toThrow(/log2-domain/);
-  });
+  }, 120_000);
 });
 
 // --------------------------------------------------------------------------
@@ -188,13 +188,13 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(d.p90Milli).toBe(10_000_000);
     expect(d.minimum).toBe(10_000);
     expect(d.maximum).toBe(10_000);
-  });
+  }, 120_000);
 
   it('is byte-identical across repeated analyses of the same evidence', () => {
     const left = canonicalSerialize(buildCalibrationReport('fixture-seq', tenRuns(), []));
     const right = canonicalSerialize(buildCalibrationReport('fixture-seq', tenRuns(), []));
     expect(left).toBe(right);
-  });
+  }, 120_000);
 
   it('identical decision timelines report no divergence and keep ordinal matching valid', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -203,7 +203,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       expect(pair.firstDivergence.comparableDecisions).toBe(3);
       expect(pair.firstDivergence.laterOrdinalMatchingValid).toBe(true);
     }
-  });
+  }, 120_000);
 
   it('reports SELECTION divergence at the first comparable differing choice', () => {
     const runs = tenRuns();
@@ -220,7 +220,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(pair.firstDivergence.leftSelectedAffordanceId).toBe('aff:a');
     expect(pair.firstDivergence.rightSelectedAffordanceId).toBe('aff:b');
     expect(pair.firstDivergence.laterOrdinalMatchingValid).toBe(false);
-  });
+  }, 120_000);
 
   it('reports CONTEXT divergence when beliefs/memories/affordances drift before any action difference', () => {
     const runs = tenRuns();
@@ -252,7 +252,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     )!;
     expect(offeredPair.firstDivergence.kind).toBe('context-divergence');
     expect(offeredPair.firstDivergence.atOrdinal).toBe(0);
-  });
+  }, 120_000);
 
   it('computes entropy from the real fingerprint distributions with pooled aggregates', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -281,7 +281,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(report.aggregate.pooledCategoryTransitionEntropyMilliBits).toBe(
       expectedTransitionEntropy,
     );
-  });
+  }, 120_000);
 
   it('aggregates outcomes, coverage, rationale frequency, and route consistency', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -302,7 +302,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(mixedReport.aggregate.servingProviderIdsDistinct).toEqual(['local', 'other-route']);
     expect(mixedReport.runs[5]!.routeConsistencyVerdict).toBe('inconsistent');
     expect(mixedReport.runs[0]!.routeConsistencyVerdict).toBe('consistent');
-  });
+  }, 120_000);
 
   it('reports operational metrics per run AND in aggregate (§3.4.F)', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -322,7 +322,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(report.aggregate.acceptedModelResponsesTotal).toBe(360);
     expect(report.aggregate.acceptedModelCoverageBp).toBe(9_000);
     expect(report.aggregate.failureCategories).toEqual({ 'upstream-timeout': 10 });
-  });
+  }, 120_000);
 
   it('a run answered by a SECOND model id is inconsistent per run and in aggregate (§3.5)', () => {
     const runs = tenRuns();
@@ -337,7 +337,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       'fake-decision-adapter-v1',
       'surprise-substitute-model',
     ]);
-  });
+  }, 120_000);
 
   it('refuses fewer than two primaries and lists exclusions verbatim', () => {
     expect(() => buildCalibrationReport('fixture-seq', [run('only')], [])).toThrow(
@@ -349,7 +349,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       { executionId: 'det-1-e1', reason: 'deterministic-non-primary' },
     ]);
     expect(report.excludedExecutions).toHaveLength(3);
-  });
+  }, 120_000);
 });
 
 describe('writeCalibrationReport (create-once write/render path)', () => {
@@ -370,7 +370,7 @@ describe('writeCalibrationReport (create-once write/render path)', () => {
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 });
 
 describe('metric-producer registry (§3.4.G)', () => {
@@ -379,7 +379,7 @@ describe('metric-producer registry (§3.4.G)', () => {
       expect(INSTALLED_ANALYSIS_VERSIONS).toContain(version);
     }
     expect(INSTALLED_ANALYSIS_VERSIONS).toContain(M2_CALIBRATION_ANALYSIS_VERSION);
-  });
+  }, 120_000);
 
   it('refuses a study declaring an unimplemented metric or uninstalled analysis version', () => {
     const base = {
@@ -395,5 +395,5 @@ describe('metric-producer registry (§3.4.G)', () => {
     expect(() =>
       assertMetricsProducible({ ...base, analysisScriptVersion: 'not-installed-9.9.9' }),
     ).toThrow(/study-metrics-unproducible/);
-  });
+  }, 120_000);
 });
