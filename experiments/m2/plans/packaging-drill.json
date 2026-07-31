@@ -1,0 +1,29 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-packaging-recovery-drill",
+  "description": "Packaging-recovery drill (focused re-audit finding 3): one deterministic attempt completes, the first packaging transaction is failed by injection AFTER the inventory exists, and the rehearsal proves --resume takes the packaging-only recovery path — launching nothing, changing no inventoried byte, and producing the next versioned receipt-verified archive.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/packaging-drill",
+  "attempts": [
+    {
+      "attemptId": "a-recovery-det",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 20,
+      "gatewayMode": "off"
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-rehearsal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "replacementPolicy": { "maxReplacementAttempts": 0, "retryableFailureClasses": [] },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 600000,
+    "stallTimeoutMs": 120000,
+    "stallGraceMs": 15000,
+    "heartbeatIntervalMs": 5000
+  },
+  "postSequenceBatch": false
+}

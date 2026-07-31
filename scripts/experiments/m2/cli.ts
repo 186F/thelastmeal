@@ -11,6 +11,7 @@ import {
   verifyTreeAgainstInventory,
 } from './packageEvidence';
 import { readSequenceState, verifySealedExecutions, writeSequenceState } from './sequenceState';
+import { readSequenceManifestFile, reconcileManifestWithState } from './sequenceVerification';
 
 /**
  * Orchestrator command surface (M2 brief §19.2).
@@ -112,18 +113,26 @@ export async function runCli(argv: readonly string[]): Promise<number> {
         throw new Error('package-inventory-disagrees-with-state');
       }
       verifyTreeAgainstInventory(root, inventory, 'm2:package');
+      // The IMMUTABLE manifest is authoritative (focused re-audit
+      // finding 4 + pre-push adversarial round): control state must
+      // reconcile against it exactly, and the new receipt's identity
+      // fields come from the MANIFEST — an edited control state can
+      // neither pass nor author a receipt that contradicts the archived
+      // manifest.
+      const manifest = readSequenceManifestFile(root);
+      reconcileManifestWithState(manifest, state, null);
       const zipOption = readOption(rest, 'zip');
       const zipPath = zipOption
         ? resolve(repoRoot, zipOption)
-        : nextArchivePath(dirname(root), state.sequenceId);
+        : nextArchivePath(dirname(root), manifest.sequenceId);
       if (existsSync(zipPath)) {
         throw new Error(`archive-destination-exists: ${zipPath}`);
       }
       const result = await packageSequence(root, zipPath, {
-        sequenceId: state.sequenceId,
-        planSha256: state.planSha256,
-        repositorySha: state.repositorySha,
-        studyPlanSha256: state.studyPlanSha256 === 'none' ? null : state.studyPlanSha256,
+        sequenceId: manifest.sequenceId,
+        planSha256: manifest.planSha256,
+        repositorySha: manifest.repositorySha,
+        studyPlanSha256: manifest.studyPlanSha256 === 'none' ? null : manifest.studyPlanSha256,
       });
       // The operational state points at the NEWEST archive (re-audit §5.5);
       // prior versioned archives remain untouched beside it.

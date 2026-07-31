@@ -12,7 +12,7 @@ import {
   verifyTreeAgainstInventory,
 } from './packageEvidence';
 import { verifySealedExecutions, type SequenceState } from './sequenceState';
-import { sequenceManifestSchema } from './reporting';
+import { sequenceManifestSchema, type SequenceManifest } from './reporting';
 
 /**
  * Resume-time evidence verification (Phase 3 re-audit findings 1 and 5).
@@ -111,11 +111,141 @@ export function revalidateCompletedExecutions(
   }
 }
 
+/** Reads and schema-parses the immutable final evidence manifest; a
+ * missing or malformed manifest is a typed refusal. */
+export function readSequenceManifestFile(sequenceRoot: string): SequenceManifest {
+  const manifestPath = join(sequenceRoot, 'sequence-manifest.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error('completed-resume-verification-failed: sequence-manifest.json missing');
+  }
+  return sequenceManifestSchema.parse(JSON.parse(readFileSync(manifestPath, 'utf8')));
+}
+
+/**
+ * Exact reconciliation of the IMMUTABLE sequence manifest against the
+ * MUTABLE control state (focused re-audit finding 4 §7.2): the manifest is
+ * authoritative. Every identity field, the full execution history — count,
+ * order, IDs, terminal statuses, failure classes and stages, artifact and
+ * study statuses, replacement dispositions, threshold verdicts, run IDs,
+ * seal aggregates, navigation counts, browser provenance, verdicts, and
+ * timestamps — and planned-attempt coverage must agree exactly. The
+ * control state's freeze checkpoints must extend (never rewrite) the
+ * manifest's: the pre/post-package and recovery checkpoints append AFTER
+ * the manifest is written. Any divergence — a removed, added, reordered,
+ * or edited execution, or a changed identity — is a typed read-only
+ * refusal listing every disagreement.
+ */
+export function reconcileManifestWithState(
+  manifest: SequenceManifest,
+  state: SequenceState,
+  /** Null when the caller has no identity-checked plan in hand (the
+   * standalone `m2:package` command): the planned-attempt-coverage check
+   * is skipped there — every other comparison still runs. */
+  plan: OrchestratorPlan | null,
+): void {
+  const mismatches: string[] = [];
+  const identityKeys = [
+    'sequenceId',
+    'planSha256',
+    'repositorySha',
+    'packageVersion',
+    'experimentId',
+    'experimentVersion',
+    'promptVersion',
+    'externalProviderId',
+    'upstreamPlatform',
+    'expectedModelId',
+    'expectedServingProviderId',
+    'studyId',
+    'studyVersion',
+    'studyPlanSha256',
+    'thresholdProfileId',
+    'thresholdProfileVersion',
+    'configFingerprint',
+  ] as const;
+  for (const key of identityKeys) {
+    if (manifest[key] !== state[key]) {
+      mismatches.push(`${key}: manifest '${manifest[key]}' != state '${state[key]}'`);
+    }
+  }
+  if (!manifest.attemptSetComplete) {
+    mismatches.push('attemptSetComplete: manifest does not record a complete attempt set');
+  }
+  // Planned-attempt coverage under the AUTHORITATIVE manifest: every
+  // planned attempt must hold a completed execution in the manifest.
+  for (const attempt of plan?.attempts ?? []) {
+    if (
+      !manifest.executions.some(
+        (execution) =>
+          execution.attemptId === attempt.attemptId && execution.status === 'completed',
+      )
+    ) {
+      mismatches.push(
+        `attempt-coverage: planned attempt '${attempt.attemptId}' has no completed execution in the manifest`,
+      );
+    }
+  }
+  if (manifest.executions.length !== state.executions.length) {
+    mismatches.push(
+      `execution-count: manifest ${manifest.executions.length} != state ${state.executions.length}`,
+    );
+  } else {
+    for (let index = 0; index < manifest.executions.length; index += 1) {
+      const recorded = manifest.executions[index]!;
+      const live = state.executions[index]!;
+      const scalarChecks: Array<[string, unknown, unknown]> = [
+        ['executionId', recorded.executionId, live.executionId],
+        ['attemptId', recorded.attemptId, live.attemptId],
+        ['status', recorded.status, live.status],
+        ['failureReason', recorded.failureReason, live.failureReason],
+        ['failureStage', recorded.failureStage, live.failureStage],
+        ['artifactStatus', recorded.artifactStatus, live.artifactStatus],
+        ['studyStatus', recorded.studyStatus, live.studyStatus],
+        ['replacementDisposition', recorded.replacementDisposition, live.replacementDisposition],
+        ['runId', recorded.runId, live.runId],
+        ['dir', recorded.dir, live.dir],
+        ['sealAggregateSha256', recorded.sealAggregateSha256, live.seal?.aggregateSha256 ?? null],
+        ['navigationCount', recorded.navigationCount, live.navigationCount],
+        ['startedAtUtc', recorded.startedAtUtc, live.startedAtUtc],
+        ['endedAtUtc', recorded.endedAtUtc, live.endedAtUtc],
+      ];
+      for (const [field, fromManifest, fromState] of scalarChecks) {
+        if (fromManifest !== fromState) {
+          mismatches.push(
+            `${recorded.executionId}.${field}: manifest '${String(fromManifest)}' != state '${String(fromState)}'`,
+          );
+        }
+      }
+      const deepChecks: Array<[string, unknown, unknown]> = [
+        ['thresholdVerdicts', recorded.thresholdVerdicts, live.thresholdVerdicts],
+        ['browserProvenance', recorded.browserProvenance, live.browserProvenance],
+        ['verdicts', recorded.verdicts, live.verdicts],
+      ];
+      for (const [field, fromManifest, fromState] of deepChecks) {
+        if (JSON.stringify(fromManifest) !== JSON.stringify(fromState)) {
+          mismatches.push(`${recorded.executionId}.${field}: manifest and state disagree`);
+        }
+      }
+    }
+  }
+  const checkpointPrefix = state.freezeCheckpoints.slice(0, manifest.freezeCheckpoints.length);
+  if (JSON.stringify(checkpointPrefix) !== JSON.stringify(manifest.freezeCheckpoints)) {
+    mismatches.push(
+      'freezeCheckpoints: the manifest checkpoints are not a prefix of the control state checkpoints',
+    );
+  }
+  if (mismatches.length > 0) {
+    throw new Error(`completed-manifest-state-divergence: ${mismatches.join('; ')}`);
+  }
+}
+
 /**
  * Full completed-sequence verification for the no-op resume path
  * (re-audit finding 1, §5.3): execution seals, root-vs-inventory byte
- * equality, manifest parse, semantic revalidation, and archive + sidecar
- * + receipt agreement with extraction verification.
+ * equality, manifest parse WITH exact manifest-vs-state reconciliation
+ * (the manifest is authoritative — focused re-audit finding 4), semantic
+ * revalidation, and archive + sidecar + receipt agreement with extraction
+ * verification.
  */
 export async function verifyCompletedSequence(
   sequenceRoot: string,
@@ -136,17 +266,8 @@ export async function verifyCompletedSequence(
   }
   verifyTreeAgainstInventory(sequenceRoot, inventory, 'completed-root');
 
-  const manifestPath = join(sequenceRoot, 'sequence-manifest.json');
-  if (!existsSync(manifestPath)) {
-    throw new Error('completed-resume-verification-failed: sequence-manifest.json missing');
-  }
-  const manifest = sequenceManifestSchema.parse(JSON.parse(readFileSync(manifestPath, 'utf8')));
-  if (!manifest.attemptSetComplete || manifest.sequenceId !== state.sequenceId) {
-    throw new Error(
-      'completed-resume-verification-failed: final evidence manifest does not describe a ' +
-        `complete attempt set for ${state.sequenceId}`,
-    );
-  }
+  const manifest = readSequenceManifestFile(sequenceRoot);
+  reconcileManifestWithState(manifest, state, plan);
 
   revalidateCompletedExecutions(sequenceRoot, state, plan);
 

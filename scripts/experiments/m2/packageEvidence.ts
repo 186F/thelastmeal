@@ -46,9 +46,18 @@ import { helperEnv } from './childEnv';
  * failed, never completed.
  */
 
-export const PACKAGING_VERSION = 'm2-evidence-packaging-2.0.0';
+export const PACKAGING_VERSION = 'm2-evidence-packaging-2.1.0';
 
 export const INVENTORY_FILE_NAME = 'sha256-inventory.json';
+
+/**
+ * The stages of the packaging transaction that run AFTER the inventory
+ * exists (focused re-audit finding 3 §6.4). `onStage` fires immediately
+ * BEFORE each one; a throw from the hook drills that stage's failure. The
+ * post-package freeze check is the separate `beforeReceipt` hook, between
+ * 'commit' and 'sidecar'.
+ */
+export type PackagingStage = 'zip' | 'size' | 'extraction' | 'commit' | 'sidecar' | 'receipt';
 
 const EXCLUDED_NAMES = new Set(['sequence.lock']);
 const EXCLUDED_SUFFIXES = ['.tmp'];
@@ -74,6 +83,17 @@ export interface PackageOptions {
   onHelper?: (command: string, args: readonly string[]) => void;
   /** Hard cap on the produced archive size (re-audit §13.4). */
   maxArchiveBytes?: number;
+  /** Stage hook for the post-inventory transaction (focused re-audit
+   * finding 3 §6.4): fires immediately before each stage; a throw drills
+   * that stage's failure without partial receipts or evidence mutation. */
+  onStage?: (stage: PackagingStage) => void;
+  /** Called with the inventory aggregate BEFORE the inventory file is
+   * written (and again when an existing inventory is verify-reused), so
+   * the caller can persist an AUTHENTICATED aggregate in its control
+   * state: any evidence root carrying an inventory then has a recorded
+   * aggregate to check it against — a rewritten inventory cannot
+   * self-certify a mutated root to the recovery path. */
+  onInventory?: (aggregateSha256: string) => void;
 }
 
 export interface PackageResult {
@@ -269,6 +289,45 @@ export function stagedArchivePath(zipPath: string): string {
   );
 }
 
+/**
+ * Removes staged `.tmp` archive siblings a crashed packaging transaction
+ * left behind for this sequence (focused re-audit finding 3 §6.4: prior
+ * incomplete archive material is handled EXPLICITLY). Staged files were
+ * never committed evidence — a completed transaction renames them away and
+ * a failed one deletes them in `finally`; anything matching the staged
+ * naming pattern here is a crash leftover. Committed archives are never
+ * touched. Returns the removed names. The caller must hold the sequence
+ * writer lock.
+ */
+export function removeStaleStagedArchives(dir: string, sequenceId: string): string[] {
+  const pattern = new RegExp(
+    `^\\.${sequenceId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-evidence-\\d{3}\\.zip\\..+\\.tmp$`,
+  );
+  const removed: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (pattern.test(entry)) {
+      rmSync(join(dir, entry), { force: true });
+      removed.push(entry);
+    }
+  }
+  return removed;
+}
+
+/**
+ * Committed archives for this sequence that never received their receipt
+ * (a failure between the atomic rename and the receipt write). They are
+ * preserved — versioned archives are immutable and never deleted — and the
+ * caller records them as superseded before packaging the next index.
+ */
+export function findUnreceiptedArchives(dir: string, sequenceId: string): string[] {
+  const pattern = new RegExp(
+    `^${sequenceId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-evidence-\\d{3}\\.zip$`,
+  );
+  return readdirSync(dir)
+    .filter((entry) => pattern.test(entry) && !existsSync(join(dir, `${entry}.receipt.json`)))
+    .sort();
+}
+
 export async function packageSequence(
   sequenceRoot: string,
   zipPath: string,
@@ -303,6 +362,7 @@ export async function packageSequence(
   let inventory = readInventory(sequenceRoot);
   if (inventory) {
     verifyTreeAgainstInventory(sequenceRoot, inventory, 'repackage-existing-inventory');
+    options.onInventory?.(inventory.aggregateSha256);
   } else {
     const inventoried = files
       .filter((name) => name !== INVENTORY_FILE_NAME)
@@ -311,6 +371,9 @@ export async function packageSequence(
       .update(inventoried.map((file) => `${file.name}:${file.sha256}`).join('\n'))
       .digest('hex');
     inventory = { files: inventoried, aggregateSha256 };
+    // The caller records the aggregate BEFORE the file exists on disk, so
+    // an on-disk inventory is never the sole witness to its own content.
+    options.onInventory?.(aggregateSha256);
     writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`, 'utf8');
   }
 
@@ -319,8 +382,10 @@ export async function packageSequence(
   // finding 7).
   const stagedZip = stagedArchivePath(zipPath);
   try {
+    options.onStage?.('zip');
     await createZip(sequenceRoot, stagedZip, options.onHelper);
 
+    options.onStage?.('size');
     if (options.maxArchiveBytes !== undefined) {
       const size = statSync(stagedZip).size;
       if (size > options.maxArchiveBytes) {
@@ -330,6 +395,7 @@ export async function packageSequence(
 
     // 4. Extraction verification: portable paths, exact file set, exact
     // bytes. A stale entry, a backslash path, or a traversal cannot survive.
+    options.onStage?.('extraction');
     const verifyDir = mkdtempSync(join(tmpdir(), 'm2-package-verify-'));
     try {
       await extractZip(stagedZip, verifyDir, options.onHelper);
@@ -348,6 +414,7 @@ export async function packageSequence(
     } finally {
       closeSync(fd);
     }
+    options.onStage?.('commit');
     renameSync(stagedZip, zipPath);
 
     // 6. The final path must hash exactly as staged before any receipt
@@ -358,8 +425,10 @@ export async function packageSequence(
       throw new Error(`archive-commit-hash-mismatch: ${zipPath}`);
     }
     options.beforeReceipt?.();
+    options.onStage?.('sidecar');
     writeFileSync(`${zipPath}.sha256`, `${zipSha256}  ${basename(zipPath)}\n`, 'utf8');
     const receiptPath = `${zipPath}.receipt.json`;
+    options.onStage?.('receipt');
     writeFileSync(
       receiptPath,
       `${JSON.stringify(

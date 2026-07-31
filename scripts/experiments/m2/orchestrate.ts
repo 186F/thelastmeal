@@ -50,8 +50,9 @@ import {
   SEQUENCE_STATE_VERSION,
   type AttemptExecution,
   type BrowserProvenance,
+  type SequenceState,
 } from './sequenceState';
-import { ProcessManager, type ManagedProcess } from './processManager';
+import { ProcessManager, classifyChildTerminalState, type ManagedProcess } from './processManager';
 import { startGateway, portIsFree, tsxCliPath } from './gatewayDriver';
 import {
   AUTOMATION_GATEWAY_PORT,
@@ -75,11 +76,31 @@ import {
   verifyFinalManifestTreatment,
 } from './runFinalizer';
 import { evaluateFromState, type SequenceEvaluation } from './evaluateSequence';
-import { nextArchivePath, packageSequence } from './packageEvidence';
+import {
+  findUnreceiptedArchives,
+  nextArchivePath,
+  packageSequence,
+  readInventory,
+  removeStaleStagedArchives,
+  verifyTreeAgainstInventory,
+  type InventoryFile,
+  type PackagingStage,
+} from './packageEvidence';
 import { writeSequenceManifest, writeSequenceReport, type SequenceFinalFacts } from './reporting';
-import { revalidateCompletedExecutions, verifyCompletedSequence } from './sequenceVerification';
+import {
+  readSequenceManifestFile,
+  reconcileManifestWithState,
+  revalidateCompletedExecutions,
+  verifyCompletedSequence,
+} from './sequenceVerification';
 import { acquireKeepAwake, type KeepAwakeLease } from './keepAwake';
-import { batchChildEnv, fakeGatewayEnv, helperEnv, liveGatewayEnv } from './childEnv';
+import {
+  batchChildEnv,
+  browserChildEnv,
+  fakeGatewayEnv,
+  helperEnv,
+  liveGatewayEnv,
+} from './childEnv';
 
 /**
  * The unattended sequence orchestrator (M2 brief §19), remediated per the
@@ -119,6 +140,11 @@ export interface OrchestrateOptions {
   allowSleepRisk: boolean;
   headed: boolean;
   repoRoot: string;
+  /** Packaging-stage hook threaded into the packaging transaction
+   * (focused re-audit finding 3 §6.4): a throw drills that stage's
+   * failure. Used by the rehearsal's recovery drill and the failure-
+   * injection tests; absent in normal operation. */
+  onPackagingStage?: (stage: PackagingStage) => void;
 }
 
 export interface OrchestrateResult {
@@ -128,6 +154,10 @@ export interface OrchestrateResult {
   failedExecutions: number;
   zipPath: string | null;
   noOpResume: boolean;
+  /** True when the invocation took the packaging-only recovery path
+   * (focused re-audit finding 3): no Vite, Chromium, or gateway process
+   * was launched and no inventoried evidence byte was written. */
+  packagingRecovery: boolean;
 }
 
 /** Default per-sequence evidence budget (re-audit §13.4). */
@@ -310,10 +340,31 @@ function acquireSequenceLock(sequenceRoot: string): () => void {
   };
 }
 
-/** Freeze identity (audit finding 3; re-audit findings 2 and 4):
- * re-verified before AND after every execution and through the COMPLETE
- * post-sequence pipeline. Any drift invalidates the work as
- * `freeze-violation`. */
+/** The exact bytes of the archived study freeze record (focused re-audit
+ * finding 4 §7.1): one shared constructor for the writer and every freeze
+ * check, so the record's frozen form is defined once. */
+export function studyFreezeRecordContent(study: {
+  studyId: string;
+  studyVersion: string;
+  studyPlanSha256: string;
+  studyConfigFingerprint: string;
+}): string {
+  return `${JSON.stringify(
+    {
+      studyId: study.studyId,
+      studyVersion: study.studyVersion,
+      planSha256: study.studyPlanSha256,
+      configFingerprint: study.studyConfigFingerprint,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+/** Freeze identity (audit finding 3; re-audit findings 2 and 4; focused
+ * re-audit finding 4): re-verified before AND after every execution and
+ * through the COMPLETE post-sequence pipeline. Any drift invalidates the
+ * work as `freeze-violation`. */
 export interface FreezeIdentity {
   repositorySha: string;
   packageVersion: string;
@@ -322,10 +373,15 @@ export interface FreezeIdentity {
   configFingerprint: string;
   thresholdProfileId: string;
   thresholdProfileVersion: string;
-  /** Study freeze (re-audit finding 2): archived bytes, the freeze record,
-   * AND the external registered file are all rechecked. */
+  /** Study freeze (re-audit finding 2; focused re-audit finding 4 §7.1):
+   * archived bytes, the freeze RECORD (exact bytes AND parsed fields), and
+   * the external registered file are all rechecked at every checkpoint. */
   studyPlanSha256: string | null;
   studyPlanPathAbsolute: string | null;
+  studyId: string | null;
+  studyVersion: string | null;
+  studyConfigFingerprint: string | null;
+  studyFreezeRecordSha256: string | null;
 }
 
 export function checkFreeze(repoRoot: string, sequenceRoot: string, freeze: FreezeIdentity): void {
@@ -372,8 +428,46 @@ export function checkFreeze(repoRoot: string, sequenceRoot: string, freeze: Free
     ) {
       throw new Error('freeze-violation: archived study bytes missing or altered');
     }
-    if (!existsSync(join(sequenceRoot, 'study.freeze.archived.json'))) {
+    // The freeze RECORD is verified like every other frozen artifact
+    // (focused re-audit finding 4 §7.1): parsed with each identity field
+    // compared, AND its exact bytes hashed — a byte-level change that
+    // preserves valid JSON and field values still violates.
+    const freezeRecordPath = join(sequenceRoot, 'study.freeze.archived.json');
+    if (!existsSync(freezeRecordPath)) {
       throw new Error('freeze-violation: archived study freeze record missing');
+    }
+    const recordBytes = readFileSync(freezeRecordPath);
+    let record: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(recordBytes.toString('utf8'));
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('not-an-object');
+      }
+      record = parsed as Record<string, unknown>;
+    } catch {
+      throw new Error(
+        'freeze-violation: archived study freeze record is not a parseable JSON object',
+      );
+    }
+    const recordChecks: Array<[string, unknown, unknown]> = [
+      ['studyId', record.studyId, freeze.studyId],
+      ['studyVersion', record.studyVersion, freeze.studyVersion],
+      ['planSha256', record.planSha256, freeze.studyPlanSha256],
+      ['configFingerprint', record.configFingerprint, freeze.studyConfigFingerprint],
+    ];
+    for (const [field, actual, wanted] of recordChecks) {
+      if (actual !== wanted) {
+        throw new Error(
+          `freeze-violation: archived study freeze record ${field} is '${String(actual)}', ` +
+            `the frozen identity requires '${String(wanted)}'`,
+        );
+      }
+    }
+    if (
+      freeze.studyFreezeRecordSha256 !== null &&
+      sha256(recordBytes) !== freeze.studyFreezeRecordSha256
+    ) {
+      throw new Error('freeze-violation: archived study freeze record bytes altered');
     }
     if (
       freeze.studyPlanPathAbsolute !== null &&
@@ -478,6 +572,31 @@ interface AttemptOutcome {
   failure: AttemptFailure | Error | null;
 }
 
+/**
+ * Issues the PLANNED mid-run gateway stop (focused re-audit finding 1 +
+ * pre-push adversarial round): a gateway that ALREADY exited before the
+ * planned stop tick died unexpectedly — the trigger refuses instead of
+ * absorbing the earlier death as a planned stop, so the stop evidence can
+ * never attribute an external kill to the plan. `markIssued` runs only
+ * when the gateway was alive at trigger time.
+ */
+export async function issuePlannedGatewayStop(
+  processManager: ProcessManager,
+  gateway: ManagedProcess,
+  markIssued: () => void,
+  graceMs = 5_000,
+): Promise<string> {
+  if (gateway.hasExited()) {
+    throw new AttemptFailure(
+      'gateway-died-unexpectedly',
+      `gateway child already exited (${gateway.terminalOutcome() ?? 'unknown'}) before the ` +
+        'planned stop tick — an external death is never a planned stop',
+    );
+  }
+  markIssued();
+  return processManager.stop(gateway, graceMs);
+}
+
 async function executeAttempt(
   browser: Browser,
   processManager: ProcessManager,
@@ -546,10 +665,10 @@ async function executeAttempt(
       timeouts: { ...plan.timeouts, runTimeoutMs },
       onGatewayStopTick:
         attempt.gatewayStopAtTick !== undefined && gateway !== null
-          ? async () => {
-              plannedStopIssued = true;
-              return processManager.stop(gateway!, 5_000);
-            }
+          ? () =>
+              issuePlannedGatewayStop(processManager, gateway!, () => {
+                plannedStopIssued = true;
+              })
           : undefined,
     });
     execution.navigationCount = browserResult.navigationCount;
@@ -566,13 +685,19 @@ async function executeAttempt(
         );
       }
     }
-    // Unplanned gateway death (finding 8): a normal model attempt whose
-    // gateway child exited on its own is not a valid treatment observation,
-    // however cleanly the fallbacks carried the run.
-    if (gateway && !plannedStopIssued && gateway.exitCode() !== null) {
+    // Unplanned gateway death (finding 8; focused re-audit finding 1): a
+    // normal model attempt whose gateway child ended on its own — by
+    // numeric exit OR by signal — is not a valid treatment observation,
+    // however cleanly the fallbacks carried the run. Classification uses
+    // terminal STATE, so a SIGTERM/SIGKILL-killed gateway cannot evade
+    // detection behind a null numeric exit code.
+    if (
+      gateway &&
+      classifyChildTerminalState(gateway, plannedStopIssued) === 'unexpected-terminal-exit'
+    ) {
       throw new AttemptFailure(
         'gateway-died-unexpectedly',
-        `gateway child exited with ${String(gateway.exitCode())} during a normal attempt`,
+        `gateway child exited (${gateway.terminalOutcome() ?? 'unknown'}) during a normal attempt`,
       );
     }
 
@@ -811,6 +936,180 @@ export async function runPostSequencePipeline(
   }
 }
 
+/**
+ * Packaging-ready recovery (focused re-audit finding 3): once a valid
+ * inventory exists, the evidence root is FINAL — a failure in any later
+ * packaging stage (zip, size, extraction, commit, post-package freeze,
+ * sidecar, receipt) resumes HERE, never through the ordinary path.
+ *
+ * The recovery path:
+ *  - verifies the root READ-ONLY before any write: terminal seals,
+ *    semantic revalidation, exact root-vs-inventory byte equality, and
+ *    the authoritative manifest reconciled against control state;
+ *  - launches NO Vite, Chromium, or gateway process and never appends to
+ *    the evidence-root process log;
+ *  - never reruns or rewrites evaluation, report, or manifest;
+ *  - handles prior packaging material explicitly: crash-leftover staged
+ *    `.tmp` siblings are removed, committed-but-unreceipted archives are
+ *    preserved and recorded as superseded;
+ *  - re-runs only the freeze verification and the packaging transaction,
+ *    producing the NEXT versioned archive with its sidecar and receipt;
+ *  - writes only control-root operational state, marking `completed` only
+ *    after the archive verifies and the receipt exists.
+ */
+async function resumePackagingReady(context: {
+  options: OrchestrateOptions;
+  sequenceRoot: string;
+  state: SequenceState;
+  plan: OrchestratorPlan;
+  planSha256: string;
+  repositorySha: string;
+  freeze: FreezeIdentity;
+  inventory: InventoryFile;
+}): Promise<OrchestrateResult> {
+  const { options, sequenceRoot, state, plan, inventory } = context;
+  if (state.status !== 'packaging' && state.status !== 'failed') {
+    throw new Error(
+      `packaging-recovery-unexpected-status: an inventory exists but the sequence state is ` +
+        `'${state.status}' — an inventoried root is final and only reaches this path from a ` +
+        'packaging-stage failure',
+    );
+  }
+  for (const attempt of plan.attempts) {
+    if (completedExecution(state, attempt.attemptId) === null) {
+      throw new Error(
+        `packaging-recovery-blocked: an inventory exists but planned attempt ` +
+          `'${attempt.attemptId}' has no completed execution — refusing to package an ` +
+          'incomplete attempt set',
+      );
+    }
+  }
+
+  // ---- Read-only verification: nothing below this comment writes until
+  // every check passes. --------------------------------------------------
+  verifySealedExecutions(sequenceRoot, state);
+  revalidateCompletedExecutions(sequenceRoot, state, plan);
+  // The on-disk inventory must be AUTHENTICATED, never self-certifying
+  // (adversarial round): the aggregate recorded in control state before
+  // the inventory file was written is required and must agree exactly — a
+  // rewritten inventory matching a mutated root cannot pass, and a planted
+  // inventory with no recorded aggregate is refused outright.
+  if (state.inventoryAggregateSha256 === null) {
+    throw new Error(
+      'packaging-recovery-blocked: no inventory aggregate is recorded in the control state — ' +
+        'the evidence-root inventory cannot be authenticated',
+    );
+  }
+  if (state.inventoryAggregateSha256 !== inventory.aggregateSha256) {
+    throw new Error(
+      'packaging-recovery-blocked: the recorded inventory aggregate disagrees with the ' +
+        'inventory file',
+    );
+  }
+  verifyTreeAgainstInventory(sequenceRoot, inventory, 'packaging-recovery');
+  reconcileManifestWithState(readSequenceManifestFile(sequenceRoot), state, plan);
+
+  const releaseLock = acquireSequenceLock(sequenceRoot);
+  let zipPath: string | null = null;
+  let recoveryFailed = false;
+  try {
+    const persist = (transition: string): void => {
+      state.lastTransition = transition;
+      state.updatedAtUtc = nowUtc();
+      writeSequenceState(sequenceRoot, state);
+    };
+    const checkpoint = (name: string): void => {
+      checkFreeze(options.repoRoot, sequenceRoot, context.freeze);
+      state.freezeCheckpoints.push({ checkpoint: name, atUtc: nowUtc() });
+      persist(`freeze-checkpoint:${name}`);
+    };
+    try {
+      // Prior packaging material (§6.4): staged .tmp leftovers are deleted
+      // (they were never committed evidence); committed-but-unreceipted
+      // archives are preserved and recorded as superseded.
+      const destinationDir = resolve(sequenceRoot, '..');
+      const removedStaged = removeStaleStagedArchives(destinationDir, plan.sequenceId);
+      for (const staged of removedStaged) {
+        console.warn(`packaging recovery: removed crash-leftover staged archive ${staged}`);
+      }
+      for (const orphan of findUnreceiptedArchives(destinationDir, plan.sequenceId)) {
+        if (!state.supersededArchives.some((entry) => entry.archive === orphan)) {
+          state.supersededArchives.push({
+            archive: orphan,
+            reason: 'unreceipted-before-recovery',
+            atUtc: nowUtc(),
+          });
+        }
+      }
+      checkpoint('pre-package:recovery');
+      state.status = 'packaging';
+      persist('packaging-recovery');
+      const archivePath = nextArchivePath(destinationDir, plan.sequenceId);
+      const packagingLog = join(controlRoot(sequenceRoot), 'packaging-log.jsonl');
+      const packaged = await packageSequence(
+        sequenceRoot,
+        archivePath,
+        {
+          sequenceId: plan.sequenceId,
+          planSha256: context.planSha256,
+          repositorySha: context.repositorySha,
+          studyPlanSha256: plan.study?.studyPlanSha256 ?? null,
+        },
+        {
+          beforeReceipt: () => checkpoint('post-package:recovery'),
+          maxArchiveBytes: plan.evidenceSizeBudgetBytes ?? DEFAULT_EVIDENCE_BUDGET_BYTES,
+          onStage: options.onPackagingStage,
+          onInventory: (aggregateSha256) => {
+            state.inventoryAggregateSha256 = aggregateSha256;
+            persist('inventory-recorded:recovery');
+          },
+          onHelper: (command, args) => {
+            try {
+              writeFileSync(
+                packagingLog,
+                `${JSON.stringify({ atUtc: nowUtc(), command, args })}\n`,
+                {
+                  flag: 'a',
+                },
+              );
+            } catch {
+              // Control-side provenance must not break packaging.
+            }
+          },
+        },
+      );
+      state.archivePath = packaged.zipPath;
+      state.archiveSha256 = packaged.zipSha256;
+      state.inventoryAggregateSha256 = packaged.inventoryAggregateSha256;
+      state.status = 'completed';
+      persist('sequence-completed:packaging-recovery');
+      zipPath = packaged.zipPath;
+      console.log(
+        'packaging-ready recovery: root verified against the inventory read-only; nothing ' +
+          `launched; versioned archive ${packaged.zipPath} written with sidecar and receipt`,
+      );
+    } catch (error: unknown) {
+      recoveryFailed = true;
+      state.status = 'failed';
+      state.sequenceFailureReason = `packaging-recovery: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      persist('sequence-failed:packaging-recovery');
+    }
+  } finally {
+    releaseLock();
+  }
+  return {
+    sequenceRoot,
+    status: recoveryFailed ? 'failed' : 'completed',
+    executions: state.executions.length,
+    failedExecutions: state.executions.filter((execution) => execution.status === 'failed').length,
+    zipPath,
+    noOpResume: false,
+    packagingRecovery: true,
+  };
+}
+
 export async function orchestrateSequence(options: OrchestrateOptions): Promise<OrchestrateResult> {
   const planBytes = readFileSync(options.planPath);
   const loaded: LoadedPlan = parsePlan(planBytes);
@@ -898,6 +1197,15 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     thresholdProfileVersion: profile.profileVersion,
     studyPlanSha256: plan.study?.studyPlanSha256 ?? null,
     studyPlanPathAbsolute,
+    studyId: plan.study?.studyId ?? null,
+    studyVersion: plan.study?.studyVersion ?? null,
+    studyConfigFingerprint: plan.study?.studyConfigFingerprint ?? null,
+    // The record's frozen byte identity (focused re-audit finding 4 §7.1)
+    // derives from the reviewed plan binding BEFORE any write.
+    studyFreezeRecordSha256:
+      plan.study !== undefined
+        ? sha256(Buffer.from(studyFreezeRecordContent(plan.study), 'utf8'))
+        : null,
   };
 
   let state = readSequenceState(sequenceRoot);
@@ -931,8 +1239,8 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
   ) {
     await verifyCompletedSequence(sequenceRoot, state, plan);
     console.log(
-      'no-op resume: sequence already completed; seals, inventory, manifest, semantic ' +
-        'revalidation, archive, and receipt all verified; nothing launched',
+      'no-op resume: sequence already completed; seals, inventory, manifest reconciliation, ' +
+        'semantic revalidation, archive, and receipt all verified; nothing launched',
     );
     return {
       sequenceRoot,
@@ -942,7 +1250,28 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         .length,
       zipPath: state.archivePath,
       noOpResume: true,
+      packagingRecovery: false,
     };
+  }
+
+  // ---- Packaging-ready recovery (focused re-audit finding 3): an
+  // inventory in the evidence root means the root is FINAL — the ordinary
+  // resume path (which launches processes and regenerates evidence) must
+  // never touch it. Only the packaging transaction may run again. ----------
+  if (state) {
+    const packagingInventory = readInventory(sequenceRoot);
+    if (packagingInventory !== null) {
+      return resumePackagingReady({
+        options,
+        sequenceRoot,
+        state,
+        plan,
+        planSha256: loaded.planSha256,
+        repositorySha,
+        freeze,
+        inventory: packagingInventory,
+      });
+    }
   }
 
   // Keep-awake is LIVE-ONLY and acquired after every read-only refusal
@@ -1007,16 +1336,7 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         throw new Error('freeze-violation: archived study bytes do not match the registered study');
       }
       const freezeRecordPath = join(sequenceRoot, 'study.freeze.archived.json');
-      const freezeRecord = `${JSON.stringify(
-        {
-          studyId: plan.study.studyId,
-          studyVersion: plan.study.studyVersion,
-          planSha256: plan.study.studyPlanSha256,
-          configFingerprint: plan.study.studyConfigFingerprint,
-        },
-        null,
-        2,
-      )}\n`;
+      const freezeRecord = studyFreezeRecordContent(plan.study);
       if (existsSync(freezeRecordPath)) {
         if (readFileSync(freezeRecordPath, 'utf8') !== freezeRecord) {
           throw new Error('freeze-violation: archived study freeze record differs');
@@ -1059,6 +1379,7 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         archivePath: null,
         archiveSha256: null,
         inventoryAggregateSha256: null,
+        supersededArchives: [],
         freezeCheckpoints: [],
         executions: [],
         lastTransition: 'created',
@@ -1089,7 +1410,14 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         repoRoot: options.repoRoot,
         logPath: join(sequenceRoot, 'vite.log'),
       });
-      browser = await chromium.launch({ headless: !options.headed });
+      // The Chromium OS process receives the REDUCED browser environment
+      // (focused re-audit finding 2): platform base only, plus the explicit
+      // display/session allowlist in headed mode — an operator-exported
+      // credential never enters the browser process.
+      browser = await chromium.launch({
+        headless: !options.headed,
+        env: browserChildEnv(process.env, options.headed),
+      });
       browserVersion = browser.version();
       const playwrightVersion = (
         JSON.parse(
@@ -1360,6 +1688,15 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
             {
               beforeReceipt,
               maxArchiveBytes: evidenceBudgetBytes,
+              onStage: options.onPackagingStage,
+              // The aggregate is persisted in CONTROL state before the
+              // inventory file exists (adversarial round): a later
+              // packaging-recovery resume authenticates the on-disk
+              // inventory against this recorded value.
+              onInventory: (aggregateSha256) => {
+                state!.inventoryAggregateSha256 = aggregateSha256;
+                persist('inventory-recorded');
+              },
               onHelper: (command, args) => {
                 try {
                   writeFileSync(
@@ -1404,6 +1741,7 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         .length,
       zipPath,
       noOpResume: false,
+      packagingRecovery: false,
     };
   } catch (error: unknown) {
     if (state && readSequenceState(sequenceRoot)) {

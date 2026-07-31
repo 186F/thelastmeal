@@ -86,6 +86,7 @@ function baseState(): SequenceState {
     archivePath: null,
     archiveSha256: null,
     inventoryAggregateSha256: null,
+    supersededArchives: [],
     freezeCheckpoints: [],
     executions: [],
     lastTransition: 'created',

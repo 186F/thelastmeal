@@ -134,6 +134,7 @@ async function completedSequenceFixture(): Promise<Fixture> {
     archivePath: null,
     archiveSha256: null,
     inventoryAggregateSha256: null,
+    supersededArchives: [],
     freezeCheckpoints: [{ checkpoint: 'pre-package', atUtc: '2026-07-30T00:00:00.000Z' }],
     executions: [
       {
@@ -259,6 +260,34 @@ describe('completed-sequence verification (re-audit §5.3/§5.5)', () => {
       verifyCompletedSequence(fixture.root, fixture.state, fixture.plan),
     ).rejects.toThrow(/resume-evidence-invalid/);
   });
+
+  it('a control-state edit diverging from the immutable manifest refuses (focused re-audit §7.2)', async () => {
+    // An execution added to control state alone: the archive and evidence
+    // root are untouched, seals still verify — only reconciliation against
+    // the AUTHORITATIVE manifest can notice.
+    const fixture = await completedSequenceFixture();
+    fixture.state.executions.push({
+      ...fixture.state.executions[0]!,
+      executionId: 'a-det-e0',
+      status: 'failed',
+      failureReason: 'run-timeout',
+      // A VALID empty-set seal for the never-created directory, so seal
+      // verification passes and only manifest reconciliation can refuse.
+      seal: sealExecution(fixture.root, 'attempt-a-det-e0', 'failed'),
+      dir: 'attempt-a-det-e0',
+    });
+    await expect(
+      verifyCompletedSequence(fixture.root, fixture.state, fixture.plan),
+    ).rejects.toThrow(/completed-manifest-state-divergence/);
+
+    // An edited per-execution field with a matching re-computed seal: same
+    // authority argument, caught by field-level reconciliation.
+    const fixture2 = await completedSequenceFixture();
+    fixture2.state.executions[0]!.navigationCount = 9;
+    await expect(
+      verifyCompletedSequence(fixture2.root, fixture2.state, fixture2.plan),
+    ).rejects.toThrow(/completed-manifest-state-divergence.*navigationCount/);
+  });
 });
 
 describe('semantic revalidation (re-audit §9.2)', () => {
@@ -323,6 +352,20 @@ describe('derived commands never mutate the completed root (re-audit §9.4/§5.5
     writeFileSync(join(fixture.root, 'planted.md'), 'mutation', 'utf8');
     await expect(runCli(['package', '--sequence', fixture.root])).rejects.toThrow(
       /inventory-tree-mismatch/,
+    );
+  });
+
+  it('m2:package refuses control state that diverges from the immutable manifest (pre-push adversarial round)', async () => {
+    // An edited identity in control state changes no inventoried byte and
+    // no seal — only reconciliation against the ARCHIVED manifest refuses,
+    // and the receipt identity is minted from the manifest, never from
+    // control state.
+    const fixture = await completedSequenceFixture();
+    const tampered = readSequenceState(fixture.root)!;
+    tampered.repositorySha = 'd'.repeat(40);
+    writeSequenceState(fixture.root, tampered);
+    await expect(runCli(['package', '--sequence', fixture.root])).rejects.toThrow(
+      /completed-manifest-state-divergence.*repositorySha/,
     );
   });
 });

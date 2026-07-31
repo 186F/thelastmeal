@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   batchChildEnv,
+  browserChildEnv,
   fakeGatewayEnv,
   helperEnv,
   liveGatewayEnv,
@@ -57,12 +58,16 @@ function observeInsideChild(env: NodeJS.ProcessEnv): {
 }
 
 describe('child process boundary (spawned observation)', () => {
-  it('helper, vite, batch, and fake-gateway children observe NO credentials', () => {
+  it('helper, vite, batch, fake-gateway, AND Chromium children observe NO credentials', () => {
+    // The helper list is not exhaustive by assumption: Chromium is
+    // enumerated explicitly (focused re-audit finding 2 §5.4).
     for (const [name, env] of [
       ['helper', helperEnv(POISONED)],
       ['vite', viteChildEnv(POISONED, 'http://localhost:8799')],
       ['batch', batchChildEnv(POISONED)],
       ['fake-gateway', fakeGatewayEnv(POISONED)],
+      ['chromium-headless', browserChildEnv(POISONED, false)],
+      ['chromium-headed', browserChildEnv(POISONED, true)],
     ] as const) {
       const seen = observeInsideChild(env);
       expect(seen.openrouter, name).toBeNull();
@@ -83,6 +88,29 @@ describe('child process boundary (spawned observation)', () => {
       expect(env[name], name).toBeUndefined();
     }
   });
+
+  it('headed Chromium restores ONLY the display/session variables, never the parent spread', () => {
+    const parent: NodeJS.ProcessEnv = {
+      ...POISONED,
+      DISPLAY: ':1',
+      XAUTHORITY: '/home/op/.Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+    };
+    const headed = browserChildEnv(parent, true);
+    expect(headed.DISPLAY).toBe(':1');
+    expect(headed.XAUTHORITY).toBe('/home/op/.Xauthority');
+    expect(headed.WAYLAND_DISPLAY).toBe('wayland-0');
+    expect(headed.DBUS_SESSION_BUS_ADDRESS).toBe('unix:path=/run/user/1000/bus');
+    for (const name of SECRET_ENV_VARS) {
+      expect(headed[name], name).toBeUndefined();
+    }
+    expect(headed.M2_BOUNDARY_CANARY).toBeUndefined();
+    // Headless operation gets no display variables at all.
+    const headless = browserChildEnv(parent, false);
+    expect(headless.DISPLAY).toBeUndefined();
+    expect(headless.WAYLAND_DISPLAY).toBeUndefined();
+  });
 });
 
 describe('archive and git helpers run under the helper environment', () => {
@@ -101,6 +129,11 @@ describe('archive and git helpers run under the helper environment', () => {
     );
     expect(orchestrateSource.match(/execFileSync\('git'/g)?.length).toBeGreaterThanOrEqual(2);
     expect(orchestrateSource).toContain('env: helperEnv(process.env)');
+    // The Chromium launch is bound to the reduced browser environment
+    // (focused re-audit finding 2): the browser must never inherit the
+    // orchestrator's parent environment.
+    expect(orchestrateSource).toContain('env: browserChildEnv(process.env, options.headed)');
+    expect(orchestrateSource).not.toMatch(/chromium\.launch\(\{ headless: [^}]*\}\)/);
     const processManagerSource = readFileSync(
       join('scripts', 'experiments', 'm2', 'processManager.ts'),
       'utf8',

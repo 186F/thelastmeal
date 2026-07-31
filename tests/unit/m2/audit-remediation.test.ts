@@ -165,6 +165,7 @@ describe('execution seals (audit finding 4; re-audit finding 5)', () => {
       archivePath: null,
       archiveSha256: null,
       inventoryAggregateSha256: null,
+      supersededArchives: [],
       freezeCheckpoints: [],
       executions: [
         {

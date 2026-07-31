@@ -486,10 +486,16 @@ export async function runBrowserAttempt(
   } catch (error: unknown) {
     // Every failure path — including raw Playwright throws (selector
     // timeouts, download timeouts, navigation errors) that never went
-    // through fail() — must leave §19.7 diagnostics. fail() already
-    // captured; anything else captures here before rethrowing as a typed
-    // failure.
-    if (error instanceof AttemptFailure) throw error;
+    // through fail(), AND typed failures thrown by caller-supplied hooks
+    // like the planned-stop trigger — must leave §19.7 diagnostics.
+    // fail() already captured (the terminal flag records that); anything
+    // else captures here before rethrowing as a typed failure.
+    if (error instanceof AttemptFailure) {
+      if (!terminalDiagnosticsCaptured) {
+        await captureDiagnostics(error.reason, error.message, true);
+      }
+      throw error;
+    }
     const detail = error instanceof Error ? error.message : String(error);
     await captureDiagnostics('browser-error', detail, true);
     throw new AttemptFailure('browser-error', detail);

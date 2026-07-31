@@ -35,7 +35,12 @@ import { behaviorFingerprintSetSchema } from '../../../src/shared/behaviorArtifa
  *      failure manifest, and a failed sequence state;
  *   6. resuming the failed drill is REFUSED by the recorded disposition;
  *   7. `m2:evaluate` on the completed sequence writes ONLY to the derived
- *      directory — the sealed root stays byte-identical.
+ *      directory — the sealed root stays byte-identical;
+ *   8. a packaging transaction failed by injection AFTER the inventory
+ *      exists recovers through the packaging-ONLY resume path (focused
+ *      re-audit finding 3): nothing launched, no inventoried byte changed,
+ *      the unreceipted archive superseded, the next versioned archive
+ *      receipted, and the completed sequence then no-op resumes verified.
  *
  * All rehearsal output is non-evidentiary and lives under artifacts/.
  */
@@ -401,6 +406,108 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
   );
   check(existsSync(`${rehearsalRoot}.derived`), 'derived evaluation directory missing');
   notes.push('m2:evaluate on completed sequence wrote ONLY to the derived directory');
+
+  // --- 8. Packaging-ready recovery drill (focused re-audit finding 3): the
+  // first packaging transaction fails by injection AFTER the inventory
+  // exists; --resume must take the packaging-only path — no Vite, Chromium,
+  // or gateway, no inventoried byte changed, the unreceipted archive
+  // recorded as superseded, and the NEXT versioned archive receipted. -------
+  await waitForAutomationPortsFree();
+  const packagingDrillPlan = join(repoRoot, 'experiments', 'm2', 'plans', 'packaging-drill.json');
+  const recoveryRoot = join(sequencesRoot, 'packaging-drill');
+  const failedPackaging = await orchestrateSequence({
+    planPath: packagingDrillPlan,
+    resume: false,
+    acknowledgeLiveCost: false,
+    allowSleepRisk: true,
+    headed: false,
+    repoRoot,
+    onPackagingStage: (stage) => {
+      if (stage === 'receipt') throw new Error('injected-packaging-failure: receipt write');
+    },
+  });
+  check(
+    failedPackaging.status === 'failed',
+    `packaging drill first run status ${failedPackaging.status} (expected failed)`,
+  );
+  const strandedState = readSequenceState(recoveryRoot);
+  check(
+    strandedState !== null &&
+      strandedState.status === 'failed' &&
+      (strandedState.sequenceFailureReason ?? '').startsWith('packaging'),
+    `packaging drill state/reason: ${String(strandedState?.sequenceFailureReason)}`,
+  );
+  const recoveryInventory = readInventory(recoveryRoot);
+  check(recoveryInventory !== null, 'packaging drill left no inventory in the evidence root');
+  const unreceipted = join(sequencesRoot, 'm2-packaging-recovery-drill-evidence-001.zip');
+  check(
+    existsSync(unreceipted) && !existsSync(`${unreceipted}.receipt.json`),
+    'packaging drill should leave a committed but UNRECEIPTED first archive',
+  );
+  const recoveryProcessLog = readFileSync(join(recoveryRoot, 'process-log.jsonl'), 'utf8');
+  const recoveryViteLog = readFileSync(join(recoveryRoot, 'vite.log'), 'utf8');
+
+  await waitForAutomationPortsFree();
+  const recovered = await orchestrateSequence({
+    planPath: packagingDrillPlan,
+    resume: true,
+    acknowledgeLiveCost: false,
+    allowSleepRisk: true,
+    headed: false,
+    repoRoot,
+  });
+  check(
+    recovered.status === 'completed' && recovered.packagingRecovery,
+    `recovery resume status ${recovered.status}, packagingRecovery ${String(recovered.packagingRecovery)}`,
+  );
+  check(
+    readFileSync(join(recoveryRoot, 'process-log.jsonl'), 'utf8') === recoveryProcessLog,
+    'packaging recovery spawned managed processes (process log changed)',
+  );
+  check(
+    readFileSync(join(recoveryRoot, 'vite.log'), 'utf8') === recoveryViteLog,
+    'packaging recovery changed vite.log',
+  );
+  verifyTreeAgainstInventory(recoveryRoot, recoveryInventory, 'post-packaging-recovery');
+  const recoveredState = readSequenceState(recoveryRoot);
+  check(
+    recoveredState !== null && recoveredState.status === 'completed',
+    'recovery state not completed',
+  );
+  check(
+    recoveredState.archivePath !== null &&
+      recoveredState.archivePath.endsWith('m2-packaging-recovery-drill-evidence-002.zip') &&
+      existsSync(recoveredState.archivePath) &&
+      existsSync(`${recoveredState.archivePath}.sha256`) &&
+      existsSync(`${recoveredState.archivePath}.receipt.json`),
+    'recovery did not produce the next versioned archive with sidecar and receipt',
+  );
+  check(
+    recoveredState.supersededArchives.some(
+      (entry) =>
+        entry.archive === 'm2-packaging-recovery-drill-evidence-001.zip' &&
+        entry.reason === 'unreceipted-before-recovery',
+    ),
+    'recovery did not record the unreceipted first archive as superseded',
+  );
+  check(existsSync(unreceipted), 'recovery deleted the superseded archive (it must be preserved)');
+  const recoveryNoop = await orchestrateSequence({
+    planPath: packagingDrillPlan,
+    resume: true,
+    acknowledgeLiveCost: false,
+    allowSleepRisk: true,
+    headed: false,
+    repoRoot,
+  });
+  check(
+    recoveryNoop.noOpResume,
+    'post-recovery resume was not a verified no-op on the completed sequence',
+  );
+  notes.push(
+    'packaging-recovery drill: post-inventory receipt failure resumed through the packaging-only ' +
+      'path (nothing launched, no inventoried byte changed, unreceipted archive superseded, ' +
+      'versioned archive 002 receipted, then a verified no-op resume)',
+  );
 
   return { ok: true, notes };
 }

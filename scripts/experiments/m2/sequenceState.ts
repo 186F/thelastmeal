@@ -36,7 +36,7 @@ import { dirname, join, relative } from 'node:path';
  * (re-audit finding 5), revalidated on resume before any write.
  */
 
-export const SEQUENCE_STATE_VERSION = 'm2-sequence-state-2.0.0';
+export const SEQUENCE_STATE_VERSION = 'm2-sequence-state-2.1.0';
 
 const nonEmpty = z.string().min(1);
 
@@ -183,6 +183,15 @@ export const sequenceStateSchema = z
      * the sequence-level evidence seal — the whole root, attempt and
      * non-attempt files alike, verified byte-for-byte on completed resume. */
     inventoryAggregateSha256: z.string().nullable(),
+    /** Committed archives that never received a receipt (a failure between
+     * the atomic rename and the receipt write), recorded EXPLICITLY when
+     * the packaging-ready recovery path supersedes them with the next
+     * versioned archive (focused re-audit finding 3 §6.4). Versioned
+     * archives are immutable — superseded ones are preserved, never
+     * deleted. */
+    supersededArchives: z.array(
+      z.object({ archive: nonEmpty, reason: nonEmpty, atUtc: nonEmpty }).strict(),
+    ),
     /** Freeze checkpoints passed so far (re-audit finding 4). Violations
      * never appear here — they fail the sequence. */
     freezeCheckpoints: z.array(z.object({ checkpoint: nonEmpty, atUtc: nonEmpty }).strict()),

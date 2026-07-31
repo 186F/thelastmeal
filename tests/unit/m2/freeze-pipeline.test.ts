@@ -8,6 +8,7 @@ import {
   checkFreeze,
   planConfigFingerprint,
   runPostSequencePipeline,
+  studyFreezeRecordContent,
   type FreezeIdentity,
   type PostSequenceDeps,
 } from '../../../scripts/experiments/m2/orchestrate';
@@ -107,16 +108,19 @@ function freezeFixture(
 
   const studyPath = join(base, 'study.json');
   let studyPlanSha256: string | null = null;
+  let freezeRecord: string | null = null;
   if (options.withStudy) {
     const studyBytes = '{"studyId":"freeze-study","frozen":true}';
     writeFileSync(studyPath, studyBytes, 'utf8');
     writeFileSync(join(sequenceRoot, 'study.archived.json'), studyBytes, 'utf8');
-    writeFileSync(
-      join(sequenceRoot, 'study.freeze.archived.json'),
-      '{"studyId":"freeze-study"}\n',
-      'utf8',
-    );
     studyPlanSha256 = sha256(studyBytes);
+    freezeRecord = studyFreezeRecordContent({
+      studyId: 'freeze-study',
+      studyVersion: '1.0.0',
+      studyPlanSha256,
+      studyConfigFingerprint: 'fp-fixture',
+    });
+    writeFileSync(join(sequenceRoot, 'study.freeze.archived.json'), freezeRecord, 'utf8');
   }
 
   return {
@@ -133,6 +137,10 @@ function freezeFixture(
       thresholdProfileVersion: '1.0.0',
       studyPlanSha256,
       studyPlanPathAbsolute: options.withStudy ? studyPath : null,
+      studyId: options.withStudy ? 'freeze-study' : null,
+      studyVersion: options.withStudy ? '1.0.0' : null,
+      studyConfigFingerprint: options.withStudy ? 'fp-fixture' : null,
+      studyFreezeRecordSha256: freezeRecord !== null ? sha256(freezeRecord) : null,
     },
   };
 }
@@ -231,6 +239,51 @@ describe('checkFreeze drift kinds (re-audit finding 4 + §6.5)', () => {
     expect(() => checkFreeze(fixture3.repoRoot, fixture3.sequenceRoot, fixture3.freeze)).toThrow(
       /freeze-violation: registered study file changed/,
     );
+  });
+
+  it('every tampered study freeze-record FIELD violates with the field named (focused re-audit §7.1)', () => {
+    const fieldTampers: Array<[string, string]> = [
+      ['studyId', 'other-study'],
+      ['studyVersion', '9.9.9'],
+      ['planSha256', 'f'.repeat(64)],
+      ['configFingerprint', 'fp-tampered'],
+    ];
+    for (const [field, tamperedValue] of fieldTampers) {
+      const fixture = freezeFixture({ withStudy: true });
+      const recordPath = join(fixture.sequenceRoot, 'study.freeze.archived.json');
+      const record = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown>;
+      record[field] = tamperedValue;
+      writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+      expect(
+        () => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, fixture.freeze),
+        field,
+      ).toThrow(new RegExp(`freeze-violation: archived study freeze record ${field}`));
+    }
+  });
+
+  it('a byte-level record change that preserves valid JSON and every field value still violates (§7.1)', () => {
+    const fixture = freezeFixture({ withStudy: true });
+    const recordPath = join(fixture.sequenceRoot, 'study.freeze.archived.json');
+    // Reserialize compactly: same parsed fields, different bytes.
+    const record = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(recordPath, JSON.stringify(record), 'utf8');
+    expect(() => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, fixture.freeze)).toThrow(
+      /freeze-violation: archived study freeze record bytes altered/,
+    );
+  });
+
+  it('an unparseable or non-object study freeze record violates with a TYPED refusal', () => {
+    // 'null' and '[]' parse as valid JSON but are not records — they must
+    // be typed freeze violations, never an untyped TypeError (pre-push
+    // adversarial round).
+    for (const content of ['not-json {', 'null', '[]', '"a string"']) {
+      const fixture = freezeFixture({ withStudy: true });
+      writeFileSync(join(fixture.sequenceRoot, 'study.freeze.archived.json'), content, 'utf8');
+      expect(
+        () => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, fixture.freeze),
+        JSON.stringify(content),
+      ).toThrow(/freeze-violation: archived study freeze record is not a parseable JSON object/);
+    }
   });
 });
 
