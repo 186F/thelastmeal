@@ -65,8 +65,10 @@
     "heartbeatIntervalMs": 60000
   },
   "postSequenceBatch": true,
+  "evidenceSizeBudgetBytes": 8589934592,
   "tracing": {
-    "chunkIntervalMs": 600000
+    "chunkIntervalMs": 600000,
+    "captureProfile": "semantic-trace-sparse-visual-v1"
   },
   "registration": {
     "registrationId": "stage-a",

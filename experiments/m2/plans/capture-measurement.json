@@ -1,0 +1,36 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-capture-measurement",
+  "description": "Evidence-instrumentation measurement (Advisor directive step 3): one keyless deterministic Scenario A attempt at TRUE 1x pacing under the semantic-trace-sparse-visual-v1 capture profile, bounded to fifteen minutes by the run timeout. The attempt FAILS by design at the timeout (run-timeout is not retryable here) after at least one ten-minute trace rotation, leaving the rotated chunk, the visual checkpoints, and the heartbeats as the measured footprint. Non-evidentiary scratch measurement - never formal evidence.",
+  "evidentiary": false,
+  "outputRoot": "artifacts/m2-sequences/capture-measurement",
+  "attempts": [
+    {
+      "attemptId": "capture-measurement-det",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 1,
+      "gatewayMode": "off"
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-rehearsal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "retryableFailureClasses": []
+  },
+  "liveCallBudget": 0,
+  "timeouts": {
+    "runTimeoutMs": 900000,
+    "stallTimeoutMs": 120000,
+    "stallGraceMs": 30000,
+    "heartbeatIntervalMs": 60000
+  },
+  "tracing": {
+    "chunkIntervalMs": 600000,
+    "captureProfile": "semantic-trace-sparse-visual-v1"
+  },
+  "postSequenceBatch": false
+}

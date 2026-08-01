@@ -120,6 +120,52 @@ beforeAll(async () => {
   expect(result.status).toBe('completed');
 }, 600_000);
 
+describe('sparse visual capture profile over REAL evidence (instrumentation revision)', () => {
+  it('the drill trace manifests carry the profile and hashed visual checkpoints; no continuous screenshot stream', () => {
+    const state = readSequenceState(DRILL_ROOT)!;
+    for (const execution of state.executions) {
+      const attemptDir = join(DRILL_ROOT, execution.dir);
+      const manifest = JSON.parse(
+        readFileSync(join(attemptDir, 'trace-manifest.json'), 'utf8'),
+      ) as {
+        captureProfile: string;
+        visualCheckpoints: {
+          filename: string;
+          atUtc: string;
+          tick: number | null;
+          runStatus: string;
+          sha256: string;
+        }[];
+        chunks: { name: string; bytes: number }[];
+      };
+      expect(manifest.captureProfile).toBe('semantic-trace-sparse-visual-v1');
+      // Before-start and completion at minimum; rotations add more.
+      expect(manifest.visualCheckpoints.length).toBeGreaterThanOrEqual(2);
+      expect(manifest.visualCheckpoints[0]!.filename).toContain('before-start');
+      expect(
+        manifest.visualCheckpoints.some((checkpoint) => checkpoint.filename.includes('completion')),
+      ).toBe(true);
+      for (const checkpoint of manifest.visualCheckpoints) {
+        const bytes = readFileSync(join(attemptDir, checkpoint.filename));
+        expect(createHash('sha256').update(bytes).digest('hex'), checkpoint.filename).toBe(
+          checkpoint.sha256,
+        );
+        expect(checkpoint.atUtc).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        expect(checkpoint.runStatus.length).toBeGreaterThan(0);
+      }
+      // Provenance binds the profile too.
+      expect(
+        (execution.browserProvenance as { contextOptions: Record<string, unknown> }).contextOptions
+          .traceCaptureProfile,
+      ).toBe('semantic-trace-sparse-visual-v1');
+      expect(
+        (execution.browserProvenance as { contextOptions: Record<string, unknown> }).contextOptions
+          .tracingScreenshots,
+      ).toBe(false);
+    }
+  }, 120_000);
+});
+
 describe('buildStageAPrerequisite over intact evidence', () => {
   it('verifies the complete root and extracts every audit-specified fact', async () => {
     const state = readSequenceState(DRILL_ROOT)!;

@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import {
@@ -6,7 +7,7 @@ import {
   AUTOMATION_IDS,
   AUTOMATION_TEXT,
 } from '../../../src/shared/automationContract';
-import type { PlannedAttempt } from './planSchema';
+import type { PlannedAttempt, TraceCaptureProfile } from './planSchema';
 import { isModelBackedConditionId } from '../../../src/shared/conditionContract';
 import { AttemptFailure, type FailureClass } from './failureTaxonomy';
 
@@ -49,9 +50,12 @@ export interface BrowserAttemptOptions {
     stallGraceMs: number;
     heartbeatIntervalMs: number;
   };
-  /** Trace-chunk rotation (Phase 4). Absent means the default interval. */
+  /** Trace-chunk rotation (Phase 4) and the reviewed capture profile
+   * (evidence-instrumentation revision). Absent means the default
+   * interval and the legacy `continuous-visual-v1` capture. */
   tracing?: {
     chunkIntervalMs: number;
+    captureProfile?: TraceCaptureProfile;
   };
   /** Evidence-size forecasting inputs (Phase 4): at every chunk rotation
    * the cumulative trace bytes are extrapolated to the attempt's full
@@ -136,13 +140,25 @@ export async function runBrowserAttempt(
 
   // Fresh context per attempt (§19.5): no cookies, storage, or page state
   // survives between attempts. Downloads are accepted and saved explicitly.
-  // Tracing is bounded two ways (re-audit §13.4; Phase 4 §8.2): screenshots
-  // + DOM snapshots with no source-file embedding, AND chunked rotation so
-  // no single open trace grows with attempt duration. Attempts shorter than
-  // one chunk interval produce exactly the pre-Phase-4 artifact shape (one
-  // attempt-trace.zip / failure-trace.zip and no trace-chunks/ directory).
+  // Tracing is bounded two ways (re-audit §13.4; Phase 4 §8.2): DOM
+  // snapshots with no source-file embedding, AND chunked rotation so no
+  // single open trace grows with attempt duration. The CAPTURE PROFILE
+  // (evidence-instrumentation revision) is a reviewed plan property:
+  // `semantic-trace-sparse-visual-v1` disables the continuous screenshot
+  // stream — the dominant 1× evidence cost, ~2.7 MB/s of animation frames
+  // — and records hashed static visual checkpoints instead; the legacy
+  // `continuous-visual-v1` keeps the full stream for rehearsal parity.
+  // Attempts shorter than one chunk interval produce exactly the
+  // pre-Phase-4 artifact shape (one attempt-trace.zip / failure-trace.zip
+  // and no trace-chunks/ directory).
+  const captureProfile: TraceCaptureProfile =
+    options.tracing?.captureProfile ?? 'continuous-visual-v1';
   const context: BrowserContext = await browser.newContext({ acceptDownloads: true });
-  await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+  await context.tracing.start({
+    screenshots: captureProfile === 'continuous-visual-v1',
+    snapshots: true,
+    sources: false,
+  });
   await context.tracing.startChunk();
   const chunkIntervalMs = options.tracing?.chunkIntervalMs ?? DEFAULT_TRACE_CHUNK_INTERVAL_MS;
   const traceChunksDir = join(attemptDir, 'trace-chunks');
@@ -188,10 +204,15 @@ export async function runBrowserAttempt(
       join(attemptDir, 'trace-manifest.json'),
       `${JSON.stringify(
         {
+          captureProfile,
           chunkIntervalMs,
           retention: 'retain-all-chunks',
           totalTraceBytes: traceBytesTotal,
           chunks: traceChunks,
+          visualCheckpoints,
+          ...(Object.keys(checkpointCaptureFailures).length > 0
+            ? { checkpointCaptureFailures }
+            : {}),
         },
         null,
         2,
@@ -200,6 +221,45 @@ export async function runBrowserAttempt(
     );
   };
   const page = await context.newPage();
+
+  /** Static visual checkpoints (evidence-instrumentation revision): under
+   * the sparse profile, a hashed full-page image before Start, at every
+   * rotation, and at completion — ~6–7 useful images per formal attempt
+   * instead of a continuous screen recording. Every checkpoint records
+   * filename, UTC timestamp, logical tick, run status, and SHA-256 in the
+   * trace manifest; a capture failure is recorded evidence, never a run
+   * failure or a silent absence. */
+  const visualCheckpoints: {
+    filename: string;
+    atUtc: string;
+    tick: number | null;
+    runStatus: string;
+    sha256: string;
+  }[] = [];
+  const checkpointCaptureFailures: Record<string, string> = {};
+  const captureVisualCheckpoint = async (
+    label: string,
+    tick: number | null,
+    runStatus: string,
+  ): Promise<void> => {
+    if (captureProfile !== 'semantic-trace-sparse-visual-v1') return;
+    const filename = `visual-checkpoints/checkpoint-${String(visualCheckpoints.length + 1).padStart(3, '0')}-${label}.png`;
+    try {
+      const target = join(attemptDir, filename);
+      mkdirSync(join(attemptDir, 'visual-checkpoints'), { recursive: true });
+      await page.screenshot({ path: target, fullPage: true });
+      visualCheckpoints.push({
+        filename,
+        atUtc: new Date().toISOString(),
+        tick,
+        runStatus,
+        sha256: createHash('sha256').update(readFileSync(target)).digest('hex'),
+      });
+    } catch (error: unknown) {
+      checkpointCaptureFailures[label] = error instanceof Error ? error.message : String(error);
+    }
+  };
+
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`console: ${message.text()}`);
   });
@@ -360,6 +420,13 @@ export async function runBrowserAttempt(
       }
     }
 
+    // Static visual checkpoint immediately before Start (sparse profile).
+    await captureVisualCheckpoint(
+      'before-start',
+      await readTick(page),
+      await readFieldText(page, AUTOMATION_FIELDS.runStatus),
+    );
+
     // Start the run through the real operator control (§19.7: never
     // run-to-completion for paced attempts — model decisions are async).
     await page.locator(`#${AUTOMATION_IDS.startButton}`).click();
@@ -427,6 +494,8 @@ export async function runBrowserAttempt(
       // sequence evidence budget.
       if (now - chunkStartedAt >= chunkIntervalMs) {
         await rotateTraceChunk();
+        // Static visual checkpoint at every rotation (sparse profile).
+        await captureVisualCheckpoint(`rotation-${traceChunkIndex}`, tick, status);
         const forecast = options.evidenceForecast;
         if (forecast !== undefined) {
           // Rate and horizon share one origin: bytes accumulated since
@@ -496,6 +565,13 @@ export async function runBrowserAttempt(
     }
 
     const finalTick = (await readTick(page)) ?? -1;
+    // Static visual checkpoint at completion (sparse profile) — the
+    // existing full-page final-screenshot.png is preserved separately.
+    await captureVisualCheckpoint(
+      'completion',
+      finalTick,
+      await readFieldText(page, AUTOMATION_FIELDS.runStatus),
+    );
     const runIdText = await readFieldText(page, AUTOMATION_FIELDS.runId);
     const runId =
       isModelBackedConditionId(attempt.conditionId) && runIdText !== '—' && runIdText !== ''

@@ -115,6 +115,46 @@ describe('orchestrator plan schema', () => {
     ).toThrow(/evidentiary-heartbeat-exceeds-60s/);
   });
 
+  it('the capture profile is a closed reviewed plan property; formal plans require the sparse profile', () => {
+    const plan = basePlan();
+    // Unknown profiles are refused by the closed enum.
+    expect(() =>
+      orchestratorPlanSchema.parse({
+        ...plan,
+        tracing: { chunkIntervalMs: 600_000, captureProfile: 'record-everything-v9' },
+      }),
+    ).toThrow();
+    // Both registered profiles parse on non-evidentiary plans.
+    for (const captureProfile of ['continuous-visual-v1', 'semantic-trace-sparse-visual-v1']) {
+      expect(() =>
+        orchestratorPlanSchema.parse({
+          ...plan,
+          tracing: { chunkIntervalMs: 600_000, captureProfile },
+        }),
+      ).not.toThrow();
+    }
+    // An evidentiary plan without the sparse profile is refused — the
+    // committed templates declare it, so removing it must fail parse.
+    const template = JSON.parse(
+      readFileSync(join('experiments', 'm2', 'templates', 'stage-a.plan.template.json'), 'utf8'),
+    ) as { tracing: { captureProfile?: string } };
+    delete template.tracing.captureProfile;
+    expect(() => parsePlan(Buffer.from(JSON.stringify(template)))).toThrow(
+      /evidentiary-requires-sparse-visual-capture/,
+    );
+    // The capture profile moves the configuration fingerprint (and with it
+    // the resume identity and every freeze check).
+    const sparse = orchestratorPlanSchema.parse({
+      ...plan,
+      tracing: { chunkIntervalMs: 600_000, captureProfile: 'semantic-trace-sparse-visual-v1' },
+    });
+    const continuous = orchestratorPlanSchema.parse({
+      ...plan,
+      tracing: { chunkIntervalMs: 600_000, captureProfile: 'continuous-visual-v1' },
+    });
+    expect(planConfigFingerprint(sparse)).not.toBe(planConfigFingerprint(continuous));
+  });
+
   it('model attempts require the reviewed expected treatment; stop attempts require the stop timeout', () => {
     const plan = basePlan();
     const withoutTreatment = { ...plan } as Record<string, unknown>;
