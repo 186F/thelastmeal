@@ -96,6 +96,64 @@ as many model calls, with exact replay and no loss of simulation authority.
 Whether that generalizes to larger worlds, other models, or many characters
 is future work — not a Milestone 2 claim.
 
+## Why build the laboratory first?
+
+The laboratory is not the final game this project hopes to become. It is the
+instrument for deciding whether the architecture above deserves to scale.
+
+One convincing run cannot answer that question. Language models can make
+different choices under identical starting conditions, and an NPC can appear
+intelligent for the wrong reason: the model may have caused the behavior, but
+so might a deterministic fallback, a race between the world and a late
+response, or a bug in the simulation. Before asking whether policy-driven
+Mara is still Mara, the project first has to measure **how different
+per-decision Mara normally is from herself** across repeated runs. That
+within-condition variation becomes the yardstick for every later comparison.
+
+The event and evidence machinery then makes the causal chain inspectable:
+what Mara knew, which actions the engine actually offered, what the model
+selected, whether the simulation accepted it, what happened in the world,
+and what later beliefs or memories followed. Without that chain, a striking
+moment is only an anecdote. With it, the project can distinguish model
+behavior from fallback behavior, engine behavior, provider failure, and
+presentation prose.
+
+The same machinery turns architectural changes into behavioral regression
+tests. A new prompt, model, memory representation, context selector, policy
+vocabulary, or call cadence can be evaluated on more than whether a demo
+"feels better": did Mara remain recognizable, become more repetitive, miss
+more tasks, use fewer calls, survive provider loss, or merely produce more
+persuasive explanations for the same actions?
+
+That is also how the project approaches the much larger population-scale
+question without pretending it has already solved it:
+
+```text
+one model-driven character acts lawfully
+        ↓
+measure how much that character naturally varies
+        ↓
+preserve most of that behavior with reusable local policies
+        ↓
+reduce model calls and continue through provider failure
+        ↓
+test whether larger populations are economically and operationally plausible
+```
+
+Much of the laboratory is therefore intended to become production
+infrastructure rather than disposable research scaffolding: engine-owned
+legal actions, deterministic fallbacks, model and provider provenance, cost
+budgets, exact replay, failure continuity, and release-to-release behavioral
+testing are all things a studio would need before shipping autonomous
+characters.
+
+There is a limit to that justification. Evidence infrastructure is useful
+only when it begins producing decisions. Once the per-decision baseline and
+its ordinary variance are established, the value of the project comes from
+running the sparse-cognition experiment and learning whether occasional AI
+input can really preserve a character — not from allowing the laboratory to
+grow indefinitely for its own sake.
+
 ## The project at a glance
 
 |                                 |                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -105,7 +163,7 @@ is future work — not a Milestone 2 claim.
 | **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                              |
 | **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                            |
 | **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                      |
-| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); Phase 4 — the model-driven baseline arm of the experiment, its registered studies, and bounded tracing for long live runs — has its audit remediation complete and awaits the Advisor's targeted re-audit; the sparse policy system and the head-to-head comparison follow in later gated phases |
+| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); Phase 4 — the model-driven baseline arm, its registered studies, and bounded tracing for long live runs — is under targeted re-audit, and Stage A remains blocked until the remediation is accepted and exact-head CI is green; the sparse policy system and head-to-head comparison follow later |
 | **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                       |
 | **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                         |
 | **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                 |
@@ -261,7 +319,7 @@ phases:
   entire pipeline, including deliberate failure drills
   ([report](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md),
   [operator runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)).
-- **Phase 4 (audit remediation complete — awaiting targeted re-audit):** the experiment's model-driven
+- **Phase 4 (remediation submitted — targeted re-audit in progress):** the experiment's model-driven
   baseline arm — the new AI condition and prompt under the Milestone 2
   experiment identity (with rationale and confidence downgraded to
   harmless diagnostic notes, so a chatty model can never invalidate a
@@ -275,8 +333,8 @@ phases:
 
 No live model calls have been made in any Milestone 2 phase so far; the
 first live runs (Stage A acceptance, then the calibration study) happen
-only after the Phase 4 remediation passes its targeted re-audit and the
-PR is merged.
+only after the Phase 4 remediation passes its targeted re-audit, exact-head
+CI is green, and the PR is merged.
 
 ## Pre-registered success criteria
 
