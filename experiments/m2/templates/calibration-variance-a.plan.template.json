@@ -162,7 +162,9 @@
   },
   "registration": {
     "registrationId": "calibration-variance-a",
+    "provenancePath": "registration-provenance.json",
     "provenanceSha256": "7777777777777777777777777777777777777777777777777777777777777777",
-    "stageAPrerequisiteSha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    "stageAPrerequisiteSha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "stageAPrerequisitePath": "stage-a-prerequisite.json"
   }
 }

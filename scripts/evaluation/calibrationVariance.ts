@@ -2,11 +2,21 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from 'node:path';
 import {
   M2_CALIBRATION_ANALYSIS_VERSION,
+  assertMetricsProducible,
   calibrationVarianceReportSchema,
+  decisionContextFactsSchema,
   entropyMilliBits,
   quantileMilliFloor,
   type CalibrationVarianceReport,
+  type DecisionContextFacts,
+  type DivergenceSemanticContext,
 } from '../../src/shared/calibrationAnalysis';
+import {
+  M2_ACTION_PROMPT_VERSION,
+  M2_EXPERIMENT_ID,
+  M2_EXPERIMENT_VERSION,
+  M2_PER_DECISION_CONDITION_ID,
+} from '../../src/shared/m2Experiment';
 import {
   behaviorFingerprintSetSchema,
   comparablePairing,
@@ -17,6 +27,7 @@ import { canonicalSerialize } from '../../src/sim/replay/serialize';
 import { modelTraceEntrySchema, finalManifestSchema } from '../../src/shared/modelArtifacts';
 import { loadEvaluationEvidence } from './evidence';
 import { readSequenceState, type AttemptExecution } from '../experiments/m2/sequenceState';
+import { registrationEntry } from '../experiments/m2/registrationRegistry';
 
 /**
  * The ten-run calibration variance analyzer (Phase 4 audit finding 1):
@@ -42,6 +53,104 @@ export interface DecisionPoint {
   hardDependencyFingerprint: string;
   contextHash: string | null;
   selectedAffordanceId: string | null;
+  /** Bounded structural facts from the VALIDATED archived request
+   * envelope (§4.3); null when the envelope is absent — facts are never
+   * inferred. */
+  contextFacts: DecisionContextFacts | null;
+}
+
+/** Deterministic, hard-capped fact list: sort, truncate each entry to the
+ * schema bound, keep at most 24. */
+function boundedList(values: string[]): string[] {
+  return [...values]
+    .map((value) => value.slice(0, 200))
+    .sort()
+    .slice(0, 24);
+}
+
+/**
+ * Extracts the §4.3 semantic facts from one archived request envelope —
+ * ONLY fields the envelope actually carries, no prompt text, everything
+ * bounded and deterministically ordered. Returns null when the envelope's
+ * context block is missing or unusable.
+ */
+export function extractContextFacts(envelope: unknown): DecisionContextFacts | null {
+  if (envelope === null || typeof envelope !== 'object') return null;
+  const context = (envelope as Record<string, unknown>).context;
+  if (context === null || typeof context !== 'object') return null;
+  const block = context as {
+    state?: {
+      locationId?: unknown;
+      currentAction?: { category?: unknown; mode?: unknown; phase?: unknown } | null;
+      hungerMicro?: unknown;
+      fatigueMicro?: unknown;
+      injury?: { severityMicro?: unknown; treatmentStarted?: unknown } | null;
+    };
+    cognition?: {
+      beliefs?: Array<{ subject?: unknown; value?: unknown }>;
+      memories?: Array<{ canonicalFact?: unknown; interpretation?: unknown }>;
+      commitments?: Array<{ id?: unknown; status?: unknown; role?: unknown }>;
+      relationships?: Array<{ toNpcId?: unknown; valueMicro?: unknown }>;
+    };
+    affordances?: Array<{
+      id?: unknown;
+      category?: unknown;
+      mode?: unknown;
+      violation?: unknown;
+      targetNpcId?: unknown;
+    }>;
+  };
+  const asIntOrNull = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isInteger(value) ? value : null;
+  const asStringOrNull = (value: unknown): string | null =>
+    typeof value === 'string' && value.length > 0 ? value.slice(0, 200) : null;
+  const currentAction = block.state?.currentAction;
+  const facts: DecisionContextFacts = {
+    locationId: asStringOrNull(block.state?.locationId),
+    currentActivity: currentAction
+      ? `${String(currentAction.category)}/${String(currentAction.mode)}/${String(currentAction.phase)}`.slice(
+          0,
+          200,
+        )
+      : null,
+    hungerMicro: asIntOrNull(block.state?.hungerMicro),
+    fatigueMicro: asIntOrNull(block.state?.fatigueMicro),
+    injurySeverityMicro: asIntOrNull(block.state?.injury?.severityMicro),
+    injuryTreatmentStarted:
+      typeof block.state?.injury?.treatmentStarted === 'boolean'
+        ? block.state.injury.treatmentStarted
+        : null,
+    beliefs: boundedList(
+      (block.cognition?.beliefs ?? []).map(
+        (belief) => `${String(belief.subject)}=${String(belief.value)}`,
+      ),
+    ),
+    memories: boundedList(
+      (block.cognition?.memories ?? []).map(
+        (memory) => `${String(memory.canonicalFact)} (${String(memory.interpretation)})`,
+      ),
+    ),
+    commitments: boundedList(
+      (block.cognition?.commitments ?? []).map(
+        (commitment) =>
+          `${String(commitment.id)}:${String(commitment.status)}:${String(commitment.role)}`,
+      ),
+    ),
+    relationships: boundedList(
+      (block.cognition?.relationships ?? []).map(
+        (relationship) => `${String(relationship.toNpcId)}:${String(relationship.valueMicro)}`,
+      ),
+    ),
+    offeredAffordances: boundedList(
+      (block.affordances ?? []).map(
+        (affordance) =>
+          `${String(affordance.id)} [${String(affordance.category)}/${String(affordance.mode)}` +
+          `${affordance.violation === true ? ' violation' : ''}` +
+          `${affordance.targetNpcId ? ` -> ${String(affordance.targetNpcId)}` : ''}]`,
+      ),
+    ),
+  };
+  return decisionContextFactsSchema.parse(facts);
 }
 
 export interface RunEvidence {
@@ -109,13 +218,22 @@ export function loadRunEvidence(sequenceRoot: string, execution: AttemptExecutio
     if (event.type === 'DecisionRequested' && event.payload.npcId === 'mara') {
       const providerId = String(event.payload.providerId);
       if (providerId === evidence.enrichment.externalActionProviderId) {
+        const requestId = String(event.payload.requestId);
+        // §4.3: bounded semantic facts from the archived request envelope
+        // (requests/<id>.json, byte-exact archive) — null when absent.
+        let contextFacts: DecisionContextFacts | null = null;
+        const envelopePath = join(runDir, 'requests', `${requestId}.json`);
+        if (existsSync(envelopePath)) {
+          contextFacts = extractContextFacts(JSON.parse(readFileSync(envelopePath, 'utf8')));
+        }
         requested.push({
-          requestId: String(event.payload.requestId),
+          requestId,
           tick: event.tick,
           offeredIds: (event.payload.affordanceIds as string[]) ?? [],
           hardDependencyFingerprint: String(event.payload.hardDependencyFingerprint),
-          contextHash: contextHashByRequest.get(String(event.payload.requestId)) ?? null,
+          contextHash: contextHashByRequest.get(requestId) ?? null,
           selectedAffordanceId: null,
+          contextFacts,
         });
       }
     }
@@ -194,6 +312,53 @@ export function loadRunEvidence(sequenceRoot: string, execution: AttemptExecutio
  * engine-accepted selections differ is the selection divergence; contexts
  * drifting apart first is a context divergence; later ordinal matching is
  * invalid after either. */
+/** The §4.3 interpretable divergence context: both sides' bounded facts
+ * with field-level differences made explicit. Null when NEITHER side
+ * carries archived envelope facts (never inferred). */
+function semanticContextAt(l: DecisionPoint, r: DecisionPoint): DivergenceSemanticContext | null {
+  if (l.contextFacts === null && r.contextFacts === null) return null;
+  const differingFields: string[] = [];
+  // Field-level differences are meaningful ONLY when both envelopes
+  // exist; a one-sided absence is an explicit marker, never a fabricated
+  // per-field difference (facts are never inferred).
+  if (l.contextFacts !== null && r.contextFacts !== null) {
+    const fields: (keyof DecisionContextFacts)[] = [
+      'locationId',
+      'currentActivity',
+      'hungerMicro',
+      'fatigueMicro',
+      'injurySeverityMicro',
+      'injuryTreatmentStarted',
+      'beliefs',
+      'memories',
+      'commitments',
+      'relationships',
+      'offeredAffordances',
+    ];
+    for (const field of fields) {
+      if (JSON.stringify(l.contextFacts[field]) !== JSON.stringify(r.contextFacts[field])) {
+        differingFields.push(field);
+      }
+    }
+    if (l.hardDependencyFingerprint !== r.hardDependencyFingerprint) {
+      differingFields.push('hardDependencyFingerprint');
+    }
+  }
+  return {
+    comparison:
+      l.contextFacts === null
+        ? 'left-envelope-absent'
+        : r.contextFacts === null
+          ? 'right-envelope-absent'
+          : 'both-present',
+    left: l.contextFacts,
+    right: r.contextFacts,
+    differingFields: differingFields.slice(0, 16),
+    leftHardDependencyFingerprint: l.hardDependencyFingerprint,
+    rightHardDependencyFingerprint: r.hardDependencyFingerprint,
+  };
+}
+
 function firstDivergence(left: DecisionPoint[], right: DecisionPoint[]) {
   const limit = Math.min(left.length, right.length);
   let comparable = 0;
@@ -219,6 +384,7 @@ function firstDivergence(left: DecisionPoint[], right: DecisionPoint[]) {
         leftSelectedAffordanceId: l.selectedAffordanceId,
         rightSelectedAffordanceId: r.selectedAffordanceId,
         laterOrdinalMatchingValid: false,
+        semanticContext: semanticContextAt(l, r),
       };
     }
     comparable += 1;
@@ -235,6 +401,7 @@ function firstDivergence(left: DecisionPoint[], right: DecisionPoint[]) {
         leftSelectedAffordanceId: l.selectedAffordanceId,
         rightSelectedAffordanceId: r.selectedAffordanceId,
         laterOrdinalMatchingValid: false,
+        semanticContext: semanticContextAt(l, r),
       };
     }
   }
@@ -250,6 +417,7 @@ function firstDivergence(left: DecisionPoint[], right: DecisionPoint[]) {
     leftSelectedAffordanceId: null,
     rightSelectedAffordanceId: null,
     laterOrdinalMatchingValid: true,
+    semanticContext: null,
   };
 }
 
@@ -330,6 +498,260 @@ export function analyzeCalibrationSequence(sequenceRoot: string): CalibrationVar
     primaries.push(loadRunEvidence(sequenceRoot, execution));
   }
   return buildCalibrationReport(state.sequenceId, primaries, excluded);
+}
+
+function refuseCalibration(detail: string): never {
+  throw new Error(`calibration-analysis-refused: ${detail}`);
+}
+
+/**
+ * §4.2 item 3: the report labeled as the Phase 4 calibration must prove it
+ * analyzed EXACTLY the registered design — study, version, sequence,
+ * condition, scenario, seed, sample size, profile, model, route, prompt,
+ * package, experiment, metrics, and analysis version. Pure over the
+ * already-loaded records; the production entry supplies verified inputs.
+ */
+export function assertRegisteredCalibrationDesign(args: {
+  state: {
+    registrationId: string;
+    sequenceId: string;
+    studyId: string;
+    studyVersion: string;
+    thresholdProfileId: string;
+    thresholdProfileVersion: string;
+    expectedModelId: string;
+    expectedServingProviderId: string;
+    promptVersion: string;
+    experimentId: string;
+    experimentVersion: string;
+    packageVersion: string;
+  };
+  planAttempts: readonly { attemptId: string; conditionId: string; scenarioId: string }[];
+  study: {
+    studyId: string;
+    studyVersion: string;
+    packageVersion: string;
+    conditionIds: readonly string[];
+    model: string;
+    provider: string;
+    promptVersions: readonly string[];
+    scenarioIds: readonly string[];
+    seeds: readonly number[];
+    sampleSizeN: number;
+    analysisScriptVersion: string;
+    primaryMetrics: readonly string[];
+    secondaryMetrics: readonly string[];
+  };
+}): void {
+  const { state, planAttempts, study } = args;
+  const entry = registrationEntry('calibration-variance-a')!;
+  const checks: readonly [field: string, actual: unknown, required: unknown][] = [
+    ['registrationId', state.registrationId, entry.registrationId],
+    ['sequenceId', state.sequenceId, entry.expectedSequenceId],
+    ['studyId', state.studyId, entry.studyId],
+    ['studyVersion', state.studyVersion, entry.studyVersion],
+    ['study.studyId', study.studyId, entry.studyId],
+    ['study.studyVersion', study.studyVersion, entry.studyVersion],
+    ['attemptProfileId', state.thresholdProfileId, entry.attemptProfile.profileId],
+    ['attemptProfileVersion', state.thresholdProfileVersion, entry.attemptProfile.profileVersion],
+    ['modelId', state.expectedModelId, entry.expectedTreatment.modelId],
+    [
+      'servingProviderId',
+      state.expectedServingProviderId,
+      entry.expectedTreatment.servingProviderId,
+    ],
+    ['promptVersion', state.promptVersion, entry.expectedTreatment.promptVersion],
+    ['experimentId', state.experimentId, M2_EXPERIMENT_ID],
+    ['experimentVersion', state.experimentVersion, M2_EXPERIMENT_VERSION],
+    ['study.model', study.model, entry.expectedTreatment.modelId],
+    ['study.provider', study.provider, entry.expectedTreatment.servingProviderId],
+    ['study.packageVersion', study.packageVersion, state.packageVersion],
+    ['study.sampleSizeN', study.sampleSizeN, 10],
+    ['study.analysisScriptVersion', study.analysisScriptVersion, M2_CALIBRATION_ANALYSIS_VERSION],
+  ];
+  for (const [field, actual, required] of checks) {
+    if (actual !== required) {
+      refuseCalibration(
+        `${field} is '${String(actual)}', the registered calibration requires '${String(required)}'`,
+      );
+    }
+  }
+  if (study.conditionIds.length !== 1 || study.conditionIds[0] !== M2_PER_DECISION_CONDITION_ID) {
+    refuseCalibration(
+      `study conditions [${study.conditionIds.join(', ')}] are not exactly the M2 condition`,
+    );
+  }
+  if (!study.promptVersions.includes(M2_ACTION_PROMPT_VERSION)) {
+    refuseCalibration('study prompt versions do not include the M2 action prompt');
+  }
+  if (study.scenarioIds.length !== 1 || study.scenarioIds[0] !== 'A') {
+    refuseCalibration(`study scenarios [${study.scenarioIds.join(', ')}] are not exactly ['A']`);
+  }
+  if (study.seeds.length !== 1 || study.seeds[0] !== 1001) {
+    refuseCalibration(`study seeds [${study.seeds.join(', ')}] are not exactly [1001]`);
+  }
+  assertMetricsProducible(study);
+  if (planAttempts.length !== 10) {
+    refuseCalibration(`plan has ${planAttempts.length} attempts, the registered design has 10`);
+  }
+  for (const attempt of planAttempts) {
+    if (attempt.conditionId !== M2_PER_DECISION_CONDITION_ID) {
+      refuseCalibration(`attempt '${attempt.attemptId}' condition is '${attempt.conditionId}'`);
+    }
+    if (attempt.scenarioId !== 'A') {
+      refuseCalibration(`attempt '${attempt.attemptId}' scenario is '${attempt.scenarioId}'`);
+    }
+  }
+}
+
+/**
+ * §4.2 items 4–7: maps executions onto the ten PLANNED attempts — exactly
+ * one valid primary per attempt (a permitted successful replacement IS the
+ * primary for its plan-level attempt, never an eleventh observation);
+ * failed and superseded executions become typed exclusions; anything else
+ * refuses.
+ */
+export function mapRegisteredPrimaries(
+  executions: readonly AttemptExecution[],
+  plannedAttemptIds: readonly string[],
+): { primaries: AttemptExecution[]; excluded: { executionId: string; reason: string }[] } {
+  const planned = new Set(plannedAttemptIds);
+  for (const execution of executions) {
+    if (!planned.has(execution.attemptId)) {
+      refuseCalibration(
+        `execution '${execution.executionId}' names attempt '${execution.attemptId}', ` +
+          'which is not in the registered attempt set',
+      );
+    }
+  }
+  const primaries: AttemptExecution[] = [];
+  const excluded: { executionId: string; reason: string }[] = [];
+  for (const attemptId of plannedAttemptIds) {
+    const candidates = executions.filter((execution) => execution.attemptId === attemptId);
+    const valid = candidates.filter(
+      (execution) =>
+        execution.status === 'completed' &&
+        execution.artifactStatus === 'artifact-valid' &&
+        execution.studyStatus === 'study-valid',
+    );
+    if (valid.length === 0) {
+      refuseCalibration(`attempt '${attemptId}' has no valid primary observation`);
+    }
+    if (valid.length > 1) {
+      refuseCalibration(
+        `attempt '${attemptId}' has ${valid.length} competing valid observations ` +
+          `(${valid.map((execution) => execution.executionId).join(', ')})`,
+      );
+    }
+    primaries.push(valid[0]!);
+    for (const execution of candidates) {
+      if (execution === valid[0]) continue;
+      excluded.push({
+        executionId: execution.executionId,
+        reason:
+          execution.status !== 'completed'
+            ? `status:${execution.status}:${String(execution.failureReason)}`
+            : `verdicts:${String(execution.artifactStatus)}/${String(execution.studyStatus)}`,
+      });
+    }
+  }
+  if (primaries.length !== 10) {
+    refuseCalibration(`${primaries.length} primary observation(s), the registered design has 10`);
+  }
+  return { primaries, excluded };
+}
+
+/**
+ * The PRODUCTION `m2:analyze` entry (final targeted remediation B §4.2):
+ * verifies the completed sequence end to end (seals, inventory, immutable
+ * manifest with its registration attestation, semantic revalidation,
+ * archive, sidecar, receipt), loads and validates the archived plan,
+ * study, freeze record, registration provenance, and Stage A prerequisite
+ * copies, requires EXACTLY the registered ten-run design, maps the ten
+ * primaries, and only then reads behavioral facts.
+ */
+export async function analyzeRegisteredCalibration(
+  sequenceRoot: string,
+): Promise<CalibrationVarianceReport> {
+  const state = readSequenceState(sequenceRoot);
+  if (state === null) refuseCalibration(`no sequence state for ${sequenceRoot}`);
+  if (state.status !== 'completed') {
+    refuseCalibration(`sequence status '${state.status}' is not completed`);
+  }
+  const archivedPlanPath = join(sequenceRoot, 'plan.archived.json');
+  if (!existsSync(archivedPlanPath)) refuseCalibration('archived plan missing');
+  // Deferred imports keep the shared fixture path (buildCalibrationReport)
+  // free of the orchestrator module graph.
+  const { parsePlan } = await import('../experiments/m2/planSchema');
+  const { verifyCompletedSequence } = await import('../experiments/m2/sequenceVerification');
+  const { validateStudyFile } = await import('../experiments/m2/studyRegistry');
+  const loaded = parsePlan(readFileSync(archivedPlanPath));
+  if (loaded.planSha256 !== state.planSha256) {
+    refuseCalibration('archived plan bytes do not match the recorded plan hash');
+  }
+  // Full cryptographic + semantic verification, including the manifest's
+  // registration attestation re-derived from the archived provenance and
+  // Stage A prerequisite copies.
+  await verifyCompletedSequence(sequenceRoot, state, loaded.plan);
+
+  const archivedStudyPath = join(sequenceRoot, 'study.archived.json');
+  if (!existsSync(archivedStudyPath)) refuseCalibration('archived study missing');
+  const validated = validateStudyFile(archivedStudyPath);
+  if (validated.freeze.planSha256 !== state.studyPlanSha256) {
+    refuseCalibration('archived study bytes do not match the state binding');
+  }
+  // The archived study-freeze RECORD (ruling §4.2 item 2): parse it and
+  // require every identity field to equal the freshly revalidated study
+  // and the plan's binding.
+  const freezeRecordPath = join(sequenceRoot, 'study.freeze.archived.json');
+  if (!existsSync(freezeRecordPath)) refuseCalibration('archived study freeze record missing');
+  let freezeRecord: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(freezeRecordPath, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('not-an-object');
+    }
+    freezeRecord = parsed as Record<string, unknown>;
+  } catch {
+    refuseCalibration('archived study freeze record is not a parseable JSON object');
+  }
+  const freezeChecks: readonly [string, unknown, unknown][] = [
+    ['studyId', freezeRecord.studyId, validated.freeze.studyId],
+    ['studyVersion', freezeRecord.studyVersion, validated.freeze.studyVersion],
+    ['planSha256', freezeRecord.planSha256, validated.freeze.planSha256],
+    ['configFingerprint', freezeRecord.configFingerprint, validated.freeze.configFingerprint],
+    [
+      'configFingerprint-vs-plan',
+      freezeRecord.configFingerprint,
+      loaded.plan.study?.studyConfigFingerprint,
+    ],
+  ];
+  for (const [field, actual, required] of freezeChecks) {
+    if (actual !== required) {
+      refuseCalibration(
+        `archived study freeze record ${field} is '${String(actual)}', expected '${String(required)}'`,
+      );
+    }
+  }
+  assertRegisteredCalibrationDesign({
+    state,
+    planAttempts: loaded.plan.attempts,
+    study: validated.study,
+  });
+  const { primaries, excluded } = mapRegisteredPrimaries(
+    state.executions,
+    loaded.plan.attempts.map((attempt) => attempt.attemptId),
+  );
+  const evidence = primaries.map((execution) => loadRunEvidence(sequenceRoot, execution));
+  for (const run of evidence) {
+    if (run.fingerprints.scenarioId !== 'A' || run.fingerprints.seed !== 1001) {
+      refuseCalibration(
+        `${run.execution.executionId} ran scenario ${run.fingerprints.scenarioId} ` +
+          `seed ${run.fingerprints.seed}, the registered design is A/1001`,
+      );
+    }
+  }
+  return buildCalibrationReport(state.sequenceId, evidence, excluded);
 }
 
 /**
@@ -535,6 +957,71 @@ function renderMarkdown(report: CalibrationVarianceReport): string {
     );
   }
   lines.push('');
+  const divergent = report.pairs.filter((pair) => pair.firstDivergence.kind !== 'none');
+  if (divergent.length > 0) {
+    lines.push('## First-divergence semantic context');
+    lines.push('');
+    lines.push(
+      'Ordinal matching is invalid after the first selection or semantic-context ' +
+        'divergence. Each entry below is the divergent ordinal itself: for a ' +
+        'selection divergence that is the last COMPARABLE point (identical ' +
+        'contexts, different accepted selections); for a context divergence it ' +
+        'is the first ordinal that is NO LONGER comparable. Facts come ' +
+        'exclusively from the validated archived request envelopes.',
+    );
+    lines.push('');
+    for (const pair of divergent) {
+      const d = pair.firstDivergence;
+      lines.push(`### ${pair.left} vs ${pair.right} — ${d.kind} at tick ${String(d.logicalTick)}`);
+      lines.push('');
+      lines.push(
+        `Selections: \`${String(d.leftSelectedAffordanceId)}\` vs ` +
+          `\`${String(d.rightSelectedAffordanceId)}\``,
+      );
+      if (d.semanticContext === null) {
+        lines.push('');
+        lines.push(
+          'No archived request envelope carries context for this ordinal — ' +
+            'facts are never inferred.',
+        );
+      } else {
+        const context = d.semanticContext;
+        lines.push('');
+        if (context.comparison !== 'both-present') {
+          lines.push(
+            `Envelope availability: ${context.comparison} — field-level differences ` +
+              'are computed only when both sides carry an archived envelope.',
+          );
+        } else {
+          lines.push(`Differing fields: ${context.differingFields.join(', ') || '(none)'}`);
+        }
+        for (const [label, facts] of [
+          ['left', context.left],
+          ['right', context.right],
+        ] as const) {
+          if (facts === null) {
+            lines.push(`- ${label}: no archived envelope context`);
+            continue;
+          }
+          lines.push(
+            `- ${label}: at ${String(facts.locationId)}, doing ${String(facts.currentActivity)}; ` +
+              `hunger ${String(facts.hungerMicro)}µ, fatigue ${String(facts.fatigueMicro)}µ, ` +
+              `injury ${String(facts.injurySeverityMicro)}µ (treated: ${String(facts.injuryTreatmentStarted)})`,
+          );
+          lines.push(`  - beliefs: ${facts.beliefs.join('; ') || '(none)'}`);
+          lines.push(`  - memories: ${facts.memories.join('; ') || '(none)'}`);
+          lines.push(`  - commitments: ${facts.commitments.join('; ') || '(none)'}`);
+          lines.push(`  - relationships: ${facts.relationships.join('; ') || '(none)'}`);
+          lines.push(`  - offered: ${facts.offeredAffordances.join('; ') || '(none)'}`);
+        }
+        lines.push(
+          `- hard dependencies: \`${String(context.leftHardDependencyFingerprint)}\` vs ` +
+            `\`${String(context.rightHardDependencyFingerprint)}\``,
+        );
+      }
+      lines.push('');
+    }
+  }
   lines.push('## Per-run facts');
   lines.push('');
   lines.push(
@@ -586,11 +1073,14 @@ export function writeCalibrationReport(
   return { jsonPath, markdownPath };
 }
 
-export function writeCalibrationAnalysis(
+/** The production write path (`m2:analyze`): the REGISTERED analysis —
+ * full sequence verification and exact-design binding — then the
+ * create-once write. */
+export async function writeCalibrationAnalysis(
   sequenceRoot: string,
   outputDir: string,
-): { report: CalibrationVarianceReport; jsonPath: string; markdownPath: string } {
-  const report = analyzeCalibrationSequence(sequenceRoot);
+): Promise<{ report: CalibrationVarianceReport; jsonPath: string; markdownPath: string }> {
+  const report = await analyzeRegisteredCalibration(sequenceRoot);
   const { jsonPath, markdownPath } = writeCalibrationReport(report, outputDir);
   return { report, jsonPath, markdownPath };
 }

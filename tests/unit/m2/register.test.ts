@@ -244,7 +244,11 @@ describe('registerFromRegistry (closed, Git-authenticated, transactional)', () =
     expect(loaded.plan.registration?.provenanceSha256).toBe(result.provenanceSha256);
     const refingerprinted = planConfigFingerprint({
       ...loaded.plan,
-      registration: { registrationId: 'stage-a', provenanceSha256: 'e'.repeat(64) },
+      registration: {
+        registrationId: 'stage-a',
+        provenanceSha256: 'e'.repeat(64),
+        provenancePath: 'registration-provenance.json',
+      },
     });
     expect(refingerprinted).not.toBe(planConfigFingerprint(loaded.plan));
   });

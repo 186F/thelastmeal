@@ -10,6 +10,7 @@ import {
 } from '../../../src/shared/conditionContract';
 import { RETRYABLE_ELIGIBLE_FAILURE_CLASSES } from './failureTaxonomy';
 import { getAttemptProfile, type AttemptProfile } from './attemptProfile';
+import { registrationEntry } from './registrationRegistry';
 
 /**
  * Orchestrator plan schema (M2 brief §19). A plan is the complete,
@@ -241,20 +242,27 @@ export const orchestratorPlanSchema = z
       .strict()
       .optional(),
     /** Git-authenticated registration binding (Phase 4 audit findings 2
-     * and 3), stamped by m2:register: the closed registration id, the
-     * SHA-256 of the registration-provenance record (which carries both
-     * source templates' blob ids and committed-byte hashes at the pinned
-     * HEAD), and — for the calibration plan — the SHA-256 of the verified
-     * Stage A prerequisite record. Part of the plan config fingerprint, so
-     * it joins the resume identity and every freeze checkpoint. */
+     * and 3; final targeted remediation C), stamped by m2:register: the
+     * closed registration id, the SHA-256 of the registration-provenance
+     * record (which carries both source templates' blob ids and
+     * committed-byte hashes at the pinned HEAD), the provenance record's
+     * path RELATIVE TO THE PLAN FILE (so moving the create-once
+     * registration directory keeps its internal references intact), and —
+     * for the calibration plan — the SHA-256 and relative path of the
+     * verified Stage A prerequisite record. Part of the plan config
+     * fingerprint, so it joins the resume identity and every freeze
+     * checkpoint. MANDATORY for every evidentiary or live formal plan:
+     * no authenticated registration → no formal launch. */
     registration: z
       .object({
         registrationId: nonEmpty,
         provenanceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+        provenancePath: nonEmpty,
         stageAPrerequisiteSha256: z
           .string()
           .regex(/^[0-9a-f]{64}$/)
           .optional(),
+        stageAPrerequisitePath: nonEmpty.optional(),
       })
       .strict()
       .optional(),
@@ -320,6 +328,86 @@ export const orchestratorPlanSchema = z
           code: z.ZodIssueCode.custom,
           message: 'evidentiary-gateway-stop-timeout-must-be-90min',
         });
+      }
+    }
+    // Final targeted remediation C (§5.2): no authenticated registration →
+    // no formal launch. Every evidentiary plan and every plan with a live
+    // attempt must carry a registration naming a CLOSED-REGISTRY entry
+    // whose study, sequence, profile, and treatment pins all match.
+    const anyLiveAttempt = plan.attempts.some((attempt) => attempt.gatewayMode === 'live');
+    if (plan.evidentiary || anyLiveAttempt) {
+      if (plan.registration === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'formal-plan-requires-registration: evidentiary or live plans launch only from m2:register output',
+        });
+      }
+    }
+    if (plan.registration !== undefined) {
+      const entry = registrationEntry(plan.registration.registrationId);
+      if (entry === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `registration-unknown-id:${plan.registration.registrationId}`,
+        });
+      } else {
+        if (plan.sequenceId !== entry.expectedSequenceId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `registration-sequence-mismatch:${plan.sequenceId}!=${entry.expectedSequenceId}`,
+          });
+        }
+        if (plan.study !== undefined && plan.study.studyId !== entry.studyId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `registration-study-mismatch:${plan.study.studyId}!=${entry.studyId}`,
+          });
+        }
+        if (
+          plan.attemptProfile.profileId !== entry.attemptProfile.profileId ||
+          plan.attemptProfile.profileVersion !== entry.attemptProfile.profileVersion
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'registration-profile-mismatch',
+          });
+        }
+        if (plan.expectedTreatment !== undefined) {
+          const pins = entry.expectedTreatment;
+          if (
+            plan.expectedTreatment.conditionId !== pins.conditionId ||
+            plan.expectedTreatment.modelId !== pins.modelId ||
+            plan.expectedTreatment.servingProviderId !== pins.servingProviderId ||
+            plan.expectedTreatment.promptVersion !== pins.promptVersion
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'registration-treatment-mismatch: plan expected treatment differs from the registry pins',
+            });
+          }
+        }
+        if (entry.stageAPrerequisiteRequired) {
+          if (
+            plan.registration.stageAPrerequisiteSha256 === undefined ||
+            plan.registration.stageAPrerequisitePath === undefined
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'registration-stage-a-prerequisite-missing: calibration launches require the verified Stage A record',
+            });
+          }
+        } else if (
+          plan.registration.stageAPrerequisiteSha256 !== undefined ||
+          plan.registration.stageAPrerequisitePath !== undefined
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'registration-stage-a-prerequisite-unexpected',
+          });
+        }
       }
     }
     const modelConditionIds = [

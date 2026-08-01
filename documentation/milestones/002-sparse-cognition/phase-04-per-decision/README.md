@@ -1,15 +1,19 @@
 # Milestone 2 Phase 4 — per-decision comparator
 
-**Status: AUDIT REMEDIATION COMPLETE — awaiting targeted re-audit.** The
-Advisor's [Phase 4 audit](audits/MILESTONE_002_PHASE4_PER_DECISION_AUDIT.md)
+**Status: FINAL TARGETED REMEDIATION COMPLETE — awaiting the Advisor's
+targeted verification.** The
+[Phase 4 audit](audits/MILESTONE_002_PHASE4_PER_DECISION_AUDIT.md)
 accepted the comparator architecture and requested changes on four
-study-governance/operations findings (calibration analyzer, Stage A
-prerequisite, Git-authenticated registration, CI artifact profiles) — all
-four are remediated, and the remediation itself passed an independent
-adversarial verification round (report §6.1–§6.2). **No live model call
-has been made.**
-Stage A and the calibration study execute only after the PR is re-audited,
-merged, and green on merged-`main` CI.
+findings; the remediation passed an independent adversarial verification
+round (report §6.1–§6.2); the Advisor's
+[final targeted remediation instructions](audits/MILESTONE_002_PHASE4_PER_DECISION_FINAL_TARGETED_REMEDIATION.md)
+then required four last corrections — exact-floor calibration entropy,
+exact registered-study binding with semantic first-divergence context,
+mandatory authenticated registration at formal launch with launch-time
+Stage A revalidation, and CI failure-path hygiene — all implemented
+(report §6.3). **No live model call has been made.** Stage A and the
+calibration study execute only after the targeted verification, merge,
+and green merged-`main` CI.
 
 **Scope delivered** (implementation brief §31, scope ruling §14):
 

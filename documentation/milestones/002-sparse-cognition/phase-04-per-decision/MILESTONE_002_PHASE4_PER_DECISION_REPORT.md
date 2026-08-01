@@ -393,9 +393,9 @@ are remediated in this round:
    hash — covering semantic world context, beliefs, memories, activity
    state — hard-dependency fingerprint, and offered-affordance lists all
    match; ordinal matching explicitly invalid after first divergence);
-   action-category/mode/transition entropies in milli-bits (base 2,
-   exact BigInt fixed-point logarithm — never `Math.log2` — floor-rounded
-   once, zero counts excluded, populations documented in the report
+   action-category/mode/transition entropies in milli-bits (base 2, the
+   §6.3 TRUE-floor algorithm — never `Math.log2` — zero counts excluded,
+   populations documented in the report
    itself); outcome frequencies (commitment outcomes labeled as mechanical
    terminal statuses, never moral blame); and the operational set reported
    PER RUN and IN AGGREGATE (§3.4.F) — per-run request/acceptance counts,
@@ -505,6 +505,93 @@ the technical reference, and the status pages. The real-evidence
 entry-point drill caught and fixed a genuine extraction defect (the
 decision-timeline reader filtered ledger events on a nonexistent field and
 returned zero decisions) — precisely the gap the coverage finding named.
+
+## 6.3 Final targeted remediation (ruling at PR head `f73b911`)
+
+The Advisor's final focused remediation instructions
+([audits/MILESTONE_002_PHASE4_PER_DECISION_FINAL_TARGETED_REMEDIATION.md](audits/MILESTONE_002_PHASE4_PER_DECISION_FINAL_TARGETED_REMEDIATION.md))
+accepted the comparator and the first remediation substantially and
+required four final corrections, all implemented at this head:
+
+1. **Exact, fast calibration entropy (A).** `entropyMilliBits(counts)`
+   now returns `floor(1000 × ShannonEntropyBase2(counts))` — the TRUE
+   floor, proven per call: (i) a rationality test over prime-exponent
+   cancellation of `T^T / Π c^c` answers exactly when the entropy is
+   rational (then one integer division gives the floor) and PROVES the
+   target irrational otherwise; (ii) for irrational targets,
+   directed-rounding BigInt logarithm bounds (`log2BoundsFixed`) refine —
+   48 fraction bits doubling to a 1536-bit cap — until both bounds floor
+   to the same milli-bit, which is then the proven answer. The cap is a
+   typed refusal (`entropy-refinement-exhausted`), never a wrong value.
+   The superseded Q20 approximation undercounted the audit regression
+   `[1785, 2031]` (997, not 996) and its unbounded numerator squaring was
+   the real cost driver (~26 ms per call); the interval algorithm is
+   ~250× faster, and the full analyzer suite — ten-run fixture, 45 pairs,
+   double-construction byte-identity — runs in ~120 ms under the DEFAULT
+   five-second test timeout (every earlier timeout raise was reverted).
+   A deterministic sweep is verified against an independent pure-
+   BigInt-power reference (binary search over `2^(mT)·D^1000 ≤ N^1000`,
+   no logarithms). The analysis version stays `1.0.0`: no Phase 4 live
+   data or registered dataset exists, and the corrected implementation is
+   exact — the documented contract is now true.
+2. **Exact registered-study binding (B).** The production entry
+   (`m2:analyze` → `analyzeRegisteredCalibration`) verifies the completed
+   sequence end to end (seals, inventory, immutable manifest WITH its
+   registration attestation re-derived from archived records, semantic
+   revalidation, archive + sidecar + receipt), loads and validates the
+   archived plan, study, freeze record, registration provenance, and
+   Stage A prerequisite copies, and refuses anything but the exact
+   registered design: `m2-calibration-variance-a-001@1.0.0`, sequence
+   `m2-calibration-variance-a`, ten planned M2 per-decision attempts on
+   scenario A seed 1001 under `m2-formal-attempt-profile@1.0.0`, the
+   pinned model/route/prompt, matching package version, producible
+   metrics, and analysis `m2-calibration-variance-analysis-1.0.0`.
+   Exactly one valid primary maps to each planned attempt — a permitted
+   successful replacement IS its attempt's primary, never an eleventh
+   observation; failed and superseded executions become typed exclusions;
+   nine or eleven primaries, duplicates, and out-of-set executions
+   refuse. First divergence now carries an interpretable SEMANTIC context
+   (§4.3): bounded structural facts from the validated archived request
+   envelopes only — location and current activity, hunger/fatigue/injury
+   state, beliefs, memories, commitments, relationships, offered
+   affordance descriptors — with field-level differences made explicit
+   and both hard-dependency fingerprints, in the JSON schema and the
+   Markdown rendering together; facts are never inferred (absent
+   envelopes yield an explicit null). The pure report builder remains
+   reusable for deterministic unit fixtures.
+3. **Mandatory authenticated registration at formal launch (C).** The
+   plan schema now REQUIRES a registration binding on every evidentiary
+   or live plan — the closed-registry id, matching study/sequence/profile
+   and treatment pins, and plan-relative paths to
+   `registration-provenance.json` (and `stage-a-prerequisite.json` for
+   calibration) with mandatory hashes. Before any write or spawn the
+   orchestrator preflight reopens everything: provenance re-hashed and
+   schema-validated; both source templates re-read from Git AT THE PINNED
+   SHA with blob and byte-hash equality; the DERIVATION re-proven by
+   re-stamping the committed templates and requiring the launched plan
+   and registered study to be byte-identical to the stamped output; and,
+   for calibration, the Stage A prerequisite re-hashed, its evidence root
+   re-verified end to end, and the canonical record rebuilt to byte
+   equality — with drill-mode evidence structurally unable to authorize a
+   live launch. The provenance and prerequisite records are archived into
+   the evidence root before execution, join the freeze identity (re-
+   hashed at every checkpoint through packaging), the resume identity
+   (three new fields), and the immutable manifest (a registration
+   attestation with template paths, blob ids, and Stage A identities)
+   that completed-sequence verification re-derives and reconciles.
+4. **CI failure-path hygiene (D).** The full-evidence profile is bound to
+   its PRODUCER: it prepares and uploads only when the `m2:rehearse` step
+   itself ran and failed, or on an explicit `workflow_dispatch`
+   full-evidence request — an early typecheck/lint/unit failure uploads
+   compact diagnostics only. Report uploads are producer-bound (model
+   rehearsal, batch, Playwright each keyed to their own step outcome), so
+   a skipped producer can never cause a secondary artifact-upload
+   failure, while `if-no-files-found: error` still guards every artifact
+   whose producer claimed success. One registered full budget — 4 GiB —
+   appears consistently in the script, the workflow, and this report
+   (measured ~2.7 GiB for the complete keyless set, each payload exactly
+   once). Static workflow assertions pin the failure-path conditions that
+   the merge-gate run itself cannot induce.
 
 ## 7. Known limitations and scheduled work
 

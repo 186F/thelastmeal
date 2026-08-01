@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   COMPACT_BUDGET_BYTES,
   FULL_BUDGET_BYTES,
@@ -138,5 +140,81 @@ describe('full-evidence artifact selection (re-audit: each payload exactly once)
 
   it('the registered full budget is explicit', () => {
     expect(FULL_BUDGET_BYTES).toBe(4 * 1024 * 1024 * 1024);
+  });
+});
+
+/**
+ * Static workflow assertions (final targeted remediation D, §6.3): the
+ * failure-path CI behaviors that cannot be induced in the required
+ * merge-gate run are pinned against the workflow text itself.
+ */
+describe('ci.yml failure-path hygiene (static assertions)', () => {
+  const workflow = readFileSync(join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+  /** The step block starting at the given name, ending at the next step. */
+  const step = (name: string): string => {
+    const start = workflow.indexOf(`- name: ${name}`);
+    expect(start, `step '${name}' exists`).toBeGreaterThanOrEqual(0);
+    const rest = workflow.slice(start + 1);
+    const next = rest.search(/\n {6}- name: /);
+    return workflow.slice(start, next === -1 ? undefined : start + 1 + next);
+  };
+
+  it('full-evidence prepare and upload are bound to the m2:rehearse PRODUCER, never bare failure()', () => {
+    for (const name of [
+      'Prepare FULL evidence artifact (uniqueness + size-budget gate)',
+      'Upload m2 rehearsal FULL evidence (rehearsal failure or explicit dispatch only)',
+    ]) {
+      const block = step(name);
+      expect(block).toContain("steps.m2-rehearse.outcome == 'failure'");
+      expect(block).toContain('inputs.full-evidence');
+      // An early unit-test failure must not trigger the heavy profile:
+      // bare failure() would.
+      expect(block.includes('failure() ||')).toBe(false);
+    }
+    // The producer step actually carries the id the conditions reference.
+    expect(workflow).toContain('id: m2-rehearse');
+  });
+
+  it('report uploads are producer-bound: skipped producers cause no secondary failures', () => {
+    const model = step('Upload model-rehearsal report');
+    expect(model).toContain("steps.model-rehearse.outcome == 'success'");
+    expect(model).toContain('if-no-files-found: error');
+    const modelFailure = step('Upload model-rehearsal failure diagnostics');
+    expect(modelFailure).toContain("steps.model-rehearse.outcome == 'failure'");
+    expect(modelFailure).toContain('if-no-files-found: ignore');
+    const batch = step('Upload batch report');
+    expect(batch).toContain("steps.batch.outcome == 'success'");
+    expect(batch).toContain('if-no-files-found: error');
+    const playwright = step('Upload Playwright report on e2e failure');
+    expect(playwright).toContain("steps.e2e.outcome == 'failure'");
+    expect(workflow).toContain('id: model-rehearse');
+    expect(workflow).toContain('id: batch');
+    expect(workflow).toContain('id: e2e');
+  });
+
+  it('every artifact upload pins an explicit retention period', () => {
+    const uploads = workflow.split('uses: actions/upload-artifact').length - 1;
+    const retentions = workflow.split('retention-days:').length - 1;
+    expect(uploads).toBeGreaterThan(0);
+    expect(retentions).toBe(uploads);
+  });
+
+  it('the compact gate precedes the compact upload, and the routine profile stays compact', () => {
+    const gateIndex = workflow.indexOf('Prepare compact rehearsal artifact (size-budget gate)');
+    const uploadIndex = workflow.indexOf('Upload m2 rehearsal compact proof');
+    expect(gateIndex).toBeGreaterThan(0);
+    expect(uploadIndex).toBeGreaterThan(gateIndex);
+    const compact = step('Upload m2 rehearsal compact proof');
+    expect(compact).toContain('retention-days: 21');
+    const full = step(
+      'Upload m2 rehearsal FULL evidence (rehearsal failure or explicit dispatch only)',
+    );
+    expect(full).toContain('retention-days: 7');
+  });
+
+  it('the registered full budget is documented consistently (one budget, 4 GiB)', () => {
+    expect(workflow).toContain('4 GiB');
+    expect(workflow.includes('2 GiB')).toBe(false);
+    expect(FULL_BUDGET_BYTES / 1024 ** 3).toBe(4);
   });
 });

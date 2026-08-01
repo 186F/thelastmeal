@@ -102,64 +102,182 @@ export function assertMetricsProducible(study: {
 // Deterministic arithmetic
 // --------------------------------------------------------------------------
 
-/**
- * Exact base-2 logarithm of a rational numerator/denominator in
- * MILLI-BITS, floor-rounded, via the classic BigInt squaring algorithm:
- * integer part by halving, then 20 binary fraction bits (granularity
- * 2^-20 ≪ one milli-bit), converted to thousandths by floor. Requires
- * numerator >= denominator > 0 (log >= 0).
- */
-/** log2(numerator/denominator) scaled by 2^20, floor-rounded — the exact
- * fixed-point core (20 fractional bits, granularity 2^-20 bits). */
-export function log2Q20Floor(numerator: bigint, denominator: bigint): bigint {
-  if (denominator <= 0n || numerator < denominator) {
-    throw new Error(`log2-domain: ${numerator}/${denominator} not >= 1`);
+function bitLength(x: bigint): number {
+  let length = 0;
+  let value = x;
+  while (value > 0n) {
+    value >>= 1n;
+    length += 1;
   }
-  let integerPart = 0n;
-  let num = numerator;
-  let den = denominator;
-  while (num >= 2n * den) {
-    den *= 2n;
-    integerPart += 1n;
-  }
-  // num/den now in [1, 2). Extract 20 fractional bits by squaring.
-  let fractionBits = 0n;
-  for (let bit = 0; bit < 20; bit += 1) {
-    num *= num;
-    den *= den;
-    fractionBits <<= 1n;
-    if (num >= 2n * den) {
-      den *= 2n;
-      fractionBits |= 1n;
+  return length;
+}
+
+/** Guard bits appended to the working precision of every directed-rounding
+ * logarithm run; 64 bits absorbs the error growth of up to ~2^6 more
+ * squaring steps than any refinement level uses. */
+const LOG2_GUARD_BITS = 64n;
+
+/** One digit-by-digit base-2 logarithm run over the mantissa of x with
+ * DIRECTED rounding. With exact arithmetic this algorithm emits exactly
+ * floor(2^fracBits·log2 x); monotone directed rounding therefore
+ * guarantees the down-run returns ≤ that floor and the up-run returns
+ * ≥ that floor. Only the down-run's guarantee transfers to the real
+ * value (≤ floor ≤ 2^fracBits·log2 x). The up-run's does NOT — for a
+ * non-power-of-two x the true value lies STRICTLY above its floor, so a
+ * strict upper bound needs the +1 applied by the caller
+ * (log2BoundsFixed); the +1 carries the soundness, it is not slack. */
+function log2Directed(x: bigint, fracBits: bigint, roundUp: boolean): bigint {
+  const integerPart = BigInt(bitLength(x) - 1);
+  const scale = fracBits + LOG2_GUARD_BITS;
+  // Mantissa y = x / 2^integerPart ∈ [1, 2), held as z = y·2^scale —
+  // exact at the start because scale exceeds any realistic bit length.
+  let z = x << (scale - integerPart);
+  const two = 2n << scale;
+  const mask = (1n << scale) - 1n;
+  let bits = 0n;
+  for (let i = 0n; i < fracBits; i += 1n) {
+    const squared = z * z;
+    z = squared >> scale;
+    if (roundUp && (squared & mask) !== 0n) z += 1n;
+    bits <<= 1n;
+    if (z >= two) {
+      bits |= 1n;
+      if (roundUp) z = (z + 1n) >> 1n;
+      else z >>= 1n;
     }
   }
-  return (integerPart << 20n) | fractionBits;
-}
-
-export function log2MilliBitsFloor(numerator: bigint, denominator: bigint): bigint {
-  return (log2Q20Floor(numerator, denominator) * 1000n) >> 20n;
+  return (integerPart << fracBits) | bits;
 }
 
 /**
- * Shannon entropy of an integer count distribution in MILLI-BITS (base 2),
- * floor-rounded ONCE at the end: H = Σ (c/N)·log2(N/c), computed as
- * floor( 1000 · Σ c·log2q20(N/c) / (N·2^20) ) — per-term error is below
- * 2^-20 bits, so the single final floor is exact to the milli-bit for any
- * realistic vocabulary size. Zero counts contribute nothing
- * (lim x→0 x·log x = 0); an empty or single-outcome distribution has
- * entropy 0. Fully deterministic — BigInt arithmetic only, never
- * `Math.log2`.
+ * Rigorous fixed-point bounds on log2(x) for an integer x ≥ 1:
+ * lo/2^fracBits ≤ log2(x) ≤ hi/2^fracBits, with lo === hi exactly when x
+ * is a power of two (the logarithm is then exactly representable).
+ */
+export function log2BoundsFixed(x: bigint, fracBits: bigint): { lo: bigint; hi: bigint } {
+  if (x < 1n) throw new Error(`log2-domain: ${x} is not >= 1`);
+  if ((x & (x - 1n)) === 0n) {
+    const exact = BigInt(bitLength(x) - 1) << fracBits;
+    return { lo: exact, hi: exact };
+  }
+  const lo = log2Directed(x, fracBits, false);
+  // The +1 is REQUIRED for soundness, never slack: the up-run bounds the
+  // FLOOR of 2^fracBits·log2(x) from above, and this branch only runs for
+  // non-powers-of-two, whose true value is strictly above that floor.
+  const hi = log2Directed(x, fracBits, true) + 1n;
+  return { lo, hi };
+}
+
+/** Smallest odd-prime factor exponents of n: returns a map prime → v_p(n)
+ * for every odd prime, plus the power of two separately. Trial division —
+ * counts are event tallies, far below any size where this matters. */
+function factorExponents(n: number): { twos: bigint; odd: Map<number, bigint> } {
+  let value = n;
+  let twos = 0n;
+  while (value % 2 === 0) {
+    value /= 2;
+    twos += 1n;
+  }
+  const odd = new Map<number, bigint>();
+  for (let p = 3; p * p <= value; p += 2) {
+    while (value % p === 0) {
+      value /= p;
+      odd.set(p, (odd.get(p) ?? 0n) + 1n);
+    }
+  }
+  if (value > 1) odd.set(value, (odd.get(value) ?? 0n) + 1n);
+  return { twos, odd };
+}
+
+/** Refinement ladder for the interval pass. The rationality test below
+ * PROVES the target is irrational whenever this ladder runs, so a bucket
+ * boundary can only be approached, never hit; the cap is a refusal
+ * (never a wrong value) against adversarial near-boundary inputs. */
+const ENTROPY_FRACTION_BITS = [48n, 96n, 192n, 384n, 768n, 1536n];
+
+/**
+ * Shannon entropy of an integer count distribution in MILLI-BITS (base 2):
+ *
+ *   entropyMilliBits(counts) = floor(1000 · H),  H = Σ (c/T)·log2(T/c)
+ *
+ * — the TRUE floor, deterministically, on every platform. Two exact paths:
+ *
+ * 1. RATIONAL SHORTCUT. T·H = log2(T^T / Π c^c). Factoring T and each
+ *    count, the odd-prime exponents of that quotient either all cancel —
+ *    then H = e₂/T exactly (e₂ = the surviving power of two) and the floor
+ *    is one integer division — or at least one survives, in which case
+ *    unique factorization makes 1000·H irrational (Q^1000 = 2^(m·T) would
+ *    force every odd exponent to zero), so path 2 must terminate.
+ * 2. INTERVAL REFINEMENT. Directed-rounding BigInt logarithm bounds
+ *    (log2BoundsFixed) give rigorous lower/upper bounds on 1000·H; the
+ *    fraction-bit budget doubles until both bounds floor to the same
+ *    integer, which is then the proven exact answer. Repeated (total,
+ *    count) logarithms are cached per precision level.
+ *
+ * Zero counts contribute nothing (lim x→0 x·log x = 0); empty and
+ * single-outcome distributions have entropy 0. Never `Math.log2`.
  */
 export function entropyMilliBits(counts: readonly number[]): number {
   const positive = counts.filter((count) => count > 0);
   const total = positive.reduce((sum, count) => sum + count, 0);
   if (total === 0 || positive.length <= 1) return 0;
-  const totalBig = BigInt(total);
-  let sumQ20 = 0n;
-  for (const count of positive) {
-    sumQ20 += BigInt(count) * log2Q20Floor(totalBig, BigInt(count));
+  if (!positive.every((count) => Number.isSafeInteger(count))) {
+    throw new Error('entropy-domain: counts must be safe integers');
   }
-  return Number((sumQ20 * 1000n) / (totalBig << 20n));
+  const totalBig = BigInt(total);
+
+  // Path 1: exact rationality via odd-prime cancellation.
+  const oddExponents = new Map<number, bigint>();
+  let twosExponent = 0n;
+  const accumulate = (value: number, weight: bigint) => {
+    const { twos, odd } = factorExponents(value);
+    twosExponent += weight * twos;
+    for (const [prime, exponent] of odd) {
+      const next = (oddExponents.get(prime) ?? 0n) + weight * exponent;
+      if (next === 0n) oddExponents.delete(prime);
+      else oddExponents.set(prime, next);
+    }
+  };
+  accumulate(total, totalBig);
+  for (const count of positive) accumulate(count, -BigInt(count));
+  if (oddExponents.size === 0) {
+    // H = twosExponent / T exactly (entropy > 0 here, so e₂ > 0).
+    return Number((1000n * twosExponent) / totalBig);
+  }
+
+  // Path 2: interval refinement (target proven irrational above).
+  for (const fracBits of ENTROPY_FRACTION_BITS) {
+    const cache = new Map<number, { lo: bigint; hi: bigint }>();
+    const bounds = (value: number): { lo: bigint; hi: bigint } => {
+      const hit = cache.get(value);
+      if (hit) return hit;
+      const computed = log2BoundsFixed(BigInt(value), fracBits);
+      cache.set(value, computed);
+      return computed;
+    };
+    const totalBounds = bounds(total);
+    let sumLo = 0n;
+    let sumHi = 0n;
+    for (const count of positive) {
+      const countBounds = bounds(count);
+      sumLo += BigInt(count) * countBounds.lo;
+      sumHi += BigInt(count) * countBounds.hi;
+    }
+    // T·H ∈ [T·log2(T) − Σc·log2(c)] bounded from both sides.
+    const numeratorLo = 1000n * (totalBig * totalBounds.lo - sumHi);
+    const numeratorHi = 1000n * (totalBig * totalBounds.hi - sumLo);
+    const denominator = totalBig << fracBits;
+    const floorDiv = (a: bigint, b: bigint): bigint => {
+      const q = a / b;
+      return a % b !== 0n && a < 0n !== b < 0n ? q - 1n : q;
+    };
+    const floorLo = floorDiv(numeratorLo, denominator);
+    const floorHi = floorDiv(numeratorHi, denominator);
+    if (floorLo === floorHi) return Number(floorLo);
+  }
+  throw new Error(
+    'entropy-refinement-exhausted: bounds did not converge within the precision ladder',
+  );
 }
 
 /**
@@ -206,6 +324,50 @@ export const distributionSummarySchema = z
   })
   .strict();
 
+/** Bounded structural facts extracted from a VALIDATED archived request
+ * envelope (final targeted remediation B §4.3): only fields the envelope
+ * actually carries, no prompt text, deterministic order, hard caps. */
+const boundedFact = z.string().min(1).max(200);
+const boundedFacts = z.array(boundedFact).max(24);
+export const decisionContextFactsSchema = z
+  .object({
+    locationId: z.string().max(200).nullable(),
+    currentActivity: z.string().max(200).nullable(),
+    hungerMicro: intOrNull,
+    fatigueMicro: intOrNull,
+    injurySeverityMicro: intOrNull,
+    injuryTreatmentStarted: z.boolean().nullable(),
+    beliefs: boundedFacts,
+    memories: boundedFacts,
+    commitments: boundedFacts,
+    relationships: boundedFacts,
+    offeredAffordances: boundedFacts,
+  })
+  .strict();
+export type DecisionContextFacts = z.infer<typeof decisionContextFactsSchema>;
+
+/** The interpretable first-divergence record (§4.3): the tick, both
+ * sides' bounded semantic context, the field-level differences made
+ * EXPLICIT, and the hard-dependency fingerprints — never two opaque
+ * hashes alone. Null when the pair never diverges or when an archived
+ * envelope carries no context for the divergent ordinal (facts are never
+ * inferred). */
+export const divergenceSemanticContextSchema = z
+  .object({
+    /** Which sides carried an archived envelope. Field-level differences
+     * are computed ONLY when both are present — an absent envelope is an
+     * explicit marker, never a fabricated difference (facts are never
+     * inferred). */
+    comparison: z.enum(['both-present', 'left-envelope-absent', 'right-envelope-absent']),
+    left: decisionContextFactsSchema.nullable(),
+    right: decisionContextFactsSchema.nullable(),
+    differingFields: z.array(z.string().min(1).max(60)).max(16),
+    leftHardDependencyFingerprint: z.string().nullable(),
+    rightHardDependencyFingerprint: z.string().nullable(),
+  })
+  .strict();
+export type DivergenceSemanticContext = z.infer<typeof divergenceSemanticContextSchema>;
+
 export const calibrationPairSchema = z
   .object({
     left: shortString,
@@ -227,6 +389,7 @@ export const calibrationPairSchema = z
         leftSelectedAffordanceId: z.string().nullable(),
         rightSelectedAffordanceId: z.string().nullable(),
         laterOrdinalMatchingValid: z.boolean(),
+        semanticContext: divergenceSemanticContextSchema.nullable(),
       })
       .strict(),
   })

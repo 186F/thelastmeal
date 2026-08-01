@@ -646,16 +646,24 @@ report records the prepared `gh api` command.)
   manifests, failure manifests), hard-refuses any ZIP/trace/image payload,
   enforces the registered ≤ 50 MiB budget BEFORE the upload step, and emits
   a machine-readable `artifact-size-report.json`; the upload retains 21 days
-  with `if-no-files-found: error`. The FULL-EVIDENCE profile runs only on a
-  failing run or a `workflow_dispatch` with the `full-evidence` input: the
-  same script under `--profile full` assembles `artifacts/ci-full/` with
+  with `if-no-files-found: error`. The FULL-EVIDENCE profile is bound to
+  its PRODUCER (final targeted remediation D): it prepares and uploads
+  only when the `m2:rehearse` step itself ran and failed, or on a
+  `workflow_dispatch` with the `full-evidence` input — an early
+  typecheck/lint/unit failure uploads compact diagnostics only, never
+  hundreds of megabytes of partial test-generated trees. The same script
+  under `--profile full` assembles `artifacts/ci-full/` with
   each sequence payload exactly once — sealed ZIP + `.sha256` sidecar +
   receipt for archived sequences (their raw trees are contained in the
   ZIPs and excluded, while the packaging-recovery drill's preserved
   superseded archive rides along as evidence), raw trees only for
   never-archived sequences — under a
   registered ≤ 4 GiB budget with per-sequence uniqueness dispositions in
-  its own `artifact-size-report.json`, retained 7 days. Every upload step
+  its own `artifact-size-report.json`, retained 7 days. The
+  model-rehearsal, batch, and Playwright report uploads are each keyed to
+  their own producer step's outcome, so a skipped producer never causes a
+  secondary upload failure while `if-no-files-found: error` still guards
+  every artifact whose producer claimed success. Every upload step
   pins an explicit `retention-days`. Formal live evidence is never
   entrusted to expiring Actions artifacts: it is retained locally as sealed
   receipted packages with independent durable backup. Dependency caching

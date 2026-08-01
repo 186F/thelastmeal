@@ -195,7 +195,7 @@ export async function runCli(argv: readonly string[]): Promise<number> {
         ? resolve(repoRoot, outOption)
         : join(`${root}.derived`, 'm2-calibration-variance-analysis-1.0.0');
       const { writeCalibrationAnalysis } = await import('../../evaluation/calibrationVariance');
-      const { report, jsonPath, markdownPath } = writeCalibrationAnalysis(root, outputDir);
+      const { report, jsonPath, markdownPath } = await writeCalibrationAnalysis(root, outputDir);
       console.log(
         `m2:analyze — ${report.analysisVersion}: ${report.runCount} primary run(s), ` +
           `${report.pairs.length} pair(s), median composite ` +

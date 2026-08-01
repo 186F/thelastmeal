@@ -6,7 +6,15 @@ import { helperEnv } from './childEnv';
 import { validateStudyFile } from './studyRegistry';
 import { parsePlan } from './planSchema';
 import { buildStageAPrerequisite } from './stageAPrerequisite';
+import {
+  REGISTRATION_PROVENANCE_SCHEMA_VERSION,
+  REGISTRATION_REGISTRY,
+  type RegistrationEntry,
+} from './registrationRegistry';
 import { assertMetricsProducible } from '../../../src/shared/calibrationAnalysis';
+
+export { REGISTRATION_PROVENANCE_SCHEMA_VERSION, REGISTRATION_REGISTRY };
+export type { RegistrationEntry };
 
 /**
  * Registration ritual for evidentiary plans and studies (Phase 4; reworked
@@ -57,52 +65,9 @@ export const TEMPLATE_PROVENANCE_SHA256_SENTINEL =
 export const TEMPLATE_STAGE_A_SHA256_SENTINEL =
   '8888888888888888888888888888888888888888888888888888888888888888';
 
-export const REGISTRATION_PROVENANCE_SCHEMA_VERSION = 'm2-registration-provenance-1.0.0';
-
-/** The CLOSED registration registry (audit finding 3): the only formal
- * template pairs `m2:register` will ever stamp. Paths are repo-relative
- * and must be tracked at HEAD with working-tree bytes equal to the
- * committed bytes. */
-export interface RegistrationEntry {
-  registrationId: string;
-  studyId: string;
-  studyVersion: string;
-  studyTemplatePath: string;
-  planTemplatePath: string;
-  expectedSequenceId: string;
-  attemptProfile: { profileId: string; profileVersion: string };
-  stageAPrerequisiteRequired: boolean;
-  /** Which closed-registry registration must have PRODUCED the Stage A
-   * evidence this registration consumes (re-audit: SHA equality alone
-   * would accept any completed two-attempt sequence). Null when no Stage A
-   * prerequisite is required. */
-  stageASourceRegistrationId: string | null;
-}
-
-export const REGISTRATION_REGISTRY: readonly RegistrationEntry[] = [
-  {
-    registrationId: 'stage-a',
-    studyId: 'm2-stage-a-acceptance-001',
-    studyVersion: '1.0.0',
-    studyTemplatePath: 'experiments/m2/templates/m2-stage-a-acceptance-001.study.template.json',
-    planTemplatePath: 'experiments/m2/templates/stage-a.plan.template.json',
-    expectedSequenceId: 'm2-stage-a-acceptance',
-    attemptProfile: { profileId: 'm2-formal-attempt-profile', profileVersion: '1.0.0' },
-    stageAPrerequisiteRequired: false,
-    stageASourceRegistrationId: null,
-  },
-  {
-    registrationId: 'calibration-variance-a',
-    studyId: 'm2-calibration-variance-a-001',
-    studyVersion: '1.0.0',
-    studyTemplatePath: 'experiments/m2/templates/m2-calibration-variance-a-001.study.template.json',
-    planTemplatePath: 'experiments/m2/templates/calibration-variance-a.plan.template.json',
-    expectedSequenceId: 'm2-calibration-variance-a',
-    attemptProfile: { profileId: 'm2-formal-attempt-profile', profileVersion: '1.0.0' },
-    stageAPrerequisiteRequired: true,
-    stageASourceRegistrationId: 'stage-a',
-  },
-];
+// REGISTRATION_REGISTRY and the provenance schema live in
+// registrationRegistry.ts (re-exported above) so the plan schema and the
+// launch preflight consult the same closed registry without cycles.
 
 export interface StampResult {
   studyText: string;

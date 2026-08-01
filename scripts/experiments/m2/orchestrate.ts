@@ -98,6 +98,10 @@ import {
 } from './packageEvidence';
 import { writeSequenceManifest, writeSequenceReport, type SequenceFinalFacts } from './reporting';
 import {
+  verifyPlanRegistration,
+  type RegistrationPreflightEvidence,
+} from './registrationPreflight';
+import {
   readSequenceManifestFile,
   reconcileManifestWithState,
   revalidateCompletedExecutions,
@@ -400,6 +404,14 @@ export interface FreezeIdentity {
   studyVersion: string | null;
   studyConfigFingerprint: string | null;
   studyFreezeRecordSha256: string | null;
+  /** Registration binding (final targeted remediation C §5.4): the
+   * archived provenance and Stage A prerequisite copies inside the
+   * evidence root are re-hashed at every checkpoint through post-sequence
+   * packaging — mutating either after sequence start is a freeze
+   * violation. */
+  registrationId: string | null;
+  registrationProvenanceSha256: string | null;
+  stageAPrerequisiteSha256: string | null;
 }
 
 export function checkFreeze(repoRoot: string, sequenceRoot: string, freeze: FreezeIdentity): void {
@@ -495,6 +507,24 @@ export function checkFreeze(repoRoot: string, sequenceRoot: string, freeze: Free
       throw new Error(
         `freeze-violation: registered study file changed or vanished (${freeze.studyPlanPathAbsolute})`,
       );
+    }
+  }
+  if (freeze.registrationProvenanceSha256 !== null) {
+    const archivedProvenance = join(sequenceRoot, 'registration-provenance.archived.json');
+    if (
+      !existsSync(archivedProvenance) ||
+      sha256(readFileSync(archivedProvenance)) !== freeze.registrationProvenanceSha256
+    ) {
+      throw new Error('freeze-violation: archived registration provenance missing or altered');
+    }
+  }
+  if (freeze.stageAPrerequisiteSha256 !== null) {
+    const archivedPrerequisite = join(sequenceRoot, 'stage-a-prerequisite.archived.json');
+    if (
+      !existsSync(archivedPrerequisite) ||
+      sha256(readFileSync(archivedPrerequisite)) !== freeze.stageAPrerequisiteSha256
+    ) {
+      throw new Error('freeze-violation: archived Stage A prerequisite missing or altered');
     }
   }
 }
@@ -1314,6 +1344,17 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
   if (plan.evidentiary && worktreeDirty(options.repoRoot)) {
     throw new Error('dirty-worktree: an evidentiary sequence requires a clean tracked worktree');
   }
+  // Launch-time registration preflight (final targeted remediation C
+  // §5.3): reopen, re-hash, schema-validate, and Git-re-prove every
+  // external record the plan's registration binding claims — including a
+  // full re-verification of the Stage A evidence for calibration — BEFORE
+  // any write or spawn. Read-only; typed refusal on any drift.
+  const registrationEvidence: RegistrationPreflightEvidence | null = await verifyPlanRegistration({
+    plan,
+    planBytes,
+    planPath: options.planPath,
+    repoRoot: options.repoRoot,
+  });
   const experimentIdentity = planExperimentIdentity(plan);
   const identity = {
     planSha256: loaded.planSha256,
@@ -1331,6 +1372,9 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
     studyPlanSha256: plan.study?.studyPlanSha256 ?? 'none',
     thresholdProfileId: profile.profileId,
     thresholdProfileVersion: profile.profileVersion,
+    registrationId: plan.registration?.registrationId ?? 'none',
+    registrationProvenanceSha256: plan.registration?.provenanceSha256 ?? 'none',
+    stageAPrerequisiteSha256: plan.registration?.stageAPrerequisiteSha256 ?? 'none',
     configFingerprint: planConfigFingerprint(plan),
   };
   const freeze: FreezeIdentity = {
@@ -1352,6 +1396,9 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
       plan.study !== undefined
         ? sha256(Buffer.from(studyFreezeRecordContent(plan.study), 'utf8'))
         : null,
+    registrationId: plan.registration?.registrationId ?? null,
+    registrationProvenanceSha256: plan.registration?.provenanceSha256 ?? null,
+    stageAPrerequisiteSha256: plan.registration?.stageAPrerequisiteSha256 ?? null,
   };
 
   let state = readSequenceState(sequenceRoot);
@@ -1485,6 +1532,31 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
         }
       } else {
         writeFileSync(freezeRecordPath, freezeRecord, 'utf8');
+      }
+    }
+    // Archive the authenticated registration records into the evidence
+    // root before execution (final targeted remediation C §5.4); the
+    // freeze identity re-hashes both at every checkpoint.
+    if (registrationEvidence !== null) {
+      const archivedProvenance = join(sequenceRoot, 'registration-provenance.archived.json');
+      if (existsSync(archivedProvenance)) {
+        if (sha256(readFileSync(archivedProvenance)) !== registrationEvidence.provenanceSha256) {
+          throw new Error('freeze-violation: archived registration provenance differs');
+        }
+      } else {
+        writeFileSync(archivedProvenance, registrationEvidence.provenanceBytes);
+      }
+      if (registrationEvidence.prerequisiteBytes !== null) {
+        const archivedPrerequisite = join(sequenceRoot, 'stage-a-prerequisite.archived.json');
+        if (existsSync(archivedPrerequisite)) {
+          if (
+            sha256(readFileSync(archivedPrerequisite)) !== registrationEvidence.prerequisiteSha256
+          ) {
+            throw new Error('freeze-violation: archived Stage A prerequisite differs');
+          }
+        } else {
+          writeFileSync(archivedPrerequisite, registrationEvidence.prerequisiteBytes);
+        }
       }
     }
     recordLiveAcknowledgement(plan, sequenceRoot);

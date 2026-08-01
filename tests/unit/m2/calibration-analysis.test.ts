@@ -5,11 +5,15 @@ import {
   METRIC_PRODUCER_REGISTRY,
   assertMetricsProducible,
   entropyMilliBits,
-  log2MilliBitsFloor,
+  log2BoundsFixed,
   quantileMilliFloor,
 } from '../../../src/shared/calibrationAnalysis';
+import type { DecisionContextFacts } from '../../../src/shared/calibrationAnalysis';
 import {
+  assertRegisteredCalibrationDesign,
   buildCalibrationReport,
+  extractContextFacts,
+  mapRegisteredPrimaries,
   writeCalibrationReport,
   type DecisionPoint,
   type RunEvidence,
@@ -48,7 +52,7 @@ describe('deterministic quantiles (type-7, floor, milli-units)', () => {
     expect(quantileMilliFloor(values, 90)).toBe(46_000);
     expect(quantileMilliFloor(values, 0)).toBe(10_000);
     expect(quantileMilliFloor(values, 100)).toBe(50_000);
-  }, 120_000);
+  });
 
   it('handles two-value interpolation, repeated values, and ties', () => {
     expect(quantileMilliFloor([10, 20], 75)).toBe(17_500);
@@ -58,16 +62,39 @@ describe('deterministic quantiles (type-7, floor, milli-units)', () => {
     expect(quantileMilliFloor([1, 7, 7, 7, 9], 50)).toBe(7_000);
     // Floor rounding: rank 0.1·3 = 0.3 over [0,1,…]: 0 + 0.3·1 = 0.3 → 300.
     expect(quantileMilliFloor([0, 1, 2, 3], 10)).toBe(300);
-  }, 120_000);
+  });
 
   it('refuses empty samples and non-integer percentiles', () => {
     expect(() => quantileMilliFloor([], 50)).toThrow(/quantile-empty/);
     expect(() => quantileMilliFloor([1], 50.5)).toThrow(/quantile-percentile-invalid/);
-  }, 120_000);
+  });
 });
 
-describe('deterministic entropy (base 2, milli-bits, floor)', () => {
-  it('matches exact closed forms', () => {
+/** Independent exact reference for floor(1000·H): the largest integer m
+ * with 2^(m·T)·(Π c^c)^1000 ≤ (T^T)^1000, found by binary search over pure
+ * BigInt powers — no logarithms at all. Practical only for small totals,
+ * which is exactly what the sweep uses. */
+function entropyMilliFloorReference(counts: readonly number[]): number {
+  const positive = counts.filter((count) => count > 0);
+  const total = positive.reduce((sum, count) => sum + count, 0);
+  if (total === 0 || positive.length <= 1) return 0;
+  const bigTotal = BigInt(total);
+  const numerator = bigTotal ** (1000n * bigTotal);
+  let denominator = 1n;
+  for (const count of positive) denominator *= BigInt(count) ** (1000n * BigInt(count));
+  // H ≤ log2(k) ≤ total, so m < 1000·total is a safe search ceiling.
+  let low = 0n;
+  let high = 1000n * bigTotal;
+  while (low < high) {
+    const mid = (low + high + 1n) / 2n;
+    if (2n ** (mid * bigTotal) * denominator <= numerator) low = mid;
+    else high = mid - 1n;
+  }
+  return Number(low);
+}
+
+describe('deterministic entropy (base 2, milli-bits, TRUE floor)', () => {
+  it('matches exact closed forms through the rational shortcut', () => {
     // Uniform over 4 outcomes: exactly 2 bits.
     expect(entropyMilliBits([5, 5, 5, 5])).toBe(2_000);
     // p = (1/4, 1/4, 1/2): exactly 1.5 bits.
@@ -77,22 +104,69 @@ describe('deterministic entropy (base 2, milli-bits, floor)', () => {
     expect(entropyMilliBits([])).toBe(0);
     // Zero counts are excluded, not participants.
     expect(entropyMilliBits([0, 8, 0, 8, 0])).toBe(1_000);
-  }, 120_000);
+    // Uniform over 8: exactly 3 bits, any per-outcome count.
+    expect(entropyMilliBits([7, 7, 7, 7, 7, 7, 7, 7])).toBe(3_000);
+  });
 
   it('floors irrational entropies deterministically', () => {
     // p = (1/3, 2/3): H = 0.918295… bits → 918 milli-bits.
     expect(entropyMilliBits([1, 2])).toBe(918);
     // p = (1/10, 9/10): H = 0.468995… bits → floor 468.
     expect(entropyMilliBits([1, 9])).toBe(468);
-  }, 120_000);
+  });
 
-  it('log2MilliBitsFloor is exact on powers of two and floors otherwise', () => {
-    expect(log2MilliBitsFloor(8n, 1n)).toBe(3_000n);
-    expect(log2MilliBitsFloor(1n, 1n)).toBe(0n);
-    // log2(3) = 1.58496… → 1584.
-    expect(log2MilliBitsFloor(3n, 1n)).toBe(1_584n);
-    expect(() => log2MilliBitsFloor(1n, 2n)).toThrow(/log2-domain/);
-  }, 120_000);
+  it('the audit regression: [1785, 2031] floors to 997, not 996', () => {
+    // True value 0.997000152150330… bits — one milli-bit above the
+    // boundary. The superseded Q20 approximation returned 996.
+    expect(entropyMilliBits([1785, 2031])).toBe(997);
+  });
+
+  it('agrees with an independent pure-BigInt-power reference across a deterministic sweep', () => {
+    const vectors: number[][] = [
+      [1, 1],
+      [1, 2],
+      [2, 3],
+      [1, 9],
+      [3, 3, 3],
+      [1, 2, 3],
+      [5, 7],
+      [1, 1, 1, 1, 1],
+      [2, 2, 5],
+      [4, 6, 10],
+      [7, 11, 13],
+      [1, 3, 9],
+      [8, 8],
+      [1, 2, 4, 8],
+      [6, 6, 6, 6],
+      [1, 1, 2, 4],
+      [9, 3],
+      [2, 2, 2, 2, 2, 2],
+      [10, 20, 30],
+      [1, 5, 25],
+    ];
+    for (const vector of vectors) {
+      expect(entropyMilliBits(vector), `counts [${vector.join(', ')}]`).toBe(
+        entropyMilliFloorReference(vector),
+      );
+    }
+  });
+
+  it('log2BoundsFixed brackets the true logarithm and is exact on powers of two', () => {
+    const eight = log2BoundsFixed(8n, 48n);
+    expect(eight.lo).toBe(3n << 48n);
+    expect(eight.hi).toBe(3n << 48n);
+    const one = log2BoundsFixed(1n, 48n);
+    expect(one.lo).toBe(0n);
+    expect(one.hi).toBe(0n);
+    // log2(3) = 1.584962500721156… — bounds must bracket it tightly.
+    const three = log2BoundsFixed(3n, 48n);
+    expect(three.lo <= three.hi).toBe(true);
+    expect(three.hi - three.lo <= 4n).toBe(true);
+    const scaled = Math.log2(3) * 2 ** 48;
+    expect(Number(three.lo) <= scaled).toBe(true);
+    expect(Number(three.hi) >= scaled).toBe(true);
+    expect(() => log2BoundsFixed(0n, 48n)).toThrow(/log2-domain/);
+  });
 });
 
 // --------------------------------------------------------------------------
@@ -128,7 +202,11 @@ function execution(id: string, overrides: Partial<AttemptExecution> = {}): Attem
  * pair compares at exactly 10,000 bp. */
 const FINGERPRINTS = buildBehaviorFingerprints(exportedFile('A'));
 
-function decisions(spec: { selections: string[]; contexts?: string[] }): DecisionPoint[] {
+function decisions(spec: {
+  selections: string[];
+  contexts?: string[];
+  facts?: (DecisionContextFacts | null)[];
+}): DecisionPoint[] {
   return spec.selections.map((selected, index) => ({
     requestId: `dec-${String(index + 1).padStart(4, '0')}`,
     tick: 60 * (index + 1),
@@ -136,6 +214,7 @@ function decisions(spec: { selections: string[]; contexts?: string[] }): Decisio
     hardDependencyFingerprint: 'f'.repeat(16),
     contextHash: spec.contexts?.[index] ?? 'c'.repeat(16),
     selectedAffordanceId: selected,
+    contextFacts: spec.facts?.[index] ?? null,
   }));
 }
 
@@ -188,13 +267,13 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(d.p90Milli).toBe(10_000_000);
     expect(d.minimum).toBe(10_000);
     expect(d.maximum).toBe(10_000);
-  }, 120_000);
+  });
 
   it('is byte-identical across repeated analyses of the same evidence', () => {
     const left = canonicalSerialize(buildCalibrationReport('fixture-seq', tenRuns(), []));
     const right = canonicalSerialize(buildCalibrationReport('fixture-seq', tenRuns(), []));
     expect(left).toBe(right);
-  }, 120_000);
+  });
 
   it('identical decision timelines report no divergence and keep ordinal matching valid', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -203,7 +282,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       expect(pair.firstDivergence.comparableDecisions).toBe(3);
       expect(pair.firstDivergence.laterOrdinalMatchingValid).toBe(true);
     }
-  }, 120_000);
+  });
 
   it('reports SELECTION divergence at the first comparable differing choice', () => {
     const runs = tenRuns();
@@ -220,7 +299,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(pair.firstDivergence.leftSelectedAffordanceId).toBe('aff:a');
     expect(pair.firstDivergence.rightSelectedAffordanceId).toBe('aff:b');
     expect(pair.firstDivergence.laterOrdinalMatchingValid).toBe(false);
-  }, 120_000);
+  });
 
   it('reports CONTEXT divergence when beliefs/memories/affordances drift before any action difference', () => {
     const runs = tenRuns();
@@ -252,7 +331,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     )!;
     expect(offeredPair.firstDivergence.kind).toBe('context-divergence');
     expect(offeredPair.firstDivergence.atOrdinal).toBe(0);
-  }, 120_000);
+  });
 
   it('computes entropy from the real fingerprint distributions with pooled aggregates', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -281,7 +360,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(report.aggregate.pooledCategoryTransitionEntropyMilliBits).toBe(
       expectedTransitionEntropy,
     );
-  }, 120_000);
+  });
 
   it('aggregates outcomes, coverage, rationale frequency, and route consistency', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -302,7 +381,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(mixedReport.aggregate.servingProviderIdsDistinct).toEqual(['local', 'other-route']);
     expect(mixedReport.runs[5]!.routeConsistencyVerdict).toBe('inconsistent');
     expect(mixedReport.runs[0]!.routeConsistencyVerdict).toBe('consistent');
-  }, 120_000);
+  });
 
   it('reports operational metrics per run AND in aggregate (§3.4.F)', () => {
     const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
@@ -322,7 +401,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
     expect(report.aggregate.acceptedModelResponsesTotal).toBe(360);
     expect(report.aggregate.acceptedModelCoverageBp).toBe(9_000);
     expect(report.aggregate.failureCategories).toEqual({ 'upstream-timeout': 10 });
-  }, 120_000);
+  });
 
   it('a run answered by a SECOND model id is inconsistent per run and in aggregate (§3.5)', () => {
     const runs = tenRuns();
@@ -337,7 +416,7 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       'fake-decision-adapter-v1',
       'surprise-substitute-model',
     ]);
-  }, 120_000);
+  });
 
   it('refuses fewer than two primaries and lists exclusions verbatim', () => {
     expect(() => buildCalibrationReport('fixture-seq', [run('only')], [])).toThrow(
@@ -349,7 +428,336 @@ describe('buildCalibrationReport — synthetic ten-run fixture', () => {
       { executionId: 'det-1-e1', reason: 'deterministic-non-primary' },
     ]);
     expect(report.excludedExecutions).toHaveLength(3);
-  }, 120_000);
+  });
+});
+
+// --------------------------------------------------------------------------
+// Final targeted remediation B: exact-design binding + semantic context
+// --------------------------------------------------------------------------
+
+function facts(overrides: Partial<DecisionContextFacts> = {}): DecisionContextFacts {
+  return {
+    locationId: 'purifier-workbench',
+    currentActivity: 'work-on-purifier/work/active',
+    hungerMicro: 723_000,
+    fatigueMicro: 351_500,
+    injurySeverityMicro: 0,
+    injuryTreatmentStarted: false,
+    beliefs: ['meal-exists=true', 'meal-owner=rin'],
+    memories: ['player-criticized-mara (attack-on-competence)'],
+    commitments: ['cmt-jonas-relieves-mara:active:creditor'],
+    relationships: ['jonas:0', 'rin:0'],
+    offeredAffordances: [
+      'aff:a [work-on-purifier/work]',
+      'aff:b [eat-meal/eat-violation violation -> rin]',
+    ],
+    ...overrides,
+  };
+}
+
+describe('first-divergence semantic context (§4.3)', () => {
+  it('emits both sides, explicit differing fields, and hard dependencies at the divergent ordinal', () => {
+    const runs = tenRuns();
+    runs[0] = run('cal-01', {
+      decisions: decisions({
+        selections: ['aff:a', 'aff:a', 'aff:b'],
+        facts: [facts(), facts(), facts()],
+      }),
+    });
+    runs[1] = run('cal-02', {
+      decisions: decisions({
+        selections: ['aff:a', 'aff:b', 'aff:b'],
+        facts: [facts(), facts({ beliefs: ['meal-exists=false'], hungerMicro: 901_000 }), facts()],
+      }),
+    });
+    const report = buildCalibrationReport('fixture-seq', runs, []);
+    const pair = report.pairs.find(
+      (entry) => entry.left === 'cal-01-e1' && entry.right === 'cal-02-e1',
+    )!;
+    expect(pair.firstDivergence.kind).toBe('selection-divergence');
+    const context = pair.firstDivergence.semanticContext!;
+    expect(context).not.toBeNull();
+    expect(context.differingFields).toContain('beliefs');
+    expect(context.differingFields).toContain('hungerMicro');
+    expect(context.differingFields).not.toContain('memories');
+    expect(context.left!.beliefs).toEqual(['meal-exists=true', 'meal-owner=rin']);
+    expect(context.right!.beliefs).toEqual(['meal-exists=false']);
+    expect(context.leftHardDependencyFingerprint).toBe('f'.repeat(16));
+    // Offered-descriptor and hard-dependency differences surface too.
+    const offered = tenRuns();
+    offered[0] = run('cal-01', {
+      decisions: decisions({ selections: ['aff:a'], facts: [facts()] }).map((point) => ({
+        ...point,
+        hardDependencyFingerprint: 'a'.repeat(16),
+      })),
+    });
+    offered[1] = run('cal-02', {
+      decisions: decisions({
+        selections: ['aff:a'],
+        facts: [facts({ offeredAffordances: ['aff:a [work-on-purifier/work]'] })],
+      }),
+    });
+    const offeredReport = buildCalibrationReport('fixture-seq', offered, []);
+    const offeredPair = offeredReport.pairs.find(
+      (entry) => entry.left === 'cal-01-e1' && entry.right === 'cal-02-e1',
+    )!;
+    expect(offeredPair.firstDivergence.kind).toBe('context-divergence');
+    expect(offeredPair.firstDivergence.semanticContext!.differingFields).toContain(
+      'offeredAffordances',
+    );
+    expect(offeredPair.firstDivergence.semanticContext!.differingFields).toContain(
+      'hardDependencyFingerprint',
+    );
+  });
+
+  it('facts are never inferred: no envelopes → null semantic context; non-diverging pairs carry none', () => {
+    const report = buildCalibrationReport('fixture-seq', tenRuns(), []);
+    for (const pair of report.pairs) {
+      expect(pair.firstDivergence.kind).toBe('none');
+      expect(pair.firstDivergence.semanticContext).toBeNull();
+    }
+    const runs = tenRuns();
+    runs[1] = run('cal-02', {
+      decisions: decisions({ selections: ['aff:a', 'aff:b', 'aff:b'] }),
+    });
+    const diverging = buildCalibrationReport('fixture-seq', runs, []);
+    const pair = diverging.pairs.find(
+      (entry) => entry.left === 'cal-01-e1' && entry.right === 'cal-02-e1',
+    )!;
+    expect(pair.firstDivergence.kind).toBe('selection-divergence');
+    expect(pair.firstDivergence.semanticContext).toBeNull();
+  });
+
+  it('extractContextFacts reads only present fields, bounded and deterministic', () => {
+    const envelope = {
+      context: {
+        state: {
+          locationId: 'purifier-workbench',
+          currentAction: { category: 'work-on-purifier', mode: 'work', phase: 'active' },
+          hungerMicro: 723_000,
+          fatigueMicro: 351_500,
+          injury: { severityMicro: 0, treatmentStarted: false },
+        },
+        cognition: {
+          beliefs: [
+            { subject: 'meal-owner', value: 'rin' },
+            { subject: 'meal-exists', value: 'true' },
+          ],
+          memories: [{ canonicalFact: 'fact-x', interpretation: 'attack-on-competence' }],
+          commitments: [{ id: 'cmt-1', status: 'active', role: 'creditor' }],
+          relationships: [{ toNpcId: 'rin', valueMicro: 0 }],
+        },
+        affordances: [
+          {
+            id: 'aff:b',
+            category: 'eat-meal',
+            mode: 'eat-violation',
+            violation: true,
+            targetNpcId: 'rin',
+          },
+          {
+            id: 'aff:a',
+            category: 'work-on-purifier',
+            mode: 'work',
+            violation: false,
+            targetNpcId: null,
+          },
+        ],
+      },
+    };
+    const extracted = extractContextFacts(envelope)!;
+    expect(extracted.locationId).toBe('purifier-workbench');
+    expect(extracted.currentActivity).toBe('work-on-purifier/work/active');
+    // Deterministic sorted order regardless of envelope order.
+    expect(extracted.beliefs).toEqual(['meal-exists=true', 'meal-owner=rin']);
+    expect(extracted.offeredAffordances[0]).toBe('aff:a [work-on-purifier/work]');
+    expect(extracted.offeredAffordances[1]).toBe('aff:b [eat-meal/eat-violation violation -> rin]');
+    // Absent context block: null, never inferred.
+    expect(extractContextFacts({})).toBeNull();
+    expect(extractContextFacts(null)).toBeNull();
+    // Unbounded inputs are capped at 24 entries.
+    const flood = extractContextFacts({
+      context: {
+        cognition: {
+          beliefs: Array.from({ length: 100 }, (_, index) => ({
+            subject: `s${String(index).padStart(3, '0')}`,
+            value: 'v',
+          })),
+        },
+      },
+    })!;
+    expect(flood.beliefs).toHaveLength(24);
+  });
+});
+
+describe('exact registered-design binding (§4.2/§4.4)', () => {
+  const validState = {
+    registrationId: 'calibration-variance-a',
+    sequenceId: 'm2-calibration-variance-a',
+    studyId: 'm2-calibration-variance-a-001',
+    studyVersion: '1.0.0',
+    thresholdProfileId: 'm2-formal-attempt-profile',
+    thresholdProfileVersion: '1.0.0',
+    expectedModelId: 'google/gemini-2.5-flash-lite',
+    expectedServingProviderId: 'google-ai-studio',
+    promptVersion: 'mara-action-selection-m2-1.0.0',
+    experimentId: 'sparse-cognition-policy-001',
+    experimentVersion: '1.0.0',
+    packageVersion: '1.9.0',
+  };
+  const validAttempts = Array.from({ length: 10 }, (_, index) => ({
+    attemptId: `cal-var-a-${String(index + 1).padStart(2, '0')}`,
+    conditionId: 'mara-model-per-decision-m2-v1',
+    scenarioId: 'A',
+  }));
+  const validStudy = {
+    studyId: 'm2-calibration-variance-a-001',
+    studyVersion: '1.0.0',
+    packageVersion: '1.9.0',
+    conditionIds: ['mara-model-per-decision-m2-v1'],
+    model: 'google/gemini-2.5-flash-lite',
+    provider: 'google-ai-studio',
+    promptVersions: ['mara-action-selection-m2-1.0.0'],
+    scenarioIds: ['A'] as const,
+    seeds: [1001],
+    sampleSizeN: 10,
+    analysisScriptVersion: M2_CALIBRATION_ANALYSIS_VERSION,
+    primaryMetrics: ['pairwise-composite-similarity-matrix'],
+    secondaryMetrics: ['latency-distribution'],
+  };
+  const assertDesign = (overrides: {
+    state?: Partial<typeof validState>;
+    attempts?: typeof validAttempts;
+    study?: Partial<typeof validStudy>;
+  }) =>
+    assertRegisteredCalibrationDesign({
+      state: { ...validState, ...overrides.state },
+      planAttempts: overrides.attempts ?? validAttempts,
+      study: { ...validStudy, ...overrides.study } as typeof validStudy,
+    });
+
+  it('the exact registered design passes', () => {
+    expect(() => assertDesign({})).not.toThrow();
+  });
+
+  it('every identity deviation refuses with the offending field named', () => {
+    const cases: Array<[RegExp, Parameters<typeof assertDesign>[0]]> = [
+      [/studyId/, { state: { studyId: 'm2-stage-a-acceptance-001' } }],
+      [/studyVersion/, { state: { studyVersion: '1.0.1' } }],
+      [/sequenceId/, { state: { sequenceId: 'm2-stage-a-acceptance' } }],
+      [/registrationId/, { state: { registrationId: 'none' } }],
+      [/attemptProfileId/, { state: { thresholdProfileId: 'm2-rehearsal-attempt-profile' } }],
+      [/modelId/, { state: { expectedModelId: 'other/model' } }],
+      [/servingProviderId/, { state: { expectedServingProviderId: 'other-route' } }],
+      [/promptVersion/, { state: { promptVersion: 'mara-action-selection-1.0.0' } }],
+      [/study\.model/, { study: { model: 'other/model' } }],
+      [/study\.sampleSizeN/, { study: { sampleSizeN: 9 } }],
+      [/analysisScriptVersion/, { study: { analysisScriptVersion: 'not-installed-9.9.9' } }],
+      [/scenarios/, { study: { scenarioIds: ['A', 'B1'] as unknown as readonly ['A'] } }],
+      [/seeds/, { study: { seeds: [1002] } }],
+      [/not exactly the M2 condition/, { study: { conditionIds: ['mara-model-per-decision-v1'] } }],
+      [/study-metrics-unproducible/, { study: { primaryMetrics: ['spectral-vibe-analysis'] } }],
+    ];
+    for (const [pattern, overrides] of cases) {
+      expect(() => assertDesign(overrides), pattern.source).toThrow(pattern);
+    }
+    // Nine or eleven planned attempts, a wrong condition, and a wrong
+    // scenario each refuse.
+    expect(() => assertDesign({ attempts: validAttempts.slice(0, 9) })).toThrow(/9 attempts/);
+    expect(() =>
+      assertDesign({
+        attempts: [
+          ...validAttempts,
+          {
+            attemptId: 'cal-var-a-11',
+            conditionId: 'mara-model-per-decision-m2-v1',
+            scenarioId: 'A',
+          },
+        ],
+      }),
+    ).toThrow(/11 attempts/);
+    expect(() =>
+      assertDesign({
+        attempts: validAttempts.map((attempt, index) =>
+          index === 3 ? { ...attempt, conditionId: 'mara-model-per-decision-v1' } : attempt,
+        ),
+      }),
+    ).toThrow(/condition is 'mara-model-per-decision-v1'/);
+    expect(() =>
+      assertDesign({
+        attempts: validAttempts.map((attempt, index) =>
+          index === 3 ? { ...attempt, scenarioId: 'B1' } : attempt,
+        ),
+      }),
+    ).toThrow(/scenario is 'B1'/);
+  });
+});
+
+describe('registered primary mapping (§4.2 items 4–6)', () => {
+  const plannedIds = Array.from(
+    { length: 10 },
+    (_, index) => `cal-var-a-${String(index + 1).padStart(2, '0')}`,
+  );
+  const validExecution = (
+    attemptId: string,
+    suffix = 'e1',
+    overrides: Partial<AttemptExecution> = {},
+  ) =>
+    execution(`${attemptId}-x`, {
+      executionId: `${attemptId}-${suffix}`,
+      attemptId,
+      dir: `attempt-${attemptId}-${suffix}`,
+      runId: `run-${attemptId}-${suffix}`,
+      ...overrides,
+    });
+
+  it('one valid primary per planned attempt, with a permitted replacement AS the primary', () => {
+    const executions = plannedIds.map((attemptId) => validExecution(attemptId));
+    // Attempt 04 failed once and was replaced: the failed original is a
+    // typed exclusion, the replacement is THE primary — never an eleventh.
+    executions.push(
+      validExecution('cal-var-a-04', 'e0', {
+        status: 'failed',
+        failureReason: 'run-timeout',
+        artifactStatus: null,
+        studyStatus: null,
+      }),
+    );
+    const { primaries, excluded } = mapRegisteredPrimaries(executions, plannedIds);
+    expect(primaries).toHaveLength(10);
+    expect(primaries.filter((primary) => primary.attemptId === 'cal-var-a-04')).toHaveLength(1);
+    expect(excluded).toEqual([
+      { executionId: 'cal-var-a-04-e0', reason: 'status:failed:run-timeout' },
+    ]);
+  });
+
+  it('nine primaries, duplicate primaries, and out-of-set executions each refuse', () => {
+    const nine = plannedIds.slice(0, 9).map((attemptId) => validExecution(attemptId));
+    expect(() => mapRegisteredPrimaries(nine, plannedIds)).toThrow(/no valid primary/);
+
+    const duplicated = plannedIds.map((attemptId) => validExecution(attemptId));
+    duplicated.push(validExecution('cal-var-a-07', 'e2'));
+    expect(() => mapRegisteredPrimaries(duplicated, plannedIds)).toThrow(
+      /cal-var-a-07' has 2 competing valid observations/,
+    );
+
+    const foreign = plannedIds.map((attemptId) => validExecution(attemptId));
+    foreign.push(validExecution('someone-elses-attempt'));
+    expect(() => mapRegisteredPrimaries(foreign, plannedIds)).toThrow(
+      /not in the registered attempt set/,
+    );
+
+    // An invalid-treatment completed execution is NEVER a primary: with a
+    // valid replacement it is excluded with its verdicts; alone it refuses.
+    const invalidTreatment = plannedIds.map((attemptId) => validExecution(attemptId));
+    invalidTreatment.push(
+      validExecution('cal-var-a-02', 'e0', { studyStatus: 'invalid-treatment' }),
+    );
+    const mapped = mapRegisteredPrimaries(invalidTreatment, plannedIds);
+    expect(mapped.excluded).toEqual([
+      { executionId: 'cal-var-a-02-e0', reason: 'verdicts:artifact-valid/invalid-treatment' },
+    ]);
+  });
 });
 
 describe('writeCalibrationReport (create-once write/render path)', () => {
@@ -370,7 +778,7 @@ describe('writeCalibrationReport (create-once write/render path)', () => {
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
-  }, 120_000);
+  });
 });
 
 describe('metric-producer registry (§3.4.G)', () => {
@@ -379,7 +787,7 @@ describe('metric-producer registry (§3.4.G)', () => {
       expect(INSTALLED_ANALYSIS_VERSIONS).toContain(version);
     }
     expect(INSTALLED_ANALYSIS_VERSIONS).toContain(M2_CALIBRATION_ANALYSIS_VERSION);
-  }, 120_000);
+  });
 
   it('refuses a study declaring an unimplemented metric or uninstalled analysis version', () => {
     const base = {
@@ -395,5 +803,5 @@ describe('metric-producer registry (§3.4.G)', () => {
     expect(() =>
       assertMetricsProducible({ ...base, analysisScriptVersion: 'not-installed-9.9.9' }),
     ).toThrow(/study-metrics-unproducible/);
-  }, 120_000);
+  });
 });

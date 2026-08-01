@@ -1,9 +1,12 @@
-import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ProcessManagerHealth } from './processManager';
 import type { SequenceState } from './sequenceState';
 import type { SequenceEvaluation } from './evaluateSequence';
+import { registrationProvenanceSchema } from './registrationRegistry';
+import { stageAPrerequisiteSchema } from './stageAPrerequisite';
 
 /**
  * Sequence reporting (M2 brief §19.4 final step; re-audit finding 1).
@@ -22,9 +25,88 @@ import type { SequenceEvaluation } from './evaluateSequence';
  *    from the same final facts plus the append-only process log.
  */
 
-export const SEQUENCE_MANIFEST_VERSION = 'm2-sequence-manifest-1.0.0';
+export const SEQUENCE_MANIFEST_VERSION = 'm2-sequence-manifest-1.1.0';
 
 const nonEmpty = z.string().min(1);
+
+/** The manifest's registration attestation (final targeted remediation C
+ * §5.4): registration id, provenance hash, both source templates' paths
+ * and Git blob ids, and — for calibration — the Stage A prerequisite hash
+ * plus the Stage A sequence and archive identities. Derived from the
+ * ARCHIVED records inside the evidence root, never from mutable state
+ * alone. Null for unregistered rehearsal/test sequences. */
+export const manifestRegistrationSchema = z
+  .object({
+    registrationId: nonEmpty,
+    provenanceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    studyTemplate: z.object({ path: nonEmpty, blobId: nonEmpty }).strict(),
+    planTemplate: z.object({ path: nonEmpty, blobId: nonEmpty }).strict(),
+    stageAPrerequisiteSha256: z.string().nullable(),
+    stageASequenceId: z.string().nullable(),
+    stageAArchiveSha256: z.string().nullable(),
+  })
+  .strict();
+
+export type ManifestRegistration = z.infer<typeof manifestRegistrationSchema>;
+
+/**
+ * Rebuilds the manifest registration block from the archived records in
+ * the evidence root, verifying their hashes against the control state on
+ * the way — used by the manifest writer AND completed-sequence
+ * verification, so the attestation is always re-derivable from archived
+ * evidence.
+ */
+export function buildManifestRegistration(
+  sequenceRoot: string,
+  state: SequenceState,
+): ManifestRegistration | null {
+  if (state.registrationId === 'none') return null;
+  const provenancePath = join(sequenceRoot, 'registration-provenance.archived.json');
+  if (!existsSync(provenancePath)) {
+    throw new Error('manifest-registration-invalid: archived registration provenance missing');
+  }
+  const provenanceBytes = readFileSync(provenancePath);
+  const provenanceSha256 = createHash('sha256').update(provenanceBytes).digest('hex');
+  if (provenanceSha256 !== state.registrationProvenanceSha256) {
+    throw new Error('manifest-registration-invalid: archived provenance hash differs from state');
+  }
+  const provenance = registrationProvenanceSchema.parse(
+    JSON.parse(provenanceBytes.toString('utf8')),
+  );
+  let stageASequenceId: string | null = null;
+  let stageAArchiveSha256: string | null = null;
+  if (state.stageAPrerequisiteSha256 !== 'none') {
+    const prerequisitePath = join(sequenceRoot, 'stage-a-prerequisite.archived.json');
+    if (!existsSync(prerequisitePath)) {
+      throw new Error('manifest-registration-invalid: archived Stage A prerequisite missing');
+    }
+    const prerequisiteBytes = readFileSync(prerequisitePath);
+    const prerequisiteSha = createHash('sha256').update(prerequisiteBytes).digest('hex');
+    if (prerequisiteSha !== state.stageAPrerequisiteSha256) {
+      throw new Error(
+        'manifest-registration-invalid: archived Stage A prerequisite hash differs from state',
+      );
+    }
+    const prerequisite = stageAPrerequisiteSchema.parse(
+      JSON.parse(prerequisiteBytes.toString('utf8')),
+    );
+    stageASequenceId = prerequisite.stageASequenceId;
+    stageAArchiveSha256 = prerequisite.evidenceArchiveSha256;
+  }
+  return {
+    registrationId: provenance.registrationId,
+    provenanceSha256,
+    studyTemplate: {
+      path: provenance.studyTemplate.path,
+      blobId: provenance.studyTemplate.blobId,
+    },
+    planTemplate: { path: provenance.planTemplate.path, blobId: provenance.planTemplate.blobId },
+    stageAPrerequisiteSha256:
+      state.stageAPrerequisiteSha256 === 'none' ? null : state.stageAPrerequisiteSha256,
+    stageASequenceId,
+    stageAArchiveSha256,
+  };
+}
 
 export const sequenceManifestSchema = z
   .object({
@@ -45,7 +127,11 @@ export const sequenceManifestSchema = z
     studyPlanSha256: nonEmpty,
     thresholdProfileId: nonEmpty,
     thresholdProfileVersion: nonEmpty,
+    registrationId: nonEmpty,
+    registrationProvenanceSha256: nonEmpty,
+    stageAPrerequisiteSha256: nonEmpty,
     configFingerprint: nonEmpty,
+    registration: manifestRegistrationSchema.nullable(),
     /** Final outcome facts — never an in-flight lifecycle value. */
     sequenceOutcome: nonEmpty,
     attemptSetComplete: z.boolean(),
@@ -108,6 +194,7 @@ export interface SequenceFinalFacts {
 export function buildSequenceManifest(
   state: SequenceState,
   facts: SequenceFinalFacts,
+  registration: ManifestRegistration | null,
 ): SequenceManifest {
   const inProgress = state.executions.filter((execution) => execution.status === 'in-progress');
   if (inProgress.length > 0) {
@@ -135,7 +222,11 @@ export function buildSequenceManifest(
     studyPlanSha256: state.studyPlanSha256,
     thresholdProfileId: state.thresholdProfileId,
     thresholdProfileVersion: state.thresholdProfileVersion,
+    registrationId: state.registrationId,
+    registrationProvenanceSha256: state.registrationProvenanceSha256,
+    stageAPrerequisiteSha256: state.stageAPrerequisiteSha256,
     configFingerprint: state.configFingerprint,
+    registration,
     sequenceOutcome: facts.sequenceOutcome,
     attemptSetComplete: facts.attemptSetComplete,
     executions: state.executions.map((execution) => ({
@@ -179,7 +270,11 @@ export function writeSequenceManifest(
   state: SequenceState,
   facts: SequenceFinalFacts,
 ): string {
-  const manifest = buildSequenceManifest(state, facts);
+  const manifest = buildSequenceManifest(
+    state,
+    facts,
+    buildManifestRegistration(sequenceRoot, state),
+  );
   const path = join(sequenceRoot, 'sequence-manifest.json');
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   return path;
@@ -190,7 +285,11 @@ export function writeSequenceReport(
   state: SequenceState,
   facts: SequenceFinalFacts,
 ): { jsonPath: string; markdownPath: string } {
-  const manifest = buildSequenceManifest(state, facts);
+  const manifest = buildSequenceManifest(
+    state,
+    facts,
+    buildManifestRegistration(sequenceRoot, state),
+  );
   const jsonPath = join(sequenceRoot, 'sequence-report.json');
   const markdownPath = join(sequenceRoot, 'sequence-report.md');
   writeFileSync(

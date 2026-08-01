@@ -91,7 +91,15 @@ describe('orchestrator plan schema', () => {
         heartbeatIntervalMs: 60_000,
       },
     };
-    expect(() => orchestratorPlanSchema.parse(formal)).not.toThrow();
+    // Final targeted remediation C: even a fully formal-shaped plan is
+    // refused without an authenticated registration binding.
+    expect(() => orchestratorPlanSchema.parse(formal)).toThrow(/formal-plan-requires-registration/);
+    // The committed calibration TEMPLATE is the canonical valid formal
+    // plan (sentinels are schema-valid by construction).
+    const template = readFileSync(
+      join('experiments', 'm2', 'templates', 'calibration-variance-a.plan.template.json'),
+    );
+    expect(() => parsePlan(template)).not.toThrow();
     // Formal profile is EXACT: a 74-minute normal timeout is refused.
     expect(() =>
       orchestratorPlanSchema.parse({
@@ -150,30 +158,48 @@ describe('orchestrator plan schema', () => {
   });
 
   it('computes the §19.14 worst case over live attempts AND permitted replacements', () => {
+    // The arithmetic is a pure function of the plan shape; live plans can
+    // no longer be synthesized THROUGH the schema without a closed-registry
+    // registration (remediation C), so the formula is unit-tested on the
+    // shape directly and pinned on the real registered template below.
     const plan = basePlan();
-    const livePlan: OrchestratorPlan = orchestratorPlanSchema.parse({
+    const liveShape = {
       ...plan,
       attempts: [
         plan.attempts[0]!,
-        { ...plan.attempts[1]!, gatewayMode: 'live', maxCallsPerRun: 120, maxTotalCalls: 100 },
+        {
+          ...plan.attempts[1]!,
+          gatewayMode: 'live' as const,
+          maxCallsPerRun: 120,
+          maxTotalCalls: 100,
+        },
       ],
       replacementPolicy: { maxReplacementAttempts: 2, retryableFailureClasses: ['run-timeout'] },
       liveCallBudget: 300,
-    });
+    } as OrchestratorPlan;
     // min(120, 100) × (1 primary + 2 replacements) = 300.
-    expect(worstCaseStudyCalls(livePlan)).toBe(300);
+    expect(worstCaseStudyCalls(liveShape)).toBe(300);
+    // The REAL registered calibration design: min(120,120) × 10 attempts ×
+    // (1 + 1 replacement) = 2400, exactly its acknowledged budget.
+    const template = parsePlan(
+      readFileSync(
+        join('experiments', 'm2', 'templates', 'calibration-variance-a.plan.template.json'),
+      ),
+    );
+    expect(worstCaseStudyCalls(template.plan)).toBe(2400);
+    expect(template.plan.liveCallBudget).toBe(2400);
   });
 
   it('refuses a live plan whose worst case exceeds the acknowledged budget', () => {
-    const plan = basePlan();
-    const overBudget = {
-      ...plan,
-      attempts: [
-        { ...plan.attempts[1]!, gatewayMode: 'live', maxCallsPerRun: 120, maxTotalCalls: 120 },
-      ],
-      replacementPolicy: { maxReplacementAttempts: 1, retryableFailureClasses: ['run-timeout'] },
-      liveCallBudget: 200, // worst case = 240
-    };
+    // The real calibration template with its budget lowered by one: the
+    // §19.14 arithmetic must refuse before anything else can proceed.
+    const overBudget = JSON.parse(
+      readFileSync(
+        join('experiments', 'm2', 'templates', 'calibration-variance-a.plan.template.json'),
+        'utf8',
+      ),
+    ) as { liveCallBudget: number };
+    overBudget.liveCallBudget = 2399;
     expect(() => parsePlan(Buffer.from(JSON.stringify(overBudget)))).toThrow(
       /plan-worst-case-exceeds-live-budget/,
     );
@@ -254,7 +280,7 @@ describe('attempt profile and closed failure taxonomy gates (re-audit finding 3)
     );
   });
 
-  it('evidentiary and live plans are hard-refused without a formal attempt profile (§7.1)', () => {
+  it('evidentiary and live plans are hard-refused at the registration wall (remediation C), with the §7.1 profile gate as backstop', () => {
     const plan = basePlan();
     const evidentiary = {
       ...plan,
@@ -276,8 +302,25 @@ describe('attempt profile and closed failure taxonomy gates (re-audit finding 3)
         heartbeatIntervalMs: 60_000,
       },
     };
+    // Registration is now the FIRST wall for evidentiary/live plans; the
+    // rehearsal-profile refusal (§7.1) remains in parsePlan as a backstop
+    // behind it. A registration binding cannot make this plan pass —
+    // the closed registry refuses its sequence id and profile too.
     expect(() => parsePlan(Buffer.from(JSON.stringify(evidentiary)))).toThrow(
-      /formal-attempt-profile-required/,
+      /formal-plan-requires-registration/,
+    );
+    const evidentiaryWithBogusRegistration = {
+      ...evidentiary,
+      registration: {
+        registrationId: 'calibration-variance-a',
+        provenanceSha256: 'e'.repeat(64),
+        provenancePath: 'registration-provenance.json',
+        stageAPrerequisiteSha256: 'f'.repeat(64),
+        stageAPrerequisitePath: 'stage-a-prerequisite.json',
+      },
+    };
+    expect(() => parsePlan(Buffer.from(JSON.stringify(evidentiaryWithBogusRegistration)))).toThrow(
+      /registration-sequence-mismatch|registration-profile-mismatch/,
     );
     const live = {
       ...plan,
@@ -288,7 +331,7 @@ describe('attempt profile and closed failure taxonomy gates (re-audit finding 3)
       liveCallBudget: 100,
     };
     expect(() => parsePlan(Buffer.from(JSON.stringify(live)))).toThrow(
-      /formal-attempt-profile-required/,
+      /formal-plan-requires-registration/,
     );
   });
 });

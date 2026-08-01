@@ -80,6 +80,9 @@ function baseState(): SequenceState {
     studyPlanSha256: 'none',
     thresholdProfileId: 'm2-rehearsal-attempt-profile',
     thresholdProfileVersion: '1.0.0',
+    registrationId: 'none',
+    registrationProvenanceSha256: 'none',
+    stageAPrerequisiteSha256: 'none',
     configFingerprint: 'c'.repeat(16),
     status: 'in-progress',
     sequenceFailureReason: null,
@@ -113,9 +116,13 @@ describe('sequence state', () => {
     const identity = Object.fromEntries(
       RESUME_IDENTITY_FIELDS.map((key) => [key, state[key]]),
     ) as unknown as Parameters<typeof assertResumeIdentity>[1];
-    expect(RESUME_IDENTITY_FIELDS).toHaveLength(16);
+    expect(RESUME_IDENTITY_FIELDS).toHaveLength(19);
     expect(RESUME_IDENTITY_FIELDS).toContain('thresholdProfileId');
     expect(RESUME_IDENTITY_FIELDS).toContain('thresholdProfileVersion');
+    // Final targeted remediation C: the registration binding is identity.
+    expect(RESUME_IDENTITY_FIELDS).toContain('registrationId');
+    expect(RESUME_IDENTITY_FIELDS).toContain('registrationProvenanceSha256');
+    expect(RESUME_IDENTITY_FIELDS).toContain('stageAPrerequisiteSha256');
     expect(() => assertResumeIdentity(state, identity)).not.toThrow();
     for (const key of RESUME_IDENTITY_FIELDS) {
       const mutated = { ...identity, [key]: `${identity[key]}x` };

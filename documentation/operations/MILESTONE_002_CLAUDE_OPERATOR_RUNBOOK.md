@@ -32,9 +32,19 @@ source change after Stage A forces Stage A to run again) and stamps the
 prerequisite record's hash into the registered study and plan, where it
 joins the resume identity and every freeze checkpoint. Output is
 transactional and create-once; a failure leaves nothing. Never pass
-`--stage-a-drill` for a real registration — it is the keyless-drill flag
-and is permanently recorded in the provenance. Launch with
-`m2:orchestrate -- --plan <registered plan path>`.
+`--stage-a-drill` for a real registration — it is the keyless-drill flag,
+permanently recorded in the provenance, and drill-mode Stage A evidence is
+structurally refused for any live launch. Launch with
+`m2:orchestrate -- --plan <registered plan path>` — and note that
+registration is MANDATORY at launch (final targeted remediation C): an
+evidentiary or live plan without a registration binding is refused at the
+schema, and before any write or spawn the orchestrator reopens and
+re-proves the provenance, both source templates at the pinned SHA (byte-
+identical re-stamping), and — for calibration — the complete Stage A
+evidence, rebuilding the prerequisite record to byte equality. Keep the
+registration directory and the Stage A evidence root intact and unmoved
+for the sequence's whole life: resume re-runs the same preflight, and the
+archived copies join every freeze checkpoint.
 
 After a completed calibration sequence, produce the registered analysis:
 
@@ -42,9 +52,19 @@ After a completed calibration sequence, produce the registered analysis:
 npm run m2:analyze -- --sequence <completed calibration root>
 ```
 
-writes `calibration-variance-analysis.{json,md}`
+The production analysis REQUIRES the exact registered design (final
+targeted remediation B): it re-verifies the whole sequence (seals,
+inventory, manifest attestation, semantic revalidation, archive, receipt),
+validates the archived plan/study/provenance/prerequisite copies, refuses
+anything but `m2-calibration-variance-a-001@1.0.0` on sequence
+`m2-calibration-variance-a` (ten M2 attempts, scenario A, seed 1001,
+formal profile, pinned model/route/prompt), and maps EXACTLY one valid
+primary per planned attempt (a permitted replacement is its attempt's
+primary; failures become typed exclusions). It writes
+`calibration-variance-analysis.{json,md}`
 (`m2-calibration-variance-analysis-1.0.0`) into the derived directory
-beside the immutable root.
+beside the immutable root — including the semantic first-divergence
+context extracted from the archived request envelopes.
 
 ## 1. Before launch
 

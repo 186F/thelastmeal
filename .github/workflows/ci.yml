@@ -82,14 +82,17 @@ jobs:
         run: npm run check:dist
 
       - name: Browser end-to-end tests
+        id: e2e
         run: npm run test:e2e
 
       - name: Deterministic batch (full gate, 100 runs/scenario)
+        id: batch
         run: npm run batch
 
       # After the batch (A10): a failure in the newest step must never
       # pre-empt the frozen 100-run determinism gate.
       - name: Keyless formal model-run rehearsal
+        id: model-rehearse
         run: npm run model:rehearse -- --ci
 
       # Affordance and interruption-contract audit with the VS001 known-gap
@@ -112,6 +115,7 @@ jobs:
         run: npm run test:m2
 
       - name: Keyless unattended-orchestrator rehearsal
+        id: m2-rehearse
         run: npm run m2:rehearse -- --ci
 
       # Routine COMPACT artifact profile (Phase 4 audit finding 4): the
@@ -135,27 +139,33 @@ jobs:
           retention-days: 21
           if-no-files-found: error
 
-      # Explicit FULL-EVIDENCE profile: uploads ONLY on a failing run
-      # (complete diagnostics) or when a manual workflow_dispatch
-      # explicitly requests full evidence (audit-ready or milestone-sealing
-      # runs). The prepare step assembles each sequence payload exactly
-      # ONCE — sealed ZIP + digest sidecar + receipt for archived sequences
-      # (their raw trees are contained in the ZIPs and are excluded), raw
-      # trees only for never-archived sequences — under the registered
-      # <= 2 GiB full budget, emitting artifact-size-report.json with
-      # per-sequence uniqueness dispositions. Formal live evidence is never
-      # entrusted to expiring Actions artifacts — it is retained locally as
-      # sealed packages with independent durable backup.
+      # Explicit FULL-EVIDENCE profile (final targeted remediation D): the
+      # heavy profile is bound to its PRODUCER, not to any failure. It runs
+      # only when the m2:rehearse step itself actually ran and failed
+      # (bounded genuine rehearsal diagnostics) or when a manual
+      # workflow_dispatch explicitly requests full evidence (audit-ready or
+      # milestone-sealing runs). An early typecheck/lint/unit failure must
+      # NOT package hundreds of megabytes of partial test-generated trees.
+      # The prepare step assembles each sequence payload exactly ONCE —
+      # sealed ZIP + digest sidecar + receipt for archived sequences (their
+      # raw trees are contained in the ZIPs and are excluded), raw trees
+      # only for never-archived sequences — under the registered <= 4 GiB
+      # full budget, emitting artifact-size-report.json with per-sequence
+      # uniqueness dispositions. Formal live evidence is never entrusted to
+      # expiring Actions artifacts — it is retained locally as sealed
+      # packages with independent durable backup.
       - name: Prepare FULL evidence artifact (uniqueness + size-budget gate)
         if: >-
-          failure() ||
-          (github.event_name == 'workflow_dispatch' && inputs.full-evidence)
+          always() &&
+          (steps.m2-rehearse.outcome == 'failure' ||
+          (github.event_name == 'workflow_dispatch' && inputs.full-evidence))
         run: node scripts/ci/prepareCompactArtifact.mjs --profile full
 
-      - name: Upload m2 rehearsal FULL evidence (failure or explicit dispatch only)
+      - name: Upload m2 rehearsal FULL evidence (rehearsal failure or explicit dispatch only)
         if: >-
-          failure() ||
-          (github.event_name == 'workflow_dispatch' && inputs.full-evidence)
+          always() &&
+          (steps.m2-rehearse.outcome == 'failure' ||
+          (github.event_name == 'workflow_dispatch' && inputs.full-evidence))
         uses: actions/upload-artifact@v4
         with:
           name: m2-rehearsal-full-evidence
@@ -165,8 +175,12 @@ jobs:
           # empty upload here means the profile itself broke — fail loudly.
           if-no-files-found: error
 
+      # Producer-bound report uploads (final targeted remediation D): a
+      # skipped producer must never create a secondary artifact-upload
+      # failure, while a producer that claimed success and produced nothing
+      # still fails loudly (A10 — never `ignore` after a green producer).
       - name: Upload model-rehearsal report
-        if: always()
+        if: always() && steps.model-rehearse.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: model-rehearsal-report
@@ -177,12 +191,22 @@ jobs:
             artifacts/model-rehearsal/**/bundle-manifest.json
             artifacts/model-rehearsal/**/model-summary.json
           retention-days: 21
-          # Evidence artifact: a path drift must fail loudly, never upload
-          # zero bytes behind a green step (A10 — never `ignore` here).
           if-no-files-found: error
 
+      - name: Upload model-rehearsal failure diagnostics
+        if: always() && steps.model-rehearse.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-rehearsal-failure-diagnostics
+          path: |
+            artifacts/model-rehearsal/report.json
+            artifacts/model-rehearsal/report.md
+          retention-days: 7
+          # A failing rehearsal may legitimately have produced nothing yet.
+          if-no-files-found: ignore
+
       - name: Upload batch report
-        if: always()
+        if: always() && steps.batch.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: batch-report
@@ -190,10 +214,10 @@ jobs:
             artifacts/report.json
             artifacts/report.md
           retention-days: 21
-          if-no-files-found: ignore
+          if-no-files-found: error
 
-      - name: Upload Playwright report on failure
-        if: failure()
+      - name: Upload Playwright report on e2e failure
+        if: always() && steps.e2e.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

@@ -36,7 +36,7 @@ import { dirname, join, relative } from 'node:path';
  * (re-audit finding 5), revalidated on resume before any write.
  */
 
-export const SEQUENCE_STATE_VERSION = 'm2-sequence-state-2.1.0';
+export const SEQUENCE_STATE_VERSION = 'm2-sequence-state-2.2.0';
 
 const nonEmpty = z.string().min(1);
 
@@ -161,6 +161,14 @@ export const sequenceStateSchema = z
      * part of resume identity. */
     thresholdProfileId: nonEmpty,
     thresholdProfileVersion: nonEmpty,
+    /** Authenticated registration binding (final targeted remediation C
+     * §5.4): the closed-registry id, provenance record hash, and — for
+     * calibration — the Stage A prerequisite record hash. `none` markers
+     * for unregistered rehearsal/test plans. Part of resume identity and
+     * reconciled against the immutable manifest and archived records. */
+    registrationId: nonEmpty,
+    registrationProvenanceSha256: nonEmpty,
+    stageAPrerequisiteSha256: nonEmpty,
     /** Nonsecret configuration fingerprint over the plan's frozen fields. */
     configFingerprint: nonEmpty,
     /** Sequence finalization lifecycle (audit finding 5): `completed` is
@@ -241,6 +249,9 @@ export interface ResumeIdentity {
   studyPlanSha256: string;
   thresholdProfileId: string;
   thresholdProfileVersion: string;
+  registrationId: string;
+  registrationProvenanceSha256: string;
+  stageAPrerequisiteSha256: string;
   configFingerprint: string;
 }
 
@@ -260,6 +271,9 @@ export const RESUME_IDENTITY_FIELDS = [
   'studyPlanSha256',
   'thresholdProfileId',
   'thresholdProfileVersion',
+  'registrationId',
+  'registrationProvenanceSha256',
+  'stageAPrerequisiteSha256',
   'configFingerprint',
 ] as const;
 

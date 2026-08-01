@@ -186,12 +186,26 @@ describe('keep-awake governance (re-audit finding 6, §10.4)', () => {
     expect(acquireCalls).toBe(0);
   });
 
+  /** A live plan OBJECT for the keep-awake gates. Since the final
+   * targeted remediation, a live plan cannot even PARSE without a
+   * closed-registry registration — the schema wall refuses first — so
+   * this fixture is built at the object level to exercise the
+   * downstream acknowledgement/lease gates as defense in depth. */
+  function livePlanObject() {
+    const plan = planFromRehearsal();
+    return {
+      ...plan,
+      attempts: plan.attempts.map((attempt, index) =>
+        index === 1
+          ? { ...attempt, gatewayMode: 'live' as const, maxCallsPerRun: 10, maxTotalCalls: 10 }
+          : attempt,
+      ),
+      liveCallBudget: 100,
+    };
+  }
+
   it('a refused live launch never spawns the helper (acknowledgement gate runs first)', async () => {
-    const livePlan = planFromRehearsal((raw) => {
-      const attempts = raw.attempts as Array<Record<string, unknown>>;
-      attempts[1] = { ...attempts[1], gatewayMode: 'live', maxCallsPerRun: 10, maxTotalCalls: 10 };
-      raw.liveCallBudget = 100;
-    });
+    const livePlan = livePlanObject();
     let acquireCalls = 0;
     const previous = process.env.M2_LIVE_RUNS;
     delete process.env.M2_LIVE_RUNS;
@@ -209,11 +223,7 @@ describe('keep-awake governance (re-audit finding 6, §10.4)', () => {
   });
 
   it('an acknowledged live plan without a lease refuses unless --allow-sleep-risk', async () => {
-    const livePlan = planFromRehearsal((raw) => {
-      const attempts = raw.attempts as Array<Record<string, unknown>>;
-      attempts[1] = { ...attempts[1], gatewayMode: 'live', maxCallsPerRun: 10, maxTotalCalls: 10 };
-      raw.liveCallBudget = 100;
-    });
+    const livePlan = livePlanObject();
     const previous = process.env.M2_LIVE_RUNS;
     process.env.M2_LIVE_RUNS = '1';
     try {
