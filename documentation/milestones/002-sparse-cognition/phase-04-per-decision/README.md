@@ -1,19 +1,22 @@
 # Milestone 2 Phase 4 — per-decision comparator
 
-**Status: FINAL TARGETED REMEDIATION COMPLETE — awaiting the Advisor's
-targeted verification.** The
+**Status: COMPLETE.** The
 [Phase 4 audit](audits/MILESTONE_002_PHASE4_PER_DECISION_AUDIT.md)
 accepted the comparator architecture and requested changes on four
 findings; the remediation passed an independent adversarial verification
 round (report §6.1–§6.2); the Advisor's
 [final targeted remediation instructions](audits/MILESTONE_002_PHASE4_PER_DECISION_FINAL_TARGETED_REMEDIATION.md)
-then required four last corrections — exact-floor calibration entropy,
-exact registered-study binding with semantic first-divergence context,
+required four last corrections — exact-floor calibration entropy, exact
+registered-study binding with semantic first-divergence context,
 mandatory authenticated registration at formal launch with launch-time
 Stage A revalidation, and CI failure-path hygiene — all implemented
-(report §6.3). **No live model call has been made.** Stage A and the
-calibration study execute only after the targeted verification, merge,
-and green merged-`main` CI.
+(report §6.3) and verified. **The targeted verification passed: PR #15
+merged pinned to `17aba1f` (merge `8282dfe`), merged-`main` CI green,
+Phase 4 implementation declared complete.** Stage A acceptance follows
+under the post-merge evidence-instrumentation revision (sparse visual
+capture profile + registered evidence ceilings); the ten-run calibration
+stays blocked until Stage A passes and its sealed evidence feeds the
+calibration registration.
 
 **Scope delivered** (implementation brief §31, scope ruling §14):
 

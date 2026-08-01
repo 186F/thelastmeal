@@ -39,6 +39,18 @@ export const ORCHESTRATABLE_CONDITION_IDS = [
 const nonEmpty = z.string().min(1);
 const positiveInt = z.number().int().positive();
 
+/** Closed Playwright capture-profile registry (evidence-instrumentation
+ * revision): `continuous-visual-v1` is the legacy continuous-screenshot
+ * trace; `semantic-trace-sparse-visual-v1` keeps DOM snapshots and every
+ * semantic record while replacing the screenshot stream with hashed
+ * static visual checkpoints (~6–7 images per formal attempt). Formal
+ * (evidentiary) plans MUST use the sparse profile. */
+export const TRACE_CAPTURE_PROFILES = [
+  'continuous-visual-v1',
+  'semantic-trace-sparse-visual-v1',
+] as const;
+export type TraceCaptureProfile = (typeof TRACE_CAPTURE_PROFILES)[number];
+
 /**
  * Reviewed treatment identity (Phase 3 audit finding 2): the exact nonsecret
  * model and serving route the sequence is REVIEWED to run. Before Start, the
@@ -234,10 +246,19 @@ export const orchestratorPlanSchema = z
     /** Playwright trace-chunk rotation cadence (Phase 4, focused re-audit
      * §8.2): bounds the open trace on multi-hour 1× attempts and feeds the
      * evidence forecaster. Minimum one minute; defaults to the driver
-     * constant (10 minutes). All chunks are retained. */
+     * constant (10 minutes). All chunks are retained. The CAPTURE PROFILE
+     * (evidence-instrumentation revision) is a reviewed plan property, not
+     * a hard-coded driver choice: the frozen
+     * `semantic-trace-sparse-visual-v1` policy disables the continuous
+     * Playwright screenshot stream (DOM snapshots and every semantic
+     * record retained) and adds hashed static visual checkpoints before
+     * Start, at every rotation, and at completion; absent means the
+     * legacy `continuous-visual-v1` behavior. Both fields join the plan
+     * configuration fingerprint and therefore every freeze check. */
     tracing: z
       .object({
         chunkIntervalMs: z.number().int().min(60_000),
+        captureProfile: z.enum(TRACE_CAPTURE_PROFILES).optional(),
       })
       .strict()
       .optional(),
@@ -329,6 +350,16 @@ export const orchestratorPlanSchema = z
           message: 'evidentiary-gateway-stop-timeout-must-be-90min',
         });
       }
+    }
+    // Evidence-instrumentation revision: formal attempts never carry the
+    // continuous screenshot stream — evidentiary plans must declare the
+    // frozen sparse visual capture profile explicitly.
+    if (plan.evidentiary && plan.tracing?.captureProfile !== 'semantic-trace-sparse-visual-v1') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'evidentiary-requires-sparse-visual-capture: formal plans must declare tracing.captureProfile semantic-trace-sparse-visual-v1',
+      });
     }
     // Final targeted remediation C (§5.2): no authenticated registration →
     // no formal launch. Every evidentiary plan and every plan with a live

@@ -609,6 +609,29 @@ lists are recorded here.
   profiles (routine uploads ≤ 50 MiB of proof with explicit retention;
   full evidence only on failure or explicit dispatch) (report:
   [`MILESTONE_002_PHASE4_PER_DECISION_REPORT.md`](../milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)).
+  The post-merge EVIDENCE-INSTRUMENTATION revision (Advisor directive after
+  the first Stage A launch was refused by its own evidence forecast — the
+  continuous screenshot stream measured ~163 MB/min at true 1× pacing)
+  makes the Playwright CAPTURE PROFILE a reviewed plan property
+  (`tracing.captureProfile`, closed enum, part of the configuration
+  fingerprint and therefore resume identity and every freeze check).
+  Formal plans REQUIRE the frozen `semantic-trace-sparse-visual-v1`
+  profile: `screenshots: false, snapshots: true, sources: false` — the
+  semantic trace (DOM snapshots, network, actions) is fully retained with
+  the existing chunk rotation, while the screenshot stream is replaced by
+  hashed STATIC VISUAL CHECKPOINTS (full-page images immediately before
+  Start, at every rotation, and at completion — roughly 6–9 per formal
+  attempt), each recorded in `trace-manifest.json` with filename, UTC
+  timestamp, logical tick, run status, and SHA-256; the final, failure,
+  and stall screenshots, failure DOM snapshot, console/page-error records,
+  and every model/ledger/replay artifact are unchanged. Registered
+  evidence ceilings: Stage A `evidenceSizeBudgetBytes` 8 GiB, calibration
+  32 GiB. The committed keyless 1× measurement plan
+  (`experiments/m2/plans/capture-measurement.json`) verified the footprint
+  before any live spend: semantic trace ≈ 121 KB/min (a ~1,345× reduction),
+  checkpoints ≈ 103 KB each, a 75-minute attempt projecting to ~10 MB —
+  Stage A far below its 8 GiB ceiling and the ten-run calibration far
+  below 24 GiB.
 
 ## Continuous integration details
 

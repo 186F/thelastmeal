@@ -1641,13 +1641,19 @@ export async function orchestrateSequence(options: OrchestrateOptions): Promise<
           ),
         ) as { version: string }
       ).version;
+      // The reviewed capture profile (evidence-instrumentation revision):
+      // a plan property bound into the configuration fingerprint; the
+      // sparse profile disables the continuous screenshot stream and
+      // records hashed static visual checkpoints instead.
+      const traceCaptureProfile = plan.tracing?.captureProfile ?? 'continuous-visual-v1';
       const browserProvenance: BrowserProvenance = {
         playwrightVersion,
         browserVersion,
         headless: !options.headed,
         contextOptions: {
           acceptDownloads: true,
-          tracingScreenshots: true,
+          traceCaptureProfile,
+          tracingScreenshots: traceCaptureProfile === 'continuous-visual-v1',
           tracingSnapshots: true,
           tracingSources: false,
           // Phase 4 bounded tracing (§8.2): rotation cadence and the

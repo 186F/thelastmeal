@@ -60,6 +60,7 @@
   },
   "postSequenceBatch": false,
   "tracing": {
-    "chunkIntervalMs": 60000
+    "chunkIntervalMs": 60000,
+    "captureProfile": "semantic-trace-sparse-visual-v1"
   }
 }

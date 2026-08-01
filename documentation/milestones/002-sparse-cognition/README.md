@@ -7,15 +7,19 @@ per-decision model condition — targeting at most 25% of the baseline's
 upstream calls while preserving pre-registered behavioral similarity, with
 exact replay and no loss of simulation authority.
 
-**Status.** IN PROGRESS. Phases 1–3 are complete; the Phase 4
-implementation (package 1.9.0) has its **final targeted remediation
-complete and awaits the Advisor's targeted verification** (exact-floor
-calibration entropy, exact registered-study analysis binding, mandatory
-authenticated registration at formal launch, CI failure-path hygiene). No
-Milestone 2 live model calls have been made; Stage A and the calibration
-study execute only after the targeted verification, merge, and green
-merged-`main` CI, and only from `m2:register`-pinned instances of the
-reviewed study templates.
+**Status.** IN PROGRESS. Phases 1–4 are **complete** — the Phase 4
+targeted verification passed and PR #15 merged pinned to `17aba1f`
+(merge `8282dfe`, merged-`main` CI green). Stage A acceptance is the
+active work under the Advisor's evidence-instrumentation revision: the
+first launch was refused by its own evidence-size forecast (the
+continuous 1× screenshot stream projected ~11.4 GiB against the 8 GiB
+budget — zero live calls spent), so formal plans now pin the
+`semantic-trace-sparse-visual-v1` capture profile with hashed static
+visual checkpoints and registered evidence ceilings (Stage A 8 GiB,
+calibration 32 GiB), keylessly measured at ~121 KB/min before any live
+spend. The ten-run calibration remains blocked until Stage A passes and
+its sealed evidence is supplied to the calibration registration — always
+from `m2:register`-pinned instances of the reviewed study templates.
 
 **Package / experiment versions.** Package 1.7.0 (Phase 2) → 1.8.0
 (Phase 3) → 1.9.0 (Phase 4, current). Experiment
