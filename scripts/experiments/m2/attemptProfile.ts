@@ -24,10 +24,10 @@ import {
  * attempt is preserved and classified `invalid-treatment`, never completed
  * primary evidence.
  *
- * Phase 3 registers only the keyless REHEARSAL profile (`formalUse:
- * false`), so the mechanism is exercised in CI. No formal profile exists
- * yet: `parsePlan` therefore hard-refuses every evidentiary or live plan
- * until Phase 4 registers a formal profile alongside its study — the
+ * Phase 3 registered only the keyless REHEARSAL profile (`formalUse:
+ * false`), so the mechanism is exercised in CI. Phase 4 registers the
+ * FORMAL profile alongside its studies (Stage A acceptance and the R2
+ * calibration study), lifting parsePlan's evidentiary/live refusal — the
  * profile id and version are bound into the sequence resume identity and
  * into the study declaration's `thresholds` record.
  */
@@ -119,9 +119,66 @@ const REHEARSAL_PROFILE: AttemptProfile = {
   stopRule: 'fixed attempt set; stop after every planned attempt reaches a terminal disposition',
 };
 
-/** The registered profiles. Phase 4 adds the formal profile(s) WITH their
- * registered studies; Phase 3 deliberately registers none with formalUse. */
-export const REGISTERED_ATTEMPT_PROFILES: readonly AttemptProfile[] = [REHEARSAL_PROFILE];
+/**
+ * The FORMAL attempt profile (Phase 4; brief §23.1–§23.2, §24.2, §24.5) —
+ * the reviewed definition of a valid evidentiary/live primary observation,
+ * registered together with its studies (m2-stage-a-acceptance-001 and
+ * m2-calibration-variance-a-001). Registering it lifts parsePlan's
+ * `formal-attempt-profile-required` refusal.
+ *
+ * Every numeric bound here is pre-registered in the brief, not chosen ad
+ * hoc: the treatment threshold is the §23.2 upstream reliability gate
+ * (callsCompleted / upstreamCallsAttempted >= 0.90 — a normalized-rationale
+ * output still counts as completed, which the M2 contract guarantees by
+ * construction); the replacement cap is the §24.2 allowance of ONE
+ * identical replacement for a transient failure; the stop rule carries
+ * §24.5. Artifact gates and gateway lifecycle are identical to the
+ * rehearsal profile — the rehearsal exists precisely to exercise the same
+ * gates keylessly.
+ */
+const FORMAL_PROFILE: AttemptProfile = {
+  profileId: 'm2-formal-attempt-profile',
+  profileVersion: '1.0.0',
+  schemaVersion: ATTEMPT_PROFILE_SCHEMA_VERSION,
+  formalUse: true,
+  artifactGates: [
+    'worker-ready',
+    'condition-applied',
+    'speed-applied',
+    'run-complete',
+    'ledger-validated-or-strict-finalized',
+    'in-browser-replay-match',
+    'fingerprint-written',
+    'no-unexpected-navigation',
+    // §23.1 per-run integrity gate: a primary run with ANY budget-exhausted
+    // upstream call is not valid primary evidence (enforced from the final
+    // manifest's callsFailedByCategory; the planned gateway-stop run is
+    // exempt per §23.8).
+    'no-budget-exhausted-failure',
+  ],
+  gatewayLifecycle: { plannedStopMustFire: true, unplannedDeathInvalidates: true },
+  treatmentThresholds: [
+    // §23.2 upstream reliability gate: >= 90% of attempted upstream calls
+    // completed, and at least one call attempted (a zero-call "model" run is
+    // never the registered treatment).
+    { metric: 'upstream-completion-ratio-bp', npcId: 'mara', min: 9_000 },
+    { metric: 'upstream-calls-attempted', npcId: 'mara', min: 1 },
+  ],
+  hardStopFailureClasses: HARD_STOP_FAILURE_CLASSES,
+  retryableFailureClasses: RETRYABLE_ELIGIBLE_FAILURE_CLASSES,
+  maxReplacementAttempts: 1,
+  stopRule:
+    'fixed attempt set; one identical replacement per transient failure (§24.2); ' +
+    'a replacement failing for the same reason stops the sequence for ' +
+    'investigation (§24.5)',
+};
+
+/** The registered profiles. Phase 4 registers the formal profile WITH its
+ * studies; the rehearsal profile remains the only non-formal profile. */
+export const REGISTERED_ATTEMPT_PROFILES: readonly AttemptProfile[] = [
+  REHEARSAL_PROFILE,
+  FORMAL_PROFILE,
+];
 
 export function getAttemptProfile(profileId: string, profileVersion: string): AttemptProfile {
   const profile = REGISTERED_ATTEMPT_PROFILES.find((entry) => entry.profileId === profileId);

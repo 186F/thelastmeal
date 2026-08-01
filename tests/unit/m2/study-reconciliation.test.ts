@@ -39,7 +39,7 @@ function context(): ReconciliationContext {
       'behavior-fingerprint': 'behavior-fingerprint-1.0.0',
       'behavior-similarity': 'behavior-similarity-1.0.0',
     },
-    installedAnalysisVersion: 'behavior-similarity-1.0.0',
+    installedAnalysisVersions: ['behavior-similarity-1.0.0'],
   };
 }
 

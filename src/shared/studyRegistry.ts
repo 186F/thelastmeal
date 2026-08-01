@@ -95,6 +95,25 @@ export const studyDeclarationSchema = z
     executionSettings: executionSettingsSchema.optional(),
     outputRoot: nonEmpty,
     evidenceRetentionPolicy: nonEmpty,
+    /** Git-authenticated registration provenance (Phase 4 audit finding 3):
+     * the closed registration id plus the SOURCE TEMPLATE's blob id and
+     * committed-bytes sha256, stamped by m2:register from `git show HEAD`.
+     * Present on registered formal studies; absent on informal ones. */
+    registration: z
+      .object({
+        registrationId: nonEmpty,
+        sourceBlobId: gitSha,
+        sourceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+      })
+      .strict()
+      .optional(),
+    /** SHA-256 of the canonical Stage A prerequisite record (Phase 4 audit
+     * finding 2): binds the verified Stage A acceptance evidence into the
+     * registered calibration study's bytes and freeze. */
+    stageAPrerequisiteSha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
   })
   .strict()
   .superRefine((study, ctx) => {
@@ -162,5 +181,10 @@ export function studyFreezeProjection(study: StudyDeclaration): Record<string, u
     // Execution settings are freeze-bound (re-audit blocker 3): a pacing or
     // runtime-setting change moves the configuration fingerprint.
     executionSettings: study.executionSettings ?? null,
+    // Registration provenance and the Stage A prerequisite are freeze-bound
+    // (Phase 4 audit findings 2 and 3): a swapped source template or a
+    // different Stage A record moves the study's configuration fingerprint.
+    registration: study.registration ?? null,
+    stageAPrerequisiteSha256: study.stageAPrerequisiteSha256 ?? null,
   };
 }

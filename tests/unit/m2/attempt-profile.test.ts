@@ -30,10 +30,51 @@ function fingerprintsWith(attempted: number | undefined, completed: number | und
 describe('attempt profiles', () => {
   const profile = getAttemptProfile('m2-rehearsal-attempt-profile', '1.0.0');
 
-  it('registers only the non-formal rehearsal profile in Phase 3', () => {
-    expect(REGISTERED_ATTEMPT_PROFILES).toHaveLength(1);
-    expect(REGISTERED_ATTEMPT_PROFILES[0]!.formalUse).toBe(false);
-    expect(REGISTERED_ATTEMPT_PROFILES[0]!.schemaVersion).toBe(ATTEMPT_PROFILE_SCHEMA_VERSION);
+  it('registers the rehearsal profile (non-formal) and the Phase 4 formal profile', () => {
+    expect(REGISTERED_ATTEMPT_PROFILES).toHaveLength(2);
+    const rehearsal = REGISTERED_ATTEMPT_PROFILES.find(
+      (entry) => entry.profileId === 'm2-rehearsal-attempt-profile',
+    )!;
+    expect(rehearsal.formalUse).toBe(false);
+    expect(rehearsal.schemaVersion).toBe(ATTEMPT_PROFILE_SCHEMA_VERSION);
+    const formal = REGISTERED_ATTEMPT_PROFILES.find(
+      (entry) => entry.profileId === 'm2-formal-attempt-profile',
+    )!;
+    expect(formal.formalUse).toBe(true);
+    expect(formal.profileVersion).toBe('1.0.0');
+    expect(formal.schemaVersion).toBe(ATTEMPT_PROFILE_SCHEMA_VERSION);
+  });
+
+  it('the formal profile pins the pre-registered brief values, never ad-hoc ones', () => {
+    const formal = getAttemptProfile('m2-formal-attempt-profile', '1.0.0');
+    // §23.2 upstream reliability gate: completed/attempted >= 0.90.
+    expect(formal.treatmentThresholds).toContainEqual({
+      metric: 'upstream-completion-ratio-bp',
+      npcId: 'mara',
+      min: 9_000,
+    });
+    expect(formal.treatmentThresholds).toContainEqual({
+      metric: 'upstream-calls-attempted',
+      npcId: 'mara',
+      min: 1,
+    });
+    // §24.2 replacement allowance: ONE identical replacement.
+    expect(formal.maxReplacementAttempts).toBe(1);
+    expect(formal.stopRule).toMatch(/§24\.2/);
+    expect(formal.stopRule).toMatch(/§24\.5/);
+    // The rehearsal's gates plus the §23.1 no-budget-exhausted-failure
+    // per-run integrity gate; identical gateway lifecycle.
+    const rehearsal = getAttemptProfile('m2-rehearsal-attempt-profile', '1.0.0');
+    expect(formal.artifactGates).toEqual([
+      ...rehearsal.artifactGates,
+      'no-budget-exhausted-failure',
+    ]);
+    expect(formal.gatewayLifecycle).toEqual(rehearsal.gatewayLifecycle);
+    // §23.2 boundary: exactly 90.00% passes, one basis point under fails.
+    const boundary = evaluateTreatmentThresholds(formal, fingerprintsWith(100, 90));
+    expect(boundary.pass).toBe(true);
+    const under = evaluateTreatmentThresholds(formal, fingerprintsWith(100, 89));
+    expect(under.pass).toBe(false);
   });
 
   it('resolves by id and exact version with typed refusals', () => {

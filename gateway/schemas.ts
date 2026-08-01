@@ -25,6 +25,15 @@ export {
   MODEL_EXPERIMENT_VERSION,
   MODEL_TARGET_NPC_ID,
 } from '../src/shared/modelExperiment';
+export {
+  M2_ACTION_PROMPT_VERSION,
+  M2_ACTION_PROVIDER_ID,
+  M2_EXPERIMENT_ID,
+  M2_EXPERIMENT_VERSION,
+  M2_PER_DECISION_CONDITION_ID,
+  M2_TARGET_NPC_ID,
+} from '../src/shared/m2Experiment';
+export { contractForCondition, requireContractForCondition } from '../src/shared/conditionContract';
 
 export type ExternalDecisionRequestEnvelope = z.infer<typeof externalDecisionRequestEnvelopeSchema>;
 export type GatewayDecisionResult = z.infer<typeof gatewayDecisionResultSchema>;

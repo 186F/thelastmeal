@@ -68,6 +68,19 @@ export interface ModelTraceEntry {
   reasonCode: string | null;
   confidenceBp: number | null;
   rationale: string | null;
+  /** M2 revised diagnostic-output contract only (Phase 4; brief §17.5,
+   * ruling R7 §9.1): true when the rationale diagnostic was normalized
+   * (missing, non-string, or truncated). ALWAYS present on rows written
+   * under the M2 contract, NEVER present on Milestone 1 rows — an additive
+   * optional field, so every previously written v2 row validates
+   * byte-identically and the trace schema version does not move. */
+  rationaleNormalized?: boolean;
+  /** M2 contract only (ruling R7 §9.2): the model's self-reported
+   * confidence claim under its REQUIRED explicit name — optional,
+   * noncanonical, excluded from every control path and from primary
+   * analysis. Mirrors this row's confidenceBp on M2 rows; never present on
+   * Milestone 1 rows. */
+  selfReportedConfidenceBp?: number | null;
   /** First 2048 chars of the raw model text, ONLY on outcomes
    * 'invalid-model-output' and 'upstream-refusal'; null on every other
    * outcome INCLUDING success (v2). */
@@ -107,6 +120,8 @@ export const modelTraceEntrySchema = z
     reasonCode: z.string().nullable(),
     confidenceBp: z.number().int().min(0).max(10_000).nullable(),
     rationale: z.string().nullable(),
+    rationaleNormalized: z.boolean().optional(),
+    selfReportedConfidenceBp: z.number().int().min(0).max(10_000).nullable().optional(),
     rawModelOutput: z.string().max(RAW_MODEL_OUTPUT_MAX_CHARS).nullable(),
     inputTokens: nonNegInt.nullable(),
     outputTokens: nonNegInt.nullable(),

@@ -141,6 +141,9 @@ function freezeFixture(
       studyVersion: options.withStudy ? '1.0.0' : null,
       studyConfigFingerprint: options.withStudy ? 'fp-fixture' : null,
       studyFreezeRecordSha256: freezeRecord !== null ? sha256(freezeRecord) : null,
+      registrationId: null,
+      registrationProvenanceSha256: null,
+      stageAPrerequisiteSha256: null,
     },
   };
 }
@@ -149,6 +152,48 @@ describe('checkFreeze drift kinds (re-audit finding 4 + §6.5)', () => {
   it('an unchanged environment passes', () => {
     const fixture = freezeFixture({ requireCleanWorktree: true, withStudy: true });
     expect(() => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, fixture.freeze)).not.toThrow();
+  });
+
+  it('a mutated or missing archived registration record violates after sequence start (remediation C §5.5)', () => {
+    const fixture = freezeFixture();
+    const provenanceBytes = '{"fixture":"registration-provenance"}\n';
+    const prerequisiteBytes = '{"fixture":"stage-a-prerequisite"}\n';
+    writeFileSync(
+      join(fixture.sequenceRoot, 'registration-provenance.archived.json'),
+      provenanceBytes,
+      'utf8',
+    );
+    writeFileSync(
+      join(fixture.sequenceRoot, 'stage-a-prerequisite.archived.json'),
+      prerequisiteBytes,
+      'utf8',
+    );
+    const freeze = {
+      ...fixture.freeze,
+      registrationId: 'calibration-variance-a',
+      registrationProvenanceSha256: sha256(provenanceBytes),
+      stageAPrerequisiteSha256: sha256(prerequisiteBytes),
+    };
+    expect(() => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, freeze)).not.toThrow();
+    // Mutation of the archived provenance after start: violation.
+    writeFileSync(
+      join(fixture.sequenceRoot, 'registration-provenance.archived.json'),
+      `${provenanceBytes}\n`,
+      'utf8',
+    );
+    expect(() => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, freeze)).toThrow(
+      /freeze-violation: archived registration provenance/,
+    );
+    // Restore, then remove the prerequisite copy: violation.
+    writeFileSync(
+      join(fixture.sequenceRoot, 'registration-provenance.archived.json'),
+      provenanceBytes,
+      'utf8',
+    );
+    rmSync(join(fixture.sequenceRoot, 'stage-a-prerequisite.archived.json'));
+    expect(() => checkFreeze(fixture.repoRoot, fixture.sequenceRoot, freeze)).toThrow(
+      /freeze-violation: archived Stage A prerequisite/,
+    );
   });
 
   it('a moved HEAD violates', () => {

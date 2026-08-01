@@ -12,7 +12,11 @@ import {
   verifyTreeAgainstInventory,
 } from './packageEvidence';
 import { verifySealedExecutions, type SequenceState } from './sequenceState';
-import { sequenceManifestSchema, type SequenceManifest } from './reporting';
+import {
+  buildManifestRegistration,
+  sequenceManifestSchema,
+  type SequenceManifest,
+} from './reporting';
 
 /**
  * Resume-time evidence verification (Phase 3 re-audit findings 1 and 5).
@@ -161,6 +165,9 @@ export function reconcileManifestWithState(
     'studyPlanSha256',
     'thresholdProfileId',
     'thresholdProfileVersion',
+    'registrationId',
+    'registrationProvenanceSha256',
+    'stageAPrerequisiteSha256',
     'configFingerprint',
   ] as const;
   for (const key of identityKeys) {
@@ -234,6 +241,25 @@ export function reconcileManifestWithState(
       'freezeCheckpoints: the manifest checkpoints are not a prefix of the control state checkpoints',
     );
   }
+  // Registration attestation consistency (final targeted remediation C
+  // §5.4): a registered sequence carries the block, an unregistered one
+  // carries null, and the scalar bindings agree in both directions.
+  if ((state.registrationId === 'none') !== (manifest.registration === null)) {
+    mismatches.push('registration: manifest block presence disagrees with state registrationId');
+  }
+  if (manifest.registration !== null) {
+    if (manifest.registration.registrationId !== state.registrationId) {
+      mismatches.push('registration.registrationId: manifest and state disagree');
+    }
+    if (manifest.registration.provenanceSha256 !== state.registrationProvenanceSha256) {
+      mismatches.push('registration.provenanceSha256: manifest and state disagree');
+    }
+    const statePrerequisite =
+      state.stageAPrerequisiteSha256 === 'none' ? null : state.stageAPrerequisiteSha256;
+    if (manifest.registration.stageAPrerequisiteSha256 !== statePrerequisite) {
+      mismatches.push('registration.stageAPrerequisiteSha256: manifest and state disagree');
+    }
+  }
   if (mismatches.length > 0) {
     throw new Error(`completed-manifest-state-divergence: ${mismatches.join('; ')}`);
   }
@@ -268,6 +294,17 @@ export async function verifyCompletedSequence(
 
   const manifest = readSequenceManifestFile(sequenceRoot);
   reconcileManifestWithState(manifest, state, plan);
+
+  // Re-derive the registration attestation from the ARCHIVED records in
+  // the root (hash-verified against control state on the way) and require
+  // exact agreement with the immutable manifest (remediation C §5.4).
+  const rederivedRegistration = buildManifestRegistration(sequenceRoot, state);
+  if (JSON.stringify(rederivedRegistration) !== JSON.stringify(manifest.registration)) {
+    throw new Error(
+      'completed-resume-verification-failed: manifest registration block does not match the ' +
+        'archived registration records',
+    );
+  }
 
   revalidateCompletedExecutions(sequenceRoot, state, plan);
 

@@ -1,5 +1,5 @@
 import { CONDITION_IDS } from '../sim/decisions/conditions';
-import { MODEL_CONDITION_ID } from '../shared/modelExperiment';
+import { isModelBackedConditionId } from '../shared/conditionContract';
 import { buildRunBundle, canExportRunBundle, validateRunBundle } from '../app/runBundle';
 import type { ViewStore } from '../app/store';
 import type { WorkerClient } from '../app/workerClient';
@@ -38,7 +38,7 @@ export function mountModelPanel(
       s.selectedConditionId = conditionId;
     });
     client.loadScenario(store.state.selectedScenarioId);
-    if (conditionId === MODEL_CONDITION_ID) void gateway.connect();
+    if (isModelBackedConditionId(conditionId)) void gateway.connect();
   });
   const selectRow = el('div', { class: 'control-row' });
   selectRow.append(el('label', { text: 'Condition ' }), select);

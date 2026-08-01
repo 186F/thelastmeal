@@ -19,6 +19,7 @@ import type { ValidationIssue } from './validation';
 export const PROTOCOL_CONDITION_IDS = [
   'deterministic-baseline-v1',
   'mara-model-per-decision-v1',
+  'mara-model-per-decision-m2-v1',
 ] as const;
 
 /**

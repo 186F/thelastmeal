@@ -3,6 +3,69 @@
 **Audience:** a Claude Code session (optionally with Chrome/MCP tools) supervising an unattended Milestone 2 sequence.
 **Design principle (brief §20.1):** the repository-native orchestrator is the authoritative experiment runner. Claude supervises, monitors, and diagnoses — it never becomes the runner.
 
+## 0. Registering an evidentiary plan (Phase 4 ritual)
+
+Evidentiary/live sequences run ONLY from REGISTERED plan and study
+instances, never from the tracked templates (whose sentinel pins can never
+match a real HEAD). Registration is CLOSED: only the registry's two
+template pairs can be stamped, and every source is authenticated against
+`git show HEAD` with its blob ID recorded in
+`registration-provenance.json`. On the exact merged SHA the run is
+authorized for, with a clean worktree:
+
+```
+npm run m2:register -- --registration stage-a --out <dir OUTSIDE the repo>
+```
+
+then, ONLY after the Stage A sequence has completed and PASSED:
+
+```
+npm run m2:register -- --registration calibration-variance-a \
+                       --stage-a <the completed Stage A sequence root> \
+                       --out <a NEW dir OUTSIDE the repo>
+```
+
+Calibration registration cryptographically VERIFIES the Stage A root
+(seals, inventory, manifest reconciliation, semantic revalidation,
+archive, sidecar, receipt, and SHA equality with the current HEAD — any
+source change after Stage A forces Stage A to run again) and stamps the
+prerequisite record's hash into the registered study and plan, where it
+joins the resume identity and every freeze checkpoint. Output is
+transactional and create-once; a failure leaves nothing. Never pass
+`--stage-a-drill` for a real registration — it is the keyless-drill flag,
+permanently recorded in the provenance, and drill-mode Stage A evidence is
+structurally refused for any live launch. Launch with
+`m2:orchestrate -- --plan <registered plan path>` — and note that
+registration is MANDATORY at launch (final targeted remediation C): an
+evidentiary or live plan without a registration binding is refused at the
+schema, and before any write or spawn the orchestrator reopens and
+re-proves the provenance, both source templates at the pinned SHA (byte-
+identical re-stamping), and — for calibration — the complete Stage A
+evidence, rebuilding the prerequisite record to byte equality. Keep the
+registration directory and the Stage A evidence root intact and unmoved
+for the sequence's whole life: resume re-runs the same preflight, and the
+archived copies join every freeze checkpoint.
+
+After a completed calibration sequence, produce the registered analysis:
+
+```
+npm run m2:analyze -- --sequence <completed calibration root>
+```
+
+The production analysis REQUIRES the exact registered design (final
+targeted remediation B): it re-verifies the whole sequence (seals,
+inventory, manifest attestation, semantic revalidation, archive, receipt),
+validates the archived plan/study/provenance/prerequisite copies, refuses
+anything but `m2-calibration-variance-a-001@1.0.0` on sequence
+`m2-calibration-variance-a` (ten M2 attempts, scenario A, seed 1001,
+formal profile, pinned model/route/prompt), and maps EXACTLY one valid
+primary per planned attempt (a permitted replacement is its attempt's
+primary; failures become typed exclusions). It writes
+`calibration-variance-analysis.{json,md}`
+(`m2-calibration-variance-analysis-1.0.0`) into the derived directory
+beside the immutable root — including the semantic first-divergence
+context extracted from the archived request envelopes.
+
 ## 1. Before launch
 
 1. Verify the tracked worktree is clean and on the frozen SHA the plan pins:
@@ -21,7 +84,8 @@ The command runs the complete sequence unattended: preflight (ports, free disk v
 ## 3. Monitor
 
 - `<root>.control/sequence-state.json` (the CONTROL root beside the evidence root): `lastTransition`, per-execution `status`/`failureReason`/`failureStage`, `artifactStatus`/`studyStatus`, `replacementDisposition`, freeze checkpoints. The evidence root itself holds `sequence-manifest.json`, the immutable final evidence facts.
-- `attempt-*/heartbeat.jsonl`: machine-readable heartbeats (tick, run status, gateway state, call counters) at the plan's cadence.
+- `attempt-*/heartbeat.jsonl`: machine-readable heartbeats (tick, run status, gateway state, call counters, trace-chunk rotation counters) at the plan's cadence.
+- `attempt-*/trace-manifest.json` (Phase 4): every retained Playwright trace chunk with its size, the rotation cadence, and the `retain-all-chunks` policy. Rotated chunks live in `attempt-*/trace-chunks/`; the final chunk is `attempt-trace.zip` (or `failure-trace.zip`). A projected evidence-budget overrun fails the attempt EARLY as `evidence-budget-exceeded: forecast …` — treat it as a real budget failure, never delete chunks to make room.
 - `attempt-*/gateway.log` and `vite.log`: child-process health; the report records PIDs, exit codes, and process-provenance health.
 - Use Chrome tools ONLY to inspect semantic UI state or capture screenshots when the orchestrator itself reports a browser failure. Do not click controls in the automation browser.
 

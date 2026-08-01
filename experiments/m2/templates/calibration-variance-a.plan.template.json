@@ -1,0 +1,170 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-calibration-variance-a",
+  "description": "The R2 variance-calibration study m2-calibration-variance-a-001 (brief section 22.6; ruling section 4): ten primary Scenario A runs of the M2 per-decision condition at 1x against the pinned live route, measuring how behaviorally different Mara is from herself under an identical observable configuration. Registered from this template at an exact merged SHA via m2:register; never runnable with the template sentinel pins. Executes only after Stage A passes (section 19.16).",
+  "evidentiary": true,
+  "outputRoot": "../thelastmeal-m2-sparse-cognition-001/calibration-variance-a",
+  "repositorySha": "1111111111111111111111111111111111111111",
+  "attempts": [
+    {
+      "attemptId": "cal-var-a-01",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-02",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-03",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-04",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-05",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-06",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-07",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-08",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-09",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    },
+    {
+      "attemptId": "cal-var-a-10",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-formal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "expectedTreatment": {
+    "modelId": "google/gemini-2.5-flash-lite",
+    "servingProviderId": "google-ai-studio",
+    "allowFallbacks": false,
+    "requireParameters": true,
+    "promptVersion": "mara-action-selection-m2-1.0.0",
+    "conditionId": "mara-model-per-decision-m2-v1",
+    "experimentId": "sparse-cognition-policy-001",
+    "experimentVersion": "1.0.0"
+  },
+  "study": {
+    "studyId": "m2-calibration-variance-a-001",
+    "studyVersion": "1.0.0",
+    "studyPlanPath": "TEMPLATES-REGISTER-STUDY-PATH",
+    "studyPlanSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "studyConfigFingerprint": "3333333333333333"
+  },
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "retryableFailureClasses": [
+      "run-timeout",
+      "simulation-stall",
+      "browser-error",
+      "gateway-not-connected",
+      "gateway-launch-failed",
+      "interrupted"
+    ]
+  },
+  "liveCallBudget": 2400,
+  "timeouts": {
+    "runTimeoutMs": 4500000,
+    "stallTimeoutMs": 120000,
+    "stallGraceMs": 30000,
+    "heartbeatIntervalMs": 60000
+  },
+  "postSequenceBatch": true,
+  "tracing": {
+    "chunkIntervalMs": 600000
+  },
+  "registration": {
+    "registrationId": "calibration-variance-a",
+    "provenancePath": "registration-provenance.json",
+    "provenanceSha256": "7777777777777777777777777777777777777777777777777777777777777777",
+    "stageAPrerequisiteSha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "stageAPrerequisitePath": "stage-a-prerequisite.json"
+  }
+}

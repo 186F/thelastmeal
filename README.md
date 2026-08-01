@@ -96,23 +96,81 @@ as many model calls, with exact replay and no loss of simulation authority.
 Whether that generalizes to larger worlds, other models, or many characters
 is future work — not a Milestone 2 claim.
 
+## Why build the laboratory first?
+
+The laboratory is not the final game this project hopes to become. It is the
+instrument for deciding whether the architecture above deserves to scale.
+
+One convincing run cannot answer that question. Language models can make
+different choices under identical starting conditions, and an NPC can appear
+intelligent for the wrong reason: the model may have caused the behavior, but
+so might a deterministic fallback, a race between the world and a late
+response, or a bug in the simulation. Before asking whether policy-driven
+Mara is still Mara, the project first has to measure **how different
+per-decision Mara normally is from herself** across repeated runs. That
+within-condition variation becomes the yardstick for every later comparison.
+
+The event and evidence machinery then makes the causal chain inspectable:
+what Mara knew, which actions the engine actually offered, what the model
+selected, whether the simulation accepted it, what happened in the world,
+and what later beliefs or memories followed. Without that chain, a striking
+moment is only an anecdote. With it, the project can distinguish model
+behavior from fallback behavior, engine behavior, provider failure, and
+presentation prose.
+
+The same machinery turns architectural changes into behavioral regression
+tests. A new prompt, model, memory representation, context selector, policy
+vocabulary, or call cadence can be evaluated on more than whether a demo
+"feels better": did Mara remain recognizable, become more repetitive, miss
+more tasks, use fewer calls, survive provider loss, or merely produce more
+persuasive explanations for the same actions?
+
+That is also how the project approaches the much larger population-scale
+question without pretending it has already solved it:
+
+```text
+one model-driven character acts lawfully
+        ↓
+measure how much that character naturally varies
+        ↓
+preserve most of that behavior with reusable local policies
+        ↓
+reduce model calls and continue through provider failure
+        ↓
+test whether larger populations are economically and operationally plausible
+```
+
+Much of the laboratory is therefore intended to become production
+infrastructure rather than disposable research scaffolding: engine-owned
+legal actions, deterministic fallbacks, model and provider provenance, cost
+budgets, exact replay, failure continuity, and release-to-release behavioral
+testing are all things a studio would need before shipping autonomous
+characters.
+
+There is a limit to that justification. Evidence infrastructure is useful
+only when it begins producing decisions. Once the per-decision baseline and
+its ordinary variance are established, the value of the project comes from
+running the sparse-cognition experiment and learning whether occasional AI
+input can really preserve a character — not from allowing the laboratory to
+grow indefinitely for its own sake.
+
 ## The project at a glance
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                         |
-| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                      |
-| **Implementation release**      | 1.8.0                                                                                                                                                                                                                                                                                                                                                         |
-| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                       |
-| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model. |
-| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); next is Phase 4 — the model-driven baseline arm of the experiment, plus a calibration study of how much Mara varies from herself; the sparse policy system and the head-to-head comparison follow in later gated phases                                                     |
-| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                  |
-| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                    |
-| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                            |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                                                                                                          |
+| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                                                                                                       |
+| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                                                                                        |
+| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                                                                                  |
+| **Current work**                | Milestone 2: the unattended experiment orchestrator is merged (Phase 3 complete); Phase 4 — the model-driven baseline arm, its registered studies, and bounded tracing for long live runs — has its final targeted remediation complete and awaits the Advisor's targeted verification; Stage A remains blocked until it is accepted, merged, and green on merged-`main` CI; the sparse policy system and head-to-head comparison follow later |
+| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                                                                                   |
+| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                                                                                     |
+| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                                                                             |
 
 This project deliberately versions several things separately. The three to
 keep apart while reading: the **software release** moves with every code
-change (currently 1.8.0); the **frozen scenario data** (`vs001-1.0.0`) never
+change (currently 1.9.0); the **frozen scenario data** (`vs001-1.0.0`) never
 moves — that is what "frozen" means; and the **model-experiment version**
 (currently v1.2.0) moves only when the AI setup being tested changes.
 (Smaller contracts — the prompt, file formats, individual schemas — carry
@@ -261,10 +319,22 @@ phases:
   entire pipeline, including deliberate failure drills
   ([report](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md),
   [operator runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)).
+- **Phase 4 (final targeted remediation complete — awaiting the Advisor's targeted verification):** the experiment's model-driven
+  baseline arm — the new AI condition and prompt under the Milestone 2
+  experiment identity (with rationale and confidence downgraded to
+  harmless diagnostic notes, so a chatty model can never invalidate a
+  sound choice); the reviewed formal profile and both registered study
+  files (the two-run acceptance and the ten-run self-consistency
+  calibration); browser traces rotated into bounded retained chunks with
+  early evidence-size forecasting for multi-hour live runs; and a
+  registration ritual (`npm run m2:register`) that pins reviewed study
+  templates to one exact repository state immediately before execution
+  ([report](documentation/milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)).
 
-No live model calls are made in any Milestone 2 phase so far; formal and
-live experiment plans are refused by design until a reviewed formal profile
-is registered in Phase 4.
+No live model calls have been made in any Milestone 2 phase so far; the
+first live runs (Stage A acceptance, then the calibration study) happen
+only after the Phase 4 final remediation passes the Advisor's targeted
+verification, exact-head CI is green, and the PR is merged.
 
 ## Pre-registered success criteria
 
@@ -351,6 +421,8 @@ semantics are detailed in the
 | `npm run eval:reviewer-package` / `eval:score-reviews` | Blinded reviewer packages for validated live ledgers / score returned reviews                       |
 | `npm run study:validate`                               | Validate a registered study declaration file                                                        |
 | `npm run m2:orchestrate`                               | Run a planned experiment sequence unattended (`-- --plan <path>`; `-- --resume` resumes)            |
+| `npm run m2:register`                                  | Register a reviewed template pair from the closed registry at the exact current repository state    |
+| `npm run m2:analyze`                                   | Produce the registered ten-run calibration variance analysis for a completed sequence               |
 | `npm run m2:evaluate` / `m2:package`                   | Re-derive evaluation outputs / produce the next versioned evidence archive for a completed sequence |
 | `npm run m2:rehearse`                                  | Self-verifying keyless rehearsal of the entire unattended pipeline, failure drills included         |
 | `npm run m2:pilot`                                     | Refusal stub until the pilot phase is authorized                                                    |
@@ -374,6 +446,7 @@ hashes pin the deterministic baseline byte-for-byte throughout.
 | 1.6.2   | Formal treatment change: the pinned upstream model and provider endpoint — which live only in git-ignored gateway configuration — change from `inclusionai/ling-2.6-flash` via `novita` to `google/gemini-2.5-flash-lite` via `google-ai-studio`, after the v1.1.0 live attempt was aborted under sustained rate limiting (model experiment advances to v1.2.0; the prompt, provider identity, condition, scenarios, thresholds, action system, and gateway behavior do not change) | [addendum](documentation/milestones/001-model-integration/reports/OPENROUTER_INTEGRATION_IMPLEMENTATION_REPORT.md) · [attempt record](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)                                                                                                    |
 | 1.7.0   | Milestone 2 Phase 2: the laboratory foundation (fingerprints, similarity, study registry, contract auditors, blinded review)                                                                                                                                                                                                                                                                                                                                                        | [brief](documentation/milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) · [scope ruling](documentation/milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md) · [report](documentation/milestones/002-sparse-cognition/phase-02-laboratory/MILESTONE_002_PHASE2_LABORATORY_REPORT.md) |
 | 1.8.0   | Milestone 2 Phase 3: the unattended experiment orchestrator with sealed, recoverable evidence packaging                                                                                                                                                                                                                                                                                                                                                                             | [report](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md) · [runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)                                                                                                                                                      |
+| 1.9.0   | Milestone 2 Phase 4: the M2 per-decision comparator condition and prompt (rationale and confidence become normalized diagnostics, never gates), the formal attempt profile with both registered study templates and the `m2:register` pinning ritual, and chunked Playwright tracing with evidence-size forecasting for multi-hour live runs                                                                                                                                        | [report](documentation/milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)                                                                                                                                                                                                                                     |
 
 One compatibility note: ledger exports are format version 2; version-1 files
 are rejected at import with an explicit error, never silently reinterpreted

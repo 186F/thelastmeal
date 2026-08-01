@@ -20,12 +20,13 @@ historical.
 
 | Field                    | Value                                                                                                                                                        |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Package version          | 1.8.0                                                                                                                                                        |
+| Package version          | 1.9.0                                                                                                                                                        |
 | Frozen scenario data     | `vs001-1.0.0` (never changes)                                                                                                                                |
 | Current milestone        | Milestone 2 — sparse cognition (`sparse-cognition-policy-001` v1.0.0)                                                                                        |
 | Last completed phase     | Phase 3 — unattended orchestrator (PR #13, merged 2026-07-31 at pinned head `cd50a96`, merge `eaa2393`, merged-`main` CI green)                              |
-| Next authorized work     | None — Phase 4 (per-decision comparator) is unlocked but **not started**; formal Phase 4 work awaits explicit authorization                                  |
-| Live model calls to date | Milestone 1 acceptance only; **no Milestone 2 live calls have been made** — evidentiary/live plans are refused until Phase 4 registers a formal profile      |
+| Current phase            | Phase 4 — per-decision comparator: **final targeted remediation complete — awaiting the Advisor's targeted verification** ([status](milestones/002-sparse-cognition/phase-04-per-decision/README.md)) |
+| Next authorized work     | The Advisor's targeted verification of the four final-remediation areas, then the PR #15 merge decision; Stage A registration and live execution are separately authorized after green merged-`main` CI |
+| Live model calls to date | Milestone 1 acceptance only; **no Milestone 2 live calls have been made** — evidentiary/live execution additionally requires the `m2:register` pinning ritual |
 | Controlling documents    | Milestone 2 brief + scope ruling (see Start here)                                                                                                            |
 
 ## 3. Document-status legend
@@ -51,7 +52,8 @@ historical.
 3. **Milestone 2 — sparse cognition** ([index](milestones/002-sparse-cognition/README.md)) —
    brief and scope ruling (PR #10) → Phase 2 laboratory foundation (1.7.0,
    PR #12) → Phase 3 unattended orchestrator (1.8.0, PR #13) → Phase 4
-   per-decision comparator (pending authorization). IN PROGRESS.
+   per-decision comparator (1.9.0, final targeted remediation complete —
+   awaiting the Advisor's targeted verification). IN PROGRESS.
 
 ## 5. Audit reading order
 

@@ -1,0 +1,73 @@
+{
+  "registryVersion": "study-registry-1.0.0",
+  "studyId": "m2-calibration-variance-a-001",
+  "studyVersion": "1.0.0",
+  "status": "calibration",
+  "researchQuestion": "How behaviorally different is Mara from herself under an identical observable configuration? (Scope ruling R2 section 4.1: the repeat-run variance baseline that gives the later biography-sensitivity comparison its within-condition scale.)",
+  "hypothesis": "No hypothesis: this is a calibration study (brief section 22.6), not an acceptance gate. Its outputs may inform threshold scaling only through explicit change control - a similarity-formula change requires a new metric version, a formal-threshold change requires a new M2 experiment version, and either requires a repeated pilot before formal data collection (section 22.6; ruling section 4.5).",
+  "repositorySha": "1111111111111111111111111111111111111111",
+  "packageVersion": "1.9.0",
+  "experimentId": "sparse-cognition-policy-001",
+  "experimentVersion": "1.0.0",
+  "conditionIds": ["mara-model-per-decision-m2-v1"],
+  "model": "google/gemini-2.5-flash-lite",
+  "provider": "google-ai-studio",
+  "promptVersions": ["mara-action-selection-m2-1.0.0"],
+  "scenarioIds": ["A"],
+  "seeds": [1001],
+  "sampleSizeN": 10,
+  "runOrderMethod": "plan-order",
+  "primaryMetrics": [
+    "pairwise-composite-similarity-matrix",
+    "composite-similarity-distribution",
+    "first-divergence-matched-decision",
+    "action-category-entropy",
+    "action-mode-entropy",
+    "category-transition-entropy",
+    "outcome-frequencies"
+  ],
+  "secondaryMetrics": [
+    "upstream-call-coverage",
+    "accepted-model-coverage",
+    "latency-distribution",
+    "token-distribution",
+    "rationale-normalization-frequency",
+    "returned-model-consistency",
+    "serving-provider-consistency"
+  ],
+  "metricVersions": {
+    "behavior-fingerprint": "behavior-fingerprint-1.0.0",
+    "behavior-similarity": "behavior-similarity-1.0.0",
+    "m2-calibration-variance-analysis": "m2-calibration-variance-analysis-1.0.0"
+  },
+  "analysisScriptVersion": "m2-calibration-variance-analysis-1.0.0",
+  "thresholds": {
+    "attemptProfileId": "m2-formal-attempt-profile",
+    "attemptProfileVersion": "1.0.0"
+  },
+  "exclusionRules": [
+    "Failed attempts remain in the evidence archive and do not count toward n (brief section 22.6).",
+    "Only strict-finalized, replay-exact runs passing the m2-formal-attempt-profile treatment thresholds are primary observations."
+  ],
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "notes": "One identical replacement per transient operational failure (brief section 24.2); a replacement failing for the same reason stops the sequence for investigation (section 24.5)."
+  },
+  "stopRule": "Fixed attempt set: stop when all ten planned primary attempts reach a terminal disposition, or immediately when a replacement fails for the same reason as the original (section 24.5).",
+  "liveCallBudget": 2400,
+  "executionSettings": {
+    "speed": 1,
+    "requestTimeoutMs": 20000,
+    "maxConcurrency": 1,
+    "maxCallsPerRun": 120,
+    "maxTotalCalls": 120
+  },
+  "outputRoot": "../thelastmeal-m2-sparse-cognition-001/calibration-variance-a",
+  "evidenceRetentionPolicy": "Retain everything (brief sections 19.12, 24.1, 25.3): every attempt directory including failures, all rotated Playwright trace chunks, gateway traces and sidecars, ledgers, bundles, finalized artifacts, and versioned evidence archives. Nothing is deleted, overwritten, or renamed. Formal live evidence stays local with independent durable backup, never in expiring CI artifacts.",
+  "registration": {
+    "registrationId": "calibration-variance-a",
+    "sourceBlobId": "5555555555555555555555555555555555555555",
+    "sourceSha256": "6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "stageAPrerequisiteSha256": "8888888888888888888888888888888888888888888888888888888888888888"
+}

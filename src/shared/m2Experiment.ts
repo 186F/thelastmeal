@@ -26,3 +26,33 @@ export const M2_POLICY_EXECUTOR_PROVIDER_ID = 'mara-policy-patch-executor-v1';
 
 export const M2_ACTION_PROMPT_VERSION = 'mara-action-selection-m2-1.0.0';
 export const M2_POLICY_PROMPT_VERSION = 'mara-policy-compiler-1.0.0';
+
+/** The M2 per-decision condition drives the same single treatment NPC as
+ * Milestone 1 (brief §9.2: Jonas and Rin stay deterministic). */
+export const M2_TARGET_NPC_ID = 'mara';
+
+/** The M2 action route rides the same pinned OpenRouter platform as
+ * Milestone 1 (brief §6.3: model/provider are runtime configuration, pinned
+ * in plans and manifests — the platform identity is code). */
+export const M2_UPSTREAM_PLATFORM = 'openrouter';
+
+/**
+ * Scenarios supported by the M2 per-decision condition — identical coverage
+ * to Milestone 1's condition (brief §9.2: "behaviorally equivalent in
+ * authority"). Scenario F stays part of the frozen deterministic experiment:
+ * provider failure is exercised through the real external failure
+ * lifecycle, never by rewiring F's scripted failure.
+ */
+export const M2_CONDITION_SCENARIOS = ['A', 'B1', 'B2', 'C', 'D', 'E'] as const;
+
+/**
+ * The fixed trace limit for the M2 revised diagnostic-output contract
+ * (brief §17.5; scope ruling R7 §9.1). Rationale longer than this is
+ * TRUNCATED into the noncanonical trace with `rationaleNormalized: true` —
+ * never a structural rejection. The value is deliberately larger than
+ * Milestone 1's 160-character structural cap (which caused seven live
+ * failures) while still bounding trace growth; per R7 the fix is
+ * normalization, not the bound itself, so local acceptance never trusts
+ * any upstream-declared length.
+ */
+export const M2_RATIONALE_TRACE_MAX_CHARS = 600;

@@ -32,12 +32,10 @@ import { validateLedgerFile } from '../../src/sim/replay/validateLedger';
 import { externalDecisionRequestEnvelopeSchema } from '../../src/sim/decisions/externalSchemas';
 import { externalContextHash } from '../../src/sim/decisions/externalContext';
 import {
-  EXTERNAL_MARA_PROVIDER_ID,
-  MODEL_CONDITION_ID,
-  MODEL_EXPERIMENT_ID,
-  MODEL_EXPERIMENT_VERSION,
-  MODEL_PROMPT_VERSION,
-} from '../../src/shared/modelExperiment';
+  contractForCondition,
+  requireContractForCondition,
+} from '../../src/shared/conditionContract';
+import { MODEL_CONDITION_ID } from '../../src/shared/modelExperiment';
 import { computeInfraMetrics } from '../../gateway/metrics/runMetrics';
 import type { ModelTraceEntry } from '../../gateway/tracing/modelTraceWriter';
 import {
@@ -527,19 +525,32 @@ export function finalizeRunDirectory(
   const scenarioId: string = seed.scenarioId;
 
   if (seed.runId !== runId) contra(`run-manifest.json runId '${seed.runId}' != '${runId}'`);
-  if (seed.experimentId !== MODEL_EXPERIMENT_ID) {
-    contra(`run-manifest.json experimentId '${seed.experimentId}' != '${MODEL_EXPERIMENT_ID}'`);
+  // The run's registered contract (Phase 4): the manifest's conditionId
+  // selects it, and EVERY other identity field must agree with that
+  // registered pairing — an unregistered condition or any cross-field
+  // mixture is a contradiction. The orchestrator separately verifies the
+  // finalized manifest against the reviewed plan's expected treatment, so a
+  // run cannot pass by being merely self-consistent under the WRONG
+  // condition.
+  const runContract = contractForCondition(seed.conditionId);
+  if (runContract === null) {
+    contra(
+      `run-manifest.json conditionId '${seed.conditionId}' is not a registered model-backed condition`,
+    );
   }
-  if (seed.experimentVersion !== MODEL_EXPERIMENT_VERSION) {
+  const expectedIdentity = runContract ?? requireContractForCondition(MODEL_CONDITION_ID);
+  if (seed.experimentId !== expectedIdentity.experimentId) {
+    contra(
+      `run-manifest.json experimentId '${seed.experimentId}' != '${expectedIdentity.experimentId}'`,
+    );
+  }
+  if (seed.experimentVersion !== expectedIdentity.experimentVersion) {
     contra(`run-manifest.json experimentVersion '${seed.experimentVersion}' is not pinned`);
   }
-  if (seed.conditionId !== MODEL_CONDITION_ID) {
-    contra(`run-manifest.json conditionId '${seed.conditionId}' != '${MODEL_CONDITION_ID}'`);
-  }
-  if (seed.externalProviderId !== EXTERNAL_MARA_PROVIDER_ID) {
+  if (seed.externalProviderId !== expectedIdentity.providerId) {
     contra(`run-manifest.json externalProviderId '${seed.externalProviderId}' is not pinned`);
   }
-  if (seed.promptVersion !== MODEL_PROMPT_VERSION) {
+  if (seed.promptVersion !== expectedIdentity.promptVersion) {
     contra(`run-manifest.json promptVersion '${seed.promptVersion}' is not pinned`);
   }
   if (ledger.scenario.id !== scenarioId) {
@@ -637,19 +648,19 @@ export function finalizeRunDirectory(
     if (handoff.scenarioId !== scenarioId) {
       contra(`handoff scenarioId '${handoff.scenarioId}' != '${scenarioId}'`);
     }
-    if (handoff.experimentId !== MODEL_EXPERIMENT_ID) {
+    if (handoff.experimentId !== expectedIdentity.experimentId) {
       contra(`handoff experimentId '${handoff.experimentId}' is not pinned`);
     }
-    if (handoff.experimentVersion !== MODEL_EXPERIMENT_VERSION) {
+    if (handoff.experimentVersion !== expectedIdentity.experimentVersion) {
       contra(`handoff experimentVersion '${handoff.experimentVersion}' is not pinned`);
     }
-    if (handoff.conditionId !== MODEL_CONDITION_ID) {
+    if (handoff.conditionId !== expectedIdentity.conditionId) {
       contra(`handoff conditionId '${handoff.conditionId}' is not pinned`);
     }
-    if (handoff.providerId !== EXTERNAL_MARA_PROVIDER_ID) {
+    if (handoff.providerId !== expectedIdentity.providerId) {
       contra(`handoff providerId '${handoff.providerId}' is not pinned`);
     }
-    if (handoff.promptVersion !== MODEL_PROMPT_VERSION) {
+    if (handoff.promptVersion !== expectedIdentity.promptVersion) {
       contra(`handoff promptVersion '${handoff.promptVersion}' is not pinned`);
     }
     if (handoff.worldStateHash !== null && handoff.worldStateHash !== ledger.worldStateHash) {
@@ -701,13 +712,13 @@ export function finalizeRunDirectory(
       if (envelope.runId !== runId) {
         contra(`client envelope ${requestId} runId '${envelope.runId}' != '${runId}'`);
       }
-      if (envelope.conditionId !== MODEL_CONDITION_ID) {
+      if (envelope.conditionId !== expectedIdentity.conditionId) {
         contra(`client envelope ${requestId} conditionId '${envelope.conditionId}' is not pinned`);
       }
-      if (envelope.providerId !== EXTERNAL_MARA_PROVIDER_ID) {
+      if (envelope.providerId !== expectedIdentity.providerId) {
         contra(`client envelope ${requestId} providerId '${envelope.providerId}' is not pinned`);
       }
-      if (envelope.promptVersion !== MODEL_PROMPT_VERSION) {
+      if (envelope.promptVersion !== expectedIdentity.promptVersion) {
         contra(
           `client envelope ${requestId} promptVersion '${envelope.promptVersion}' is not pinned`,
         );

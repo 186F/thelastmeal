@@ -147,16 +147,73 @@ export async function runCli(argv: readonly string[]): Promise<number> {
       );
       return 0;
     }
+    case 'register': {
+      const registrationId = readOption(rest, 'registration');
+      const outDir = readOption(rest, 'out');
+      const stageARoot = readOption(rest, 'stage-a');
+      if (!registrationId || !outDir) {
+        console.error(
+          'usage: m2:register -- --registration <stage-a|calibration-variance-a> ' +
+            '--out <dir-outside-repo> [--stage-a <verified Stage A sequence root>] ' +
+            '[--stage-a-drill]',
+        );
+        return 1;
+      }
+      const { registerFromRegistry } = await import('./register');
+      const result = await registerFromRegistry({
+        repoRoot,
+        registrationId,
+        outDir,
+        stageARoot: stageARoot ?? undefined,
+        // Keyless drills only; recorded in the registration provenance.
+        allowFakeStageAForDrill: hasFlag(rest, 'stage-a-drill'),
+      });
+      console.log(
+        `m2:register — '${result.registrationId}' registered at HEAD ${result.headSha}\n` +
+          `  study: ${result.registeredStudyPath}\n` +
+          `    sha256 ${result.studySha256}\n` +
+          `    configFingerprint ${result.studyConfigFingerprint}\n` +
+          `  plan:  ${result.registeredPlanPath}\n` +
+          `    sha256 ${result.planSha256}\n` +
+          `  provenance: ${result.provenancePath} (sha256 ${result.provenanceSha256})\n` +
+          (result.stageAPrerequisiteSha256
+            ? `  stage-a prerequisite sha256: ${result.stageAPrerequisiteSha256}\n`
+            : '') +
+          `Launch with m2:orchestrate -- --plan <registered plan path>. No run was started.`,
+      );
+      return 0;
+    }
+    case 'analyze': {
+      const sequenceRoot = readOption(rest, 'sequence');
+      if (!sequenceRoot) {
+        console.error('usage: m2:analyze -- --sequence <completed-sequence-root> [--out <dir>]');
+        return 1;
+      }
+      const root = resolve(repoRoot, sequenceRoot);
+      const outOption = readOption(rest, 'out');
+      const outputDir = outOption
+        ? resolve(repoRoot, outOption)
+        : join(`${root}.derived`, 'm2-calibration-variance-analysis-1.0.0');
+      const { writeCalibrationAnalysis } = await import('../../evaluation/calibrationVariance');
+      const { report, jsonPath, markdownPath } = await writeCalibrationAnalysis(root, outputDir);
+      console.log(
+        `m2:analyze — ${report.analysisVersion}: ${report.runCount} primary run(s), ` +
+          `${report.pairs.length} pair(s), median composite ` +
+          `${report.compositeSimilarityDistribution.medianMilli / 1000} bp\n` +
+          `  ${jsonPath}\n  ${markdownPath}`,
+      );
+      return 0;
+    }
     case 'pilot': {
       console.error(
-        'm2:pilot is not runnable in Phase 3: the pilot (brief §31 Phase 7, after the Phase 6 adversarial audit) requires the M2 ' +
-          'per-decision condition (Phase 4) and the policy system (Phase 5). This command exists ' +
+        'm2:pilot is not runnable in Phase 4: the pilot (brief §31 Phase 7, after the Phase 6 adversarial audit) requires ' +
+          'the policy system (Phase 5). This command exists ' +
           'so the §19.2 surface is stable; it will gain a plan when Phase 7 is authorized.',
       );
       return 1;
     }
     default:
-      console.error('usage: m2 <orchestrate|evaluate|package|pilot> …');
+      console.error('usage: m2 <orchestrate|evaluate|package|register|pilot> …');
       return 1;
   }
 }

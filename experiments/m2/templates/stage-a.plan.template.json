@@ -1,0 +1,76 @@
+{
+  "planSchemaVersion": "m2-orchestrator-plan-1.1.0",
+  "sequenceId": "m2-stage-a-acceptance",
+  "description": "Stage A of the staged unattended acceptance (brief section 19.16): Run 1 Scenario A deterministic baseline with the gateway off, Run 2 Scenario A M2 per-decision with the live gateway. Registered from this template at an exact merged SHA via m2:register; never runnable with the template sentinel pins.",
+  "evidentiary": true,
+  "outputRoot": "../thelastmeal-m2-sparse-cognition-001/stage-a",
+  "repositorySha": "1111111111111111111111111111111111111111",
+  "attempts": [
+    {
+      "attemptId": "stage-a-baseline",
+      "scenarioId": "A",
+      "conditionId": "deterministic-baseline-v1",
+      "speed": 1,
+      "gatewayMode": "off"
+    },
+    {
+      "attemptId": "stage-a-per-decision",
+      "scenarioId": "A",
+      "conditionId": "mara-model-per-decision-m2-v1",
+      "speed": 1,
+      "gatewayMode": "live",
+      "maxCallsPerRun": 120,
+      "maxTotalCalls": 120,
+      "requestTimeoutMs": 20000,
+      "maxConcurrency": 1
+    }
+  ],
+  "attemptProfile": {
+    "profileId": "m2-formal-attempt-profile",
+    "profileVersion": "1.0.0"
+  },
+  "expectedTreatment": {
+    "modelId": "google/gemini-2.5-flash-lite",
+    "servingProviderId": "google-ai-studio",
+    "allowFallbacks": false,
+    "requireParameters": true,
+    "promptVersion": "mara-action-selection-m2-1.0.0",
+    "conditionId": "mara-model-per-decision-m2-v1",
+    "experimentId": "sparse-cognition-policy-001",
+    "experimentVersion": "1.0.0"
+  },
+  "study": {
+    "studyId": "m2-stage-a-acceptance-001",
+    "studyVersion": "1.0.0",
+    "studyPlanPath": "TEMPLATES-REGISTER-STUDY-PATH",
+    "studyPlanSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "studyConfigFingerprint": "3333333333333333"
+  },
+  "replacementPolicy": {
+    "maxReplacementAttempts": 1,
+    "retryableFailureClasses": [
+      "run-timeout",
+      "simulation-stall",
+      "browser-error",
+      "gateway-not-connected",
+      "gateway-launch-failed",
+      "interrupted"
+    ]
+  },
+  "liveCallBudget": 240,
+  "timeouts": {
+    "runTimeoutMs": 4500000,
+    "stallTimeoutMs": 120000,
+    "stallGraceMs": 30000,
+    "heartbeatIntervalMs": 60000
+  },
+  "postSequenceBatch": true,
+  "tracing": {
+    "chunkIntervalMs": 600000
+  },
+  "registration": {
+    "registrationId": "stage-a",
+    "provenancePath": "registration-provenance.json",
+    "provenanceSha256": "7777777777777777777777777777777777777777777777777777777777777777"
+  }
+}

@@ -5,7 +5,7 @@ import { mountGlobalPanel } from '../ui/globalPanel';
 import { mountInspector } from '../ui/inspector';
 import { mountModelPanel } from '../ui/modelPanel';
 import { downloadTextFile } from '../ui/fileIO';
-import { MODEL_CONDITION_ID } from '../shared/modelExperiment';
+import { isModelBackedConditionId } from '../shared/conditionContract';
 import { ViewStore } from './store';
 import { WorkerClient } from './workerClient';
 import { ModelGatewayClient } from './modelGatewayClient';
@@ -26,6 +26,10 @@ const client = new WorkerClient(store, downloadTextFile);
 const gateway = new ModelGatewayClient({
   baseUrl:
     (import.meta.env.VITE_MODEL_GATEWAY_URL as string | undefined) ?? 'http://localhost:8787',
+  // The client's pins, envelopes, and request filter follow the SELECTED
+  // model-backed condition (Phase 4): M1 and M2 per-decision conditions each
+  // carry their registered experiment/provider/prompt pairing.
+  activeConditionId: () => store.state.selectedConditionId,
   submitResponse: (response) => client.submitDecisionResponse(response),
   submitFailure: (failure) => client.submitDecisionFailure(failure),
   onStatus: (status) =>
@@ -35,12 +39,12 @@ const gateway = new ModelGatewayClient({
 });
 client.onRunReset = () => {
   gateway.newRun();
-  if (store.state.selectedConditionId === MODEL_CONDITION_ID) void gateway.connect();
+  if (isModelBackedConditionId(store.state.selectedConditionId)) void gateway.connect();
 };
 client.onDecisionRequest = (request) => {
   // Baseline conditions never call the gateway; the client additionally
-  // filters to Mara's registered external provider.
-  if (store.state.selectedConditionId === MODEL_CONDITION_ID) {
+  // filters to the active condition's registered NPC and provider.
+  if (isModelBackedConditionId(store.state.selectedConditionId)) {
     gateway.handleDecisionRequest(request);
   }
 };

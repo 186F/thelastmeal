@@ -2,16 +2,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { GatewayConfig } from './config';
 import { DEFAULT_MAX_TOTAL_CALLS, publicConfig } from './config';
 import {
-  EXTERNAL_MARA_PROVIDER_ID,
   EXTERNAL_REQUEST_SCHEMA_VERSION,
   MODEL_CONDITION_ID,
-  MODEL_EXPERIMENT_VERSION,
-  MODEL_TARGET_NPC_ID,
   externalContextHash,
   externalDecisionRequestEnvelopeSchema,
   type ExternalDecisionRequestEnvelope,
   type GatewayDecisionResult,
 } from './schemas';
+import { requireContractForCondition } from '../src/shared/conditionContract';
 import {
   MODEL_TRACE_SCHEMA_VERSION,
   RAW_MODEL_OUTPUT_MAX_CHARS,
@@ -24,11 +22,16 @@ import {
   type ModelDecisionAdapter,
 } from './adapters/modelDecisionAdapter';
 import {
-  PROMPT_VERSION,
   SYSTEM_INSTRUCTION,
   buildModelChoiceJsonSchema,
   buildUserContent,
 } from './prompts/maraActionSelection';
+import {
+  M2_SYSTEM_INSTRUCTION,
+  buildM2ChoiceJsonSchema,
+  buildM2UserContent,
+} from './prompts/maraActionSelectionM2';
+import { M2_CONFIDENCE_COMPATIBILITY_VALUE, parseM2Choice } from './adapters/m2DecisionContract';
 import type { ModelTraceWriter } from './tracing/modelTraceWriter';
 import type { ExternalFailureCode } from '../src/shared/decisionContracts';
 
@@ -60,6 +63,18 @@ type IdempotencyRecord = { contextHash: string } & (
   | { status: 'in-flight'; promise: Promise<TerminalResult> }
   | { status: 'done'; result: TerminalResult }
 );
+
+/** What the trace row records about an ACCEPTED choice, unified across the
+ * two diagnostic contracts. Under the frozen M1 contract confidence and
+ * rationale are the structural values (no flag); under the M2 contract they
+ * are the NORMALIZED diagnostics and `rationaleNormalized` is always set. */
+interface TraceChoice {
+  selectedAffordanceId: string;
+  reasonCode: string;
+  confidenceBp: number | null;
+  rationale: string | null;
+  rationaleNormalized?: boolean;
+}
 
 interface RunBudgetState {
   calls: number;
@@ -99,6 +114,10 @@ export function createGateway(
   adapter: ModelDecisionAdapter,
   trace: ModelTraceWriter,
 ): GatewayInstance {
+  // One gateway process serves exactly one registered condition pairing
+  // (Phase 4). Absent configuration means the frozen Milestone 1 condition,
+  // so every pre-Phase-4 caller behaves byte-identically.
+  const served = requireContractForCondition(config.servedConditionId ?? MODEL_CONDITION_ID);
   let inFlight = 0;
   let totalCalls = 0;
   const maxTotalCalls = config.maxTotalCalls ?? DEFAULT_MAX_TOTAL_CALLS;
@@ -150,13 +169,7 @@ export function createGateway(
   }
 
   function publicView(): Record<string, unknown> {
-    return publicConfig(
-      config,
-      EXTERNAL_MARA_PROVIDER_ID,
-      PROMPT_VERSION,
-      EXTERNAL_REQUEST_SCHEMA_VERSION,
-      MODEL_EXPERIMENT_VERSION,
-    );
+    return publicConfig(config, EXTERNAL_REQUEST_SCHEMA_VERSION);
   }
 
   async function handleDecision(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -195,10 +208,10 @@ export function createGateway(
     const envelope = parsed.data as ExternalDecisionRequestEnvelope;
 
     if (
-      envelope.providerId !== EXTERNAL_MARA_PROVIDER_ID ||
-      envelope.request.npcId !== MODEL_TARGET_NPC_ID ||
-      envelope.conditionId !== MODEL_CONDITION_ID ||
-      envelope.promptVersion !== PROMPT_VERSION
+      envelope.providerId !== served.providerId ||
+      envelope.request.npcId !== served.targetNpcId ||
+      envelope.conditionId !== served.conditionId ||
+      envelope.promptVersion !== served.promptVersion
     ) {
       json(res, 400, { error: 'unregistered-request' });
       return;
@@ -308,25 +321,64 @@ export function createGateway(
     const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
     try {
       const offeredIds = envelope.request.offeredAffordanceIds;
+      const m2Contract = served.diagnosticContract === 'm2-normalized';
       const adapterResult = await adapter.decide(
         {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          userContent: buildUserContent(envelope),
-          outputJsonSchema: buildModelChoiceJsonSchema(offeredIds),
+          systemInstruction: m2Contract ? M2_SYSTEM_INSTRUCTION : SYSTEM_INSTRUCTION,
+          userContent: m2Contract ? buildM2UserContent(envelope) : buildUserContent(envelope),
+          outputJsonSchema: m2Contract
+            ? buildM2ChoiceJsonSchema(offeredIds)
+            : buildModelChoiceJsonSchema(offeredIds),
           offeredAffordanceIds: offeredIds,
         },
         controller.signal,
       );
-      const choiceParsed = modelChoiceSchema(offeredIds).safeParse(adapterResult.choice);
-      if (!choiceParsed.success) {
-        return failureResult(
-          'invalid-model-output',
-          false,
-          adapterResult.meta,
-          adapterResult.rawOutput ?? JSON.stringify(adapterResult.choice),
-        );
+      let traceChoice: TraceChoice;
+      let responseConfidenceBp: number;
+      if (m2Contract) {
+        // Revised diagnostic-output contract (§17.5): structural fields
+        // gate; rationale and confidence are normalized diagnostics. The
+        // response's required confidenceBp compatibility field carries the
+        // self-reported claim when present, else a fixed neutral constant —
+        // diagnostic only, never consulted by any control path.
+        const parsedChoice = parseM2Choice(adapterResult.choice, offeredIds);
+        if (!parsedChoice.ok) {
+          return failureResult(
+            'invalid-model-output',
+            false,
+            adapterResult.meta,
+            adapterResult.rawOutput ?? JSON.stringify(adapterResult.choice),
+          );
+        }
+        const normalized = parsedChoice.choice;
+        traceChoice = {
+          selectedAffordanceId: normalized.selectedAffordanceId,
+          reasonCode: normalized.reasonCode,
+          confidenceBp: normalized.selfReportedConfidenceBp,
+          rationale: normalized.rationale,
+          rationaleNormalized: normalized.rationaleNormalized,
+        };
+        responseConfidenceBp =
+          normalized.selfReportedConfidenceBp ?? M2_CONFIDENCE_COMPATIBILITY_VALUE;
+      } else {
+        const choiceParsed = modelChoiceSchema(offeredIds).safeParse(adapterResult.choice);
+        if (!choiceParsed.success) {
+          return failureResult(
+            'invalid-model-output',
+            false,
+            adapterResult.meta,
+            adapterResult.rawOutput ?? JSON.stringify(adapterResult.choice),
+          );
+        }
+        const choice = choiceParsed.data as ModelChoice;
+        traceChoice = {
+          selectedAffordanceId: choice.selectedAffordanceId,
+          reasonCode: choice.reasonCode,
+          confidenceBp: choice.confidenceBp,
+          rationale: choice.rationale,
+        };
+        responseConfidenceBp = choice.confidenceBp;
       }
-      const choice = choiceParsed.data as ModelChoice;
       const result: GatewayDecisionResult = {
         outcome: 'response',
         response: {
@@ -335,9 +387,9 @@ export function createGateway(
           npcId: envelope.request.npcId,
           scenarioId: envelope.request.scenarioId,
           providerId: envelope.providerId,
-          selectedAffordanceId: choice.selectedAffordanceId,
-          confidenceBp: choice.confidenceBp,
-          reasonCode: choice.reasonCode,
+          selectedAffordanceId: traceChoice.selectedAffordanceId,
+          confidenceBp: responseConfidenceBp,
+          reasonCode: traceChoice.reasonCode,
           scores: [],
         },
         usage: {
@@ -349,7 +401,7 @@ export function createGateway(
       writeTrace(
         envelope,
         'response',
-        choice,
+        traceChoice,
         adapterResult.meta,
         null,
         Date.now() - startedAt,
@@ -418,7 +470,7 @@ export function createGateway(
   function writeTrace(
     envelope: ExternalDecisionRequestEnvelope,
     gatewayOutcome: 'response' | ExternalFailureCode,
-    choice: ModelChoice | null,
+    choice: TraceChoice | null,
     meta: ModelChoiceMeta | null,
     rawOutput: string | null,
     latencyMs: number,
@@ -446,6 +498,16 @@ export function createGateway(
       reasonCode: choice?.reasonCode ?? null,
       confidenceBp: choice?.confidenceBp ?? null,
       rationale: choice?.rationale ?? null,
+      // Present exactly when the row was written under the M2 normalized
+      // contract; Milestone 1 rows stay byte-identical to pre-Phase-4. The
+      // confidence claim additionally appears under its ruling-required
+      // explicit name (R7 §9.2: selfReportedConfidenceBp, diagnostic only).
+      ...(choice?.rationaleNormalized !== undefined
+        ? {
+            rationaleNormalized: choice.rationaleNormalized,
+            selfReportedConfidenceBp: choice.confidenceBp,
+          }
+        : {}),
       rawModelOutput:
         keepRaw && rawOutput !== null ? rawOutput.slice(0, RAW_MODEL_OUTPUT_MAX_CHARS) : null,
       inputTokens: meta?.inputTokens ?? null,

@@ -3,8 +3,14 @@ import { createHash } from 'node:crypto';
 import { SCENARIO_IDS } from '../../../src/shared/ids';
 import { AUTOMATION_SPEEDS } from '../../../src/shared/automationContract';
 import { MODEL_CONDITION_SCENARIOS } from '../../../src/shared/modelExperiment';
+import { M2_CONDITION_SCENARIOS } from '../../../src/shared/m2Experiment';
+import {
+  contractForCondition,
+  isModelBackedConditionId,
+} from '../../../src/shared/conditionContract';
 import { RETRYABLE_ELIGIBLE_FAILURE_CLASSES } from './failureTaxonomy';
 import { getAttemptProfile, type AttemptProfile } from './attemptProfile';
+import { registrationEntry } from './registrationRegistry';
 
 /**
  * Orchestrator plan schema (M2 brief §19). A plan is the complete,
@@ -14,17 +20,20 @@ import { getAttemptProfile, type AttemptProfile } from './attemptProfile';
  * orchestrator records the plan's byte-exact sha256 into the sequence state
  * and refuses to resume under a different plan (§19.11).
  *
- * Phase 3 scope: the deterministic baseline and the Milestone 1 per-decision
- * condition only. The M2 conditions arrive in Phases 4–5 and extend the
- * condition enum THERE, never here retroactively.
+ * Phase 3 scope was the deterministic baseline and the Milestone 1
+ * per-decision condition. Phase 4 adds the M2 per-decision condition
+ * (`mara-model-per-decision-m2-v1`); the policy-patch condition arrives in
+ * Phase 5, never retroactively.
  */
 
 export const PLAN_SCHEMA_VERSION = 'm2-orchestrator-plan-1.1.0';
 
-/** Conditions the Phase 3 harness may drive (R1: existing paths only). */
+/** Conditions the harness may drive: the Phase 3 pair plus the Phase 4 M2
+ * per-decision comparator. */
 export const ORCHESTRATABLE_CONDITION_IDS = [
   'deterministic-baseline-v1',
   'mara-model-per-decision-v1',
+  'mara-model-per-decision-m2-v1',
 ] as const;
 
 const nonEmpty = z.string().min(1);
@@ -122,13 +131,13 @@ export const plannedAttemptSchema = z
         message: 'baseline-attempt-must-run-gateway-off',
       });
     }
-    if (attempt.conditionId === 'mara-model-per-decision-v1' && attempt.gatewayMode === 'off') {
+    if (isModelBackedConditionId(attempt.conditionId) && attempt.gatewayMode === 'off') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'model-attempt-requires-a-gateway',
       });
     }
-    // The app refuses the model condition outside its registered scenarios
+    // The app refuses a model condition outside its registered scenarios
     // (silently degrading to baseline); a plan must fail STATICALLY, never
     // at attempt time in an unattended run.
     if (
@@ -138,6 +147,15 @@ export const plannedAttemptSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `scenario-not-in-model-condition:${attempt.scenarioId}`,
+      });
+    }
+    if (
+      attempt.conditionId === 'mara-model-per-decision-m2-v1' &&
+      !(M2_CONDITION_SCENARIOS as readonly string[]).includes(attempt.scenarioId)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `scenario-not-in-m2-condition:${attempt.scenarioId}`,
       });
     }
     if (attempt.gatewayStopAtTick !== undefined && attempt.gatewayMode === 'off') {
@@ -213,6 +231,41 @@ export const orchestratorPlanSchema = z
      * execution; exceeding it fails the sequence as
      * `evidence-budget-exceeded`. Defaults to the orchestrator constant. */
     evidenceSizeBudgetBytes: positiveInt.optional(),
+    /** Playwright trace-chunk rotation cadence (Phase 4, focused re-audit
+     * §8.2): bounds the open trace on multi-hour 1× attempts and feeds the
+     * evidence forecaster. Minimum one minute; defaults to the driver
+     * constant (10 minutes). All chunks are retained. */
+    tracing: z
+      .object({
+        chunkIntervalMs: z.number().int().min(60_000),
+      })
+      .strict()
+      .optional(),
+    /** Git-authenticated registration binding (Phase 4 audit findings 2
+     * and 3; final targeted remediation C), stamped by m2:register: the
+     * closed registration id, the SHA-256 of the registration-provenance
+     * record (which carries both source templates' blob ids and
+     * committed-byte hashes at the pinned HEAD), the provenance record's
+     * path RELATIVE TO THE PLAN FILE (so moving the create-once
+     * registration directory keeps its internal references intact), and —
+     * for the calibration plan — the SHA-256 and relative path of the
+     * verified Stage A prerequisite record. Part of the plan config
+     * fingerprint, so it joins the resume identity and every freeze
+     * checkpoint. MANDATORY for every evidentiary or live formal plan:
+     * no authenticated registration → no formal launch. */
+    registration: z
+      .object({
+        registrationId: nonEmpty,
+        provenanceSha256: z.string().regex(/^[0-9a-f]{64}$/),
+        provenancePath: nonEmpty,
+        stageAPrerequisiteSha256: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional(),
+        stageAPrerequisitePath: nonEmpty.optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((plan, ctx) => {
@@ -277,14 +330,131 @@ export const orchestratorPlanSchema = z
         });
       }
     }
-    const hasModelAttempt = plan.attempts.some(
-      (attempt) => attempt.conditionId === 'mara-model-per-decision-v1',
-    );
+    // Final targeted remediation C (§5.2): no authenticated registration →
+    // no formal launch. Every evidentiary plan and every plan with a live
+    // attempt must carry a registration naming a CLOSED-REGISTRY entry
+    // whose study, sequence, profile, and treatment pins all match.
+    const anyLiveAttempt = plan.attempts.some((attempt) => attempt.gatewayMode === 'live');
+    if (plan.evidentiary || anyLiveAttempt) {
+      if (plan.registration === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'formal-plan-requires-registration: evidentiary or live plans launch only from m2:register output',
+        });
+      }
+    }
+    if (plan.registration !== undefined) {
+      const entry = registrationEntry(plan.registration.registrationId);
+      if (entry === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `registration-unknown-id:${plan.registration.registrationId}`,
+        });
+      } else {
+        if (plan.sequenceId !== entry.expectedSequenceId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `registration-sequence-mismatch:${plan.sequenceId}!=${entry.expectedSequenceId}`,
+          });
+        }
+        if (plan.study !== undefined && plan.study.studyId !== entry.studyId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `registration-study-mismatch:${plan.study.studyId}!=${entry.studyId}`,
+          });
+        }
+        if (
+          plan.attemptProfile.profileId !== entry.attemptProfile.profileId ||
+          plan.attemptProfile.profileVersion !== entry.attemptProfile.profileVersion
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'registration-profile-mismatch',
+          });
+        }
+        if (plan.expectedTreatment !== undefined) {
+          const pins = entry.expectedTreatment;
+          if (
+            plan.expectedTreatment.conditionId !== pins.conditionId ||
+            plan.expectedTreatment.modelId !== pins.modelId ||
+            plan.expectedTreatment.servingProviderId !== pins.servingProviderId ||
+            plan.expectedTreatment.promptVersion !== pins.promptVersion
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'registration-treatment-mismatch: plan expected treatment differs from the registry pins',
+            });
+          }
+        }
+        if (entry.stageAPrerequisiteRequired) {
+          if (
+            plan.registration.stageAPrerequisiteSha256 === undefined ||
+            plan.registration.stageAPrerequisitePath === undefined
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'registration-stage-a-prerequisite-missing: calibration launches require the verified Stage A record',
+            });
+          }
+        } else if (
+          plan.registration.stageAPrerequisiteSha256 !== undefined ||
+          plan.registration.stageAPrerequisitePath !== undefined
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'registration-stage-a-prerequisite-unexpected',
+          });
+        }
+      }
+    }
+    const modelConditionIds = [
+      ...new Set(
+        plan.attempts
+          .map((attempt) => attempt.conditionId)
+          .filter((conditionId) => isModelBackedConditionId(conditionId)),
+      ),
+    ];
+    if (modelConditionIds.length > 1) {
+      // One sequence, one treatment (Phase 4): a plan mixing model-backed
+      // conditions would need two expected treatments, two gateway pairings,
+      // and two experiment identities in one resume identity. Mixed formal
+      // designs arrive with the Phase 5+ paired plans, reviewed then.
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `plan-mixes-model-conditions:${modelConditionIds.join(',')}`,
+      });
+    }
+    const hasModelAttempt = modelConditionIds.length > 0;
     if (hasModelAttempt && plan.expectedTreatment === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'model-attempts-require-expected-treatment',
       });
+    }
+    if (hasModelAttempt && plan.expectedTreatment !== undefined) {
+      // The reviewed treatment must name the PLAN's model condition and that
+      // condition's registered experiment/prompt pairing — a plan whose
+      // treatment block contradicts the condition registry fails statically.
+      const contract = contractForCondition(modelConditionIds[0]!);
+      if (contract !== null) {
+        const treatment = plan.expectedTreatment;
+        const mismatches: string[] = [];
+        if (treatment.conditionId !== contract.conditionId) mismatches.push('conditionId');
+        if (treatment.experimentId !== contract.experimentId) mismatches.push('experimentId');
+        if (treatment.experimentVersion !== contract.experimentVersion) {
+          mismatches.push('experimentVersion');
+        }
+        if (treatment.promptVersion !== contract.promptVersion) mismatches.push('promptVersion');
+        if (mismatches.length > 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `expected-treatment-contradicts-condition-contract:${mismatches.join(',')}`,
+          });
+        }
+      }
     }
     if (
       plan.attempts.some((attempt) => attempt.gatewayStopAtTick !== undefined) &&

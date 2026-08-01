@@ -5,11 +5,8 @@ import type {
   ExternalDecisionRequest,
 } from '../shared/decisionContracts';
 import { externalDecisionRequestSchema } from '../sim/decisions/externalSchemas';
-import {
-  BASELINE_CONDITION_ID,
-  MODEL_CONDITION_ID,
-  MODEL_CONDITION_SCENARIOS,
-} from '../shared/modelExperiment';
+import { BASELINE_CONDITION_ID } from '../shared/modelExperiment';
+import { contractForCondition } from '../shared/conditionContract';
 import type { ScenarioId } from '../shared/ids';
 import {
   workerEventsResponseSchema,
@@ -87,11 +84,12 @@ export class WorkerClient {
     this.onRunReset?.();
     this.expectedRunSeq += 1;
     let conditionId = this.store.state.selectedConditionId;
-    // A scenario the model condition refuses (Scenario F stays part of the
-    // frozen deterministic experiment) silently degrades the SELECTION to the
-    // baseline so the UI and the worker can never desynchronize on a
-    // rejected load.
-    if (conditionId === MODEL_CONDITION_ID && !MODEL_CONDITION_SCENARIOS.includes(id)) {
+    // A scenario the selected model-backed condition refuses (Scenario F
+    // stays part of the frozen deterministic experiment) silently degrades
+    // the SELECTION to the baseline so the UI and the worker can never
+    // desynchronize on a rejected load.
+    const selectedContract = contractForCondition(conditionId);
+    if (selectedContract !== null && !selectedContract.scenarios.includes(id)) {
       conditionId = BASELINE_CONDITION_ID;
       this.store.update((s) => {
         s.selectedConditionId = BASELINE_CONDITION_ID;

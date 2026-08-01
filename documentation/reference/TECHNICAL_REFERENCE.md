@@ -6,7 +6,7 @@ technical statements were moved here **unchanged in meaning**. Milestone-level
 detail lives in the briefs and reports under `documentation/` (see the
 README's documentation map).
 
-Implementation release: **1.8.0**. Frozen experiment identity: **Vertical
+Implementation release: **1.9.0**. Frozen experiment identity: **Vertical
 Slice 001 — v1.0**, configuration version `vs001-1.0.0` (frozen identifiers
 never change with the package).
 
@@ -579,6 +579,36 @@ lists are recorded here.
   packaging-recovery drills; `m2:resume` is `m2:orchestrate -- --resume`
   (report:
   [`MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md`](../milestones/002-sparse-cognition/phase-03-orchestrator/MILESTONE_002_PHASE3_ORCHESTRATOR_REPORT.md)).
+- **Phase 4 — M2 per-decision comparator (release 1.9.0, brief §31
+  Phase 4):** the registered condition-contract registry
+  (`src/shared/conditionContract.ts`) pairing each model-backed condition
+  with its complete experiment/provider/prompt identity and diagnostic
+  contract; the `mara-model-per-decision-m2-v1` condition under
+  `sparse-cognition-policy-001` v1.0.0 with the new
+  `mara-action-selection-m2-1.0.0` prompt and the §17.5 revised
+  diagnostic-output contract (rationale and self-reported confidence are
+  normalized diagnostics — `rationaleNormalized` and
+  `selfReportedConfidenceBp` are additive optional trace fields on M2 rows;
+  trace schema v2 unchanged); one gateway process serves one pairing
+  (nonsecret `MODEL_GATEWAY_CONDITION_ID`); the condition-aware finalizer;
+  the registered `m2-formal-attempt-profile` (§23.2 ≥ 90% upstream
+  completion, §24.2 one replacement); tracked study/plan TEMPLATES with the
+  `m2:register` SHA-pinning ritual for `m2-stage-a-acceptance-001` and
+  `m2-calibration-variance-a-001`; chunked Playwright tracing
+  (plan-configurable cadence, `trace-manifest.json`, retain-all-chunks)
+  with attempt- and sequence-level evidence-size forecasting; rehearsal
+  part 9 drives the M2 condition keylessly end to end. The audit
+  remediation round adds the versioned calibration analyzer
+  (`m2-calibration-variance-analysis-1.0.0`, `npm run m2:analyze`, closed
+  metric-producer registry), the authenticated Stage A prerequisite
+  (`m2-stage-a-prerequisite-1.0.0`, verified — never trusted — at
+  calibration registration and hash-bound into study freeze and plan
+  fingerprint), the closed Git-authenticated transactional registration
+  registry (`m2:register -- --registration <id>`, `git show HEAD` blob
+  provenance, staging + atomic rename), and compact-vs-full CI artifact
+  profiles (routine uploads ≤ 50 MiB of proof with explicit retention;
+  full evidence only on failure or explicit dispatch) (report:
+  [`MILESTONE_002_PHASE4_PER_DECISION_REPORT.md`](../milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)).
 
 ## Continuous integration details
 
@@ -608,14 +638,37 @@ report records the prepared `gh api` command.)
   frozen determinism gate. Any failing required command fails the workflow.
   The workflow declares `permissions: contents: read` and a per-ref
   concurrency group that cancels superseded runs. Batch and Playwright
-  reports upload as artifacts; the model-rehearsal evidence and the complete
-  m2 rehearsal evidence (versioned sealed archive, `.sha256` sidecar,
-  receipt, final evidence manifest, reports, control-root state, the failure
-  drill, and the packaging-recovery drill's superseded archive 001 beside its
-  recovered receipted archive 002) upload with `if-no-files-found: error` —
-  an evidence artifact must fail loudly rather than pass green while
-  uploading zero bytes. Dependency caching covers `node_modules` sources
-  only — no generated output is ever cached as an authoritative input.
+  reports upload as artifacts. The m2 rehearsal evidence uploads under TWO
+  registered profiles (Phase 4 audit finding 4). Routine runs upload only
+  the COMPACT proof: `node scripts/ci/prepareCompactArtifact.mjs` assembles
+  `artifacts/ci-compact/` from an explicit allowlist (manifests, reports,
+  control-root state, inventories, digest sidecars, receipts, trace
+  manifests, failure manifests), hard-refuses any ZIP/trace/image payload,
+  enforces the registered ≤ 50 MiB budget BEFORE the upload step, and emits
+  a machine-readable `artifact-size-report.json`; the upload retains 21 days
+  with `if-no-files-found: error`. The FULL-EVIDENCE profile is bound to
+  its PRODUCER (final targeted remediation D): it prepares and uploads
+  only when the `m2:rehearse` step itself ran and failed, or on a
+  `workflow_dispatch` with the `full-evidence` input — an early
+  typecheck/lint/unit failure uploads compact diagnostics only, never
+  hundreds of megabytes of partial test-generated trees. The same script
+  under `--profile full` assembles `artifacts/ci-full/` with
+  each sequence payload exactly once — sealed ZIP + `.sha256` sidecar +
+  receipt for archived sequences (their raw trees are contained in the
+  ZIPs and excluded, while the packaging-recovery drill's preserved
+  superseded archive rides along as evidence), raw trees only for
+  never-archived sequences — under a
+  registered ≤ 4 GiB budget with per-sequence uniqueness dispositions in
+  its own `artifact-size-report.json`, retained 7 days. The
+  model-rehearsal, batch, and Playwright report uploads are each keyed to
+  their own producer step's outcome, so a skipped producer never causes a
+  secondary upload failure while `if-no-files-found: error` still guards
+  every artifact whose producer claimed success. Every upload step
+  pins an explicit `retention-days`. Formal live evidence is never
+  entrusted to expiring Actions artifacts: it is retained locally as sealed
+  receipted packages with independent durable backup. Dependency caching
+  covers `node_modules` sources only — no generated output is ever cached
+  as an authoritative input.
 - **`deterministic-batch.yml`** — scheduled weekly and manually
   dispatchable: the same full 100-run batch, uploading ledgers and reports.
 

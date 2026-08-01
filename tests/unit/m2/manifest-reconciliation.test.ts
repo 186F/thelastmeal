@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  buildManifestRegistration,
   buildSequenceManifest,
   type SequenceFinalFacts,
   type SequenceManifest,
@@ -132,6 +137,9 @@ function fixtureState(): SequenceState {
     studyPlanSha256: 'none',
     thresholdProfileId: 'm2-rehearsal-attempt-profile',
     thresholdProfileVersion: '1.0.0',
+    registrationId: 'none',
+    registrationProvenanceSha256: 'none',
+    stageAPrerequisiteSha256: 'none',
     configFingerprint: 'c'.repeat(16),
     status: 'completed',
     sequenceFailureReason: null,
@@ -163,7 +171,7 @@ const FACTS: SequenceFinalFacts = {
 };
 
 function fixtureManifest(state: SequenceState = fixtureState()): SequenceManifest {
-  return buildSequenceManifest(state, FACTS);
+  return buildSequenceManifest(state, FACTS, null);
 }
 
 describe('manifest-vs-state reconciliation (focused re-audit §7.2)', () => {
@@ -330,8 +338,62 @@ describe('manifest-vs-state reconciliation (focused re-audit §7.2)', () => {
     // the AUTHORITATIVE manifest is what refuses.
     state.executions[1]!.status = 'failed';
     state.executions[1]!.failureReason = 'browser-error';
-    const manifest = buildSequenceManifest(state, FACTS);
+    const manifest = buildSequenceManifest(state, FACTS, null);
     expect(() => reconcileManifestWithState(manifest, state, PLAN)).toThrow(/attempt-coverage/);
+  });
+
+  it('registration attestation must be consistent between manifest, state, and archived records (remediation C §5.4)', () => {
+    // Block presence disagreeing with state identity refuses in both
+    // directions.
+    const registered = fixtureState();
+    registered.registrationId = 'calibration-variance-a';
+    registered.registrationProvenanceSha256 = 'a'.repeat(64);
+    expect(() => reconcileManifestWithState(fixtureManifest(), registered, PLAN)).toThrow(
+      /registration: manifest block presence disagrees|registrationId/,
+    );
+    // buildManifestRegistration re-derives the block from the ARCHIVED
+    // records, hash-verified against state on the way.
+    const root = mkdtempSync(join(tmpdir(), 'm2-manifest-reg-'));
+    try {
+      const unregistered = fixtureState();
+      expect(buildManifestRegistration(root, unregistered)).toBeNull();
+      const state = fixtureState();
+      const provenance = {
+        registrationProvenanceSchemaVersion: 'm2-registration-provenance-1.0.0',
+        registrationId: 'stage-a',
+        headSha: 'b'.repeat(40),
+        atUtc: '2026-07-31T00:00:00.000Z',
+        studyTemplate: {
+          path: 'experiments/m2/templates/m2-stage-a-acceptance-001.study.template.json',
+          blobId: 'c'.repeat(40),
+          sha256: 'd'.repeat(64),
+        },
+        planTemplate: {
+          path: 'experiments/m2/templates/stage-a.plan.template.json',
+          blobId: 'e'.repeat(40),
+          sha256: 'f'.repeat(64),
+        },
+        registeredStudySha256: 'a'.repeat(64),
+        stageAPrerequisiteSha256: null,
+        stageADrillMode: false,
+      };
+      const bytes = `${JSON.stringify(provenance, null, 2)}\n`;
+      writeFileSync(join(root, 'registration-provenance.archived.json'), bytes, 'utf8');
+      state.registrationId = 'stage-a';
+      state.registrationProvenanceSha256 = createHash('sha256').update(bytes).digest('hex');
+      const block = buildManifestRegistration(root, state);
+      expect(block).not.toBeNull();
+      expect(block!.registrationId).toBe('stage-a');
+      expect(block!.studyTemplate.blobId).toBe('c'.repeat(40));
+      expect(block!.stageAPrerequisiteSha256).toBeNull();
+      // A mutated archived record refuses re-derivation.
+      writeFileSync(join(root, 'registration-provenance.archived.json'), `${bytes}\n`, 'utf8');
+      expect(() => buildManifestRegistration(root, state)).toThrow(
+        /manifest-registration-invalid: archived provenance hash differs/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('every divergence is listed in ONE refusal', () => {

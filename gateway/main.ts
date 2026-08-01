@@ -3,8 +3,7 @@ import { createGateway, stopWithFallback } from './server';
 import { FakeDecisionAdapter } from './adapters/fakeDecisionAdapter';
 import { OpenRouterResponsesDecisionAdapter } from './adapters/openRouterResponsesAdapter';
 import { ModelTraceWriter } from './tracing/modelTraceWriter';
-import { PROMPT_VERSION } from './prompts/maraActionSelection';
-import { EXTERNAL_MARA_PROVIDER_ID } from './schemas';
+import { MODEL_CONDITION_ID, requireContractForCondition } from './schemas';
 
 /**
  * Gateway CLI entry.
@@ -49,9 +48,11 @@ gateway
   .then((port) => {
     const model = useFake ? 'fake-adapter' : (config.openRouterModel ?? '');
     const route = useFake ? 'local' : (config.openRouterProvider ?? '');
+    const served = requireContractForCondition(config.servedConditionId ?? MODEL_CONDITION_ID);
     console.log(
       `model gateway listening on http://127.0.0.1:${port} ` +
-        `(adapter=${adapter.id}, provider=${EXTERNAL_MARA_PROVIDER_ID}, prompt=${PROMPT_VERSION}, ` +
+        `(adapter=${adapter.id}, condition=${served.conditionId}, ` +
+        `provider=${served.providerId}, prompt=${served.promptVersion}, ` +
         `model=${model}, route=${route}, traceDir=${config.traceDir})`,
     );
   })

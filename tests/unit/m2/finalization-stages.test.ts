@@ -7,6 +7,7 @@ import {
   finalizeDeterministicAttempt,
   finalizeModelAttempt,
   guardStage,
+  readBudgetExhaustedCalls,
   verifyFinalManifestTreatment,
   type ModelFinalizeDeps,
 } from '../../../scripts/experiments/m2/runFinalizer';
@@ -262,10 +263,81 @@ describe('final-manifest treatment verification stage', () => {
         conditionId: expected.conditionId,
         promptVersion: expected.promptVersion,
         externalProviderId: 'openrouter-mara-action-v1',
+        experimentId: expected.experimentId,
+        experimentVersion: expected.experimentVersion,
       }),
       'utf8',
     );
     expect(() => verifyFinalManifestTreatment(root, expected, 'fake')).not.toThrow();
+  });
+
+  // Phase 4 adversarial-review regression: the check derives its expected
+  // identity from the treatment's CONDITION via the registered contract —
+  // an M2 manifest verifies under the M2 provider, and the old M1-pinned
+  // behavior (which failed every M2 attempt at the final stage) can never
+  // silently return.
+  const expectedM2 = {
+    modelId: 'fake-adapter',
+    servingProviderId: 'local',
+    allowFallbacks: false as const,
+    requireParameters: true as const,
+    promptVersion: 'mara-action-selection-m2-1.0.0',
+    conditionId: 'mara-model-per-decision-m2-v1',
+    experimentId: 'sparse-cognition-policy-001',
+    experimentVersion: '1.0.0',
+  };
+
+  function writeM2Manifest(root: string, overrides: Record<string, unknown> = {}): void {
+    writeFileSync(
+      join(root, 'run-manifest.final.json'),
+      JSON.stringify({
+        requestedModelId: 'fake-decision-adapter-v1',
+        conditionId: expectedM2.conditionId,
+        promptVersion: expectedM2.promptVersion,
+        externalProviderId: 'openrouter-mara-action-m2-v1',
+        experimentId: expectedM2.experimentId,
+        experimentVersion: expectedM2.experimentVersion,
+        ...overrides,
+      }),
+      'utf8',
+    );
+  }
+
+  it('an M2 final manifest verifies against the M2 condition contract', () => {
+    const root = scratch();
+    writeM2Manifest(root);
+    expect(() => verifyFinalManifestTreatment(root, expectedM2, 'fake')).not.toThrow();
+  });
+
+  it('an M2 manifest carrying the M1 provider — or the M1 experiment — is a treatment mismatch', () => {
+    const wrongProvider = scratch();
+    writeM2Manifest(wrongProvider, { externalProviderId: 'openrouter-mara-action-v1' });
+    expectStageFailure(
+      () => verifyFinalManifestTreatment(wrongProvider, expectedM2, 'fake'),
+      'treatment-mismatch',
+      'final-treatment-verification',
+    );
+    const wrongExperiment = scratch();
+    writeM2Manifest(wrongExperiment, {
+      experimentId: 'model-backed-npc-001',
+      experimentVersion: '1.2.0',
+    });
+    expectStageFailure(
+      () => verifyFinalManifestTreatment(wrongExperiment, expectedM2, 'fake'),
+      'treatment-mismatch',
+      'final-treatment-verification',
+    );
+  });
+
+  it('readBudgetExhaustedCalls reads the §23.1 gate counter from the final manifest', () => {
+    const root = scratch();
+    writeM2Manifest(root, {
+      callsFailedByCategory: { 'budget-exhausted': 3, 'upstream-timeout': 1 },
+    });
+    expect(readBudgetExhaustedCalls(root)).toBe(3);
+    const clean = scratch();
+    writeM2Manifest(clean, { callsFailedByCategory: {} });
+    expect(readBudgetExhaustedCalls(clean)).toBe(0);
   });
 });
 

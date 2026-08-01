@@ -40,7 +40,12 @@ import { behaviorFingerprintSetSchema } from '../../../src/shared/behaviorArtifa
  *      exists recovers through the packaging-ONLY resume path (focused
  *      re-audit finding 3): nothing launched, no inventoried byte changed,
  *      the unreceipted archive superseded, the next versioned archive
- *      receipted, and the completed sequence then no-op resumes verified.
+ *      receipted, and the completed sequence then no-op resumes verified;
+ *   9. the Phase 4 M2 per-decision condition runs keylessly end to end —
+ *      two fake attempts (one with the planned gateway stop) under the
+ *      sparse-cognition-policy-001 identity, strict-finalized with
+ *      normalization-flagged trace rows (§17.5), chunked-tracing manifests
+ *      with every chunk retained, and a verified no-op resume.
  *
  * All rehearsal output is non-evidentiary and lives under artifacts/.
  */
@@ -507,6 +512,142 @@ export async function runM2Rehearsal(repoRoot: string): Promise<{
     'packaging-recovery drill: post-inventory receipt failure resumed through the packaging-only ' +
       'path (nothing launched, no inventoried byte changed, unreceipted archive superseded, ' +
       'versioned archive 002 receipted, then a verified no-op resume)',
+  );
+
+  // --- 9. The Phase 4 M2 per-decision condition, keylessly. -----------------
+  // Two accelerated fake-gateway attempts under the M2 experiment identity —
+  // one plain, one with the planned mid-run gateway stop — prove the new
+  // condition end to end: M2 treatment verification against the gateway's
+  // advertised contract, strict finalization and exact replay under the
+  // revised diagnostic-output contract (every trace row carries the
+  // normalization flag), chunked tracing with its manifest, sealed
+  // artifact-valid/study-valid executions, and an identity-checked no-op
+  // resume recording sparse-cognition-policy-001.
+  const m2ConditionPlan = join(
+    repoRoot,
+    'experiments',
+    'm2',
+    'plans',
+    'm2-condition-rehearsal.json',
+  );
+  const m2ConditionRoot = join(sequencesRoot, 'm2-condition-rehearsal');
+  await waitForAutomationPortsFree();
+  const m2Run = await orchestrateSequence({
+    planPath: m2ConditionPlan,
+    resume: false,
+    acknowledgeLiveCost: false,
+    allowSleepRisk: true,
+    headed: false,
+    repoRoot,
+  });
+  check(m2Run.status === 'completed', `m2-condition sequence status ${m2Run.status}`);
+  check(m2Run.executions === 2, `expected 2 m2-condition executions, saw ${m2Run.executions}`);
+  check(m2Run.failedExecutions === 0, `m2-condition failed executions ${m2Run.failedExecutions}`);
+  const m2State = readSequenceState(m2ConditionRoot);
+  check(m2State !== null, 'm2-condition sequence state missing');
+  // The sequence identity records the M2 experiment (Phase 4).
+  check(
+    m2State.experimentId === 'sparse-cognition-policy-001' &&
+      m2State.experimentVersion === '1.0.0' &&
+      m2State.promptVersion === 'mara-action-selection-m2-1.0.0' &&
+      m2State.externalProviderId === 'openrouter-mara-action-m2-v1' &&
+      m2State.upstreamPlatform === 'openrouter',
+    `m2-condition identity mismatch: ${m2State.experimentId}@${m2State.experimentVersion} ` +
+      `prompt ${m2State.promptVersion} provider ${m2State.externalProviderId}`,
+  );
+  for (const execution of m2State.executions) {
+    check(
+      execution.status === 'completed' &&
+        execution.artifactStatus === 'artifact-valid' &&
+        execution.studyStatus === 'study-valid' &&
+        execution.verdicts['replay-match'] === true &&
+        execution.navigationCount === 1 &&
+        execution.seal !== null &&
+        execution.seal.sealedStatus === 'completed',
+      `m2-condition execution ${execution.executionId} not a sealed valid primary observation`,
+    );
+    check(
+      execution.verdicts['strict-finalized'] === 'completed',
+      `m2-condition execution ${execution.executionId} not strict-finalized`,
+    );
+    check(
+      execution.verdicts['verified-model'] === 'fake-adapter' &&
+        execution.verdicts['verified-serving-provider'] === 'local',
+      `m2-condition execution ${execution.executionId} missing M2 treatment verification`,
+    );
+    // Chunked tracing (Phase 4): the trace manifest records every retained
+    // chunk and the explicit retention policy; heartbeats expose rotation.
+    const traceManifestPath = join(m2ConditionRoot, execution.dir, 'trace-manifest.json');
+    check(
+      existsSync(traceManifestPath),
+      `m2-condition ${execution.executionId} missing trace-manifest.json`,
+    );
+    const traceManifest = JSON.parse(readFileSync(traceManifestPath, 'utf8')) as {
+      retention: string;
+      chunks: { name: string; bytes: number }[];
+    };
+    check(
+      traceManifest.retention === 'retain-all-chunks' && traceManifest.chunks.length >= 1,
+      `m2-condition ${execution.executionId} trace manifest malformed`,
+    );
+    for (const chunk of traceManifest.chunks) {
+      check(
+        existsSync(join(m2ConditionRoot, execution.dir, chunk.name)) && chunk.bytes > 0,
+        `m2-condition ${execution.executionId} missing retained trace chunk ${chunk.name}`,
+      );
+    }
+    const firstHeartbeat = readFileSync(
+      join(m2ConditionRoot, execution.dir, 'heartbeat.jsonl'),
+      'utf8',
+    ).split('\n')[0]!;
+    check(
+      firstHeartbeat.includes('"traceChunksWritten"'),
+      `m2-condition ${execution.executionId} heartbeat lacks trace-rotation fields`,
+    );
+    // Revised diagnostic-output contract (§17.5): every accepted-choice
+    // trace row written under the M2 contract carries the normalization
+    // flag (false here — the fake adapter's rationale is within bounds).
+    check(execution.runId !== null, `m2-condition ${execution.executionId} has no runId`);
+    const traceRows = readFileSync(
+      join(m2ConditionRoot, execution.dir, 'gateway', execution.runId!, 'model-trace.jsonl'),
+      'utf8',
+    )
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const acceptedRows = traceRows.filter((row) => row.selectedAffordanceId !== null);
+    check(
+      acceptedRows.length > 0,
+      `m2-condition ${execution.executionId} has no accepted trace rows`,
+    );
+    check(
+      acceptedRows.every((row) => row.rationaleNormalized === false),
+      `m2-condition ${execution.executionId} trace rows lack the M2 normalization flag`,
+    );
+  }
+  const m2StateBytes = readFileSync(
+    join(`${m2ConditionRoot}.control`, 'sequence-state.json'),
+    'utf8',
+  );
+  await waitForAutomationPortsFree();
+  const m2Noop = await orchestrateSequence({
+    planPath: m2ConditionPlan,
+    resume: true,
+    acknowledgeLiveCost: false,
+    allowSleepRisk: true,
+    headed: false,
+    repoRoot,
+  });
+  check(m2Noop.noOpResume, 'm2-condition resume was not a verified no-op');
+  check(
+    readFileSync(join(`${m2ConditionRoot}.control`, 'sequence-state.json'), 'utf8') ===
+      m2StateBytes,
+    'm2-condition no-op resume changed the sequence state bytes',
+  );
+  notes.push(
+    'm2-condition rehearsal: 2/2 M2 per-decision fake attempts (incl. planned gateway stop) ' +
+      'completed under sparse-cognition-policy-001 with strict finalization, normalization-flagged ' +
+      'trace rows, chunked tracing manifests, and a verified no-op resume',
   );
 
   return { ok: true, notes };

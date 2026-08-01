@@ -24,6 +24,11 @@ export interface GatewayLaunch {
   mode: 'fake' | 'live';
   port: number;
   allowedBrowserOrigin: string;
+  /** The model-backed condition this gateway child serves (Phase 4). The
+   * gateway derives its complete advertised identity — experiment,
+   * provider, prompt, diagnostic contract — from this NONSECRET id via the
+   * registered condition contract. Absent means the M1 condition. */
+  servedConditionId?: string;
   /** Absolute path — the child resolves relative traceDirs against ITS cwd. */
   traceDir: string;
   maxCallsPerRun?: number;
@@ -74,6 +79,9 @@ export async function startGateway(
     MODEL_MAX_TOTAL_CALLS: String(launch.maxTotalCalls ?? 120),
     MODEL_REQUEST_TIMEOUT_MS: String(launch.requestTimeoutMs ?? 20_000),
     MODEL_MAX_CONCURRENCY: String(launch.maxConcurrency ?? 1),
+    ...(launch.servedConditionId !== undefined
+      ? { MODEL_GATEWAY_CONDITION_ID: launch.servedConditionId }
+      : {}),
   };
   const args = [tsxCliPath(launch.repoRoot), join(launch.repoRoot, 'gateway', 'main.ts')];
   if (launch.mode === 'fake') args.push('--fake');

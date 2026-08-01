@@ -1,8 +1,8 @@
 {
   "name": "causal-npc-lab",
   "private": true,
-  "version": "1.8.0",
-  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0; finalized-trace event semantics at 1.6.1; model-experiment treatment change to v1.2.0 at 1.6.2; Milestone 2 sparse-cognition laboratory foundation at 1.7.0; Milestone 2 unattended orchestrator at 1.8.0)",
+  "version": "1.9.0",
+  "description": "Vertical Slice 001 - The Last Meal: deterministic causal-NPC simulation testbed (remediation release 1.1.0; re-audit remediation 1.2.0; model integration milestone 001 at 1.3.0; re-audit remediation 1.4.0; artifact integrity, CI verification, and keyless rehearsal at 1.5.0; pinned OpenRouter integration at 1.6.0; finalized-trace event semantics at 1.6.1; model-experiment treatment change to v1.2.0 at 1.6.2; Milestone 2 sparse-cognition laboratory foundation at 1.7.0; Milestone 2 unattended orchestrator at 1.8.0; Milestone 2 per-decision comparator at 1.9.0)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -37,9 +37,11 @@
     "model:finalize": "tsx scripts/model/finalize.ts",
     "model:rehearse": "tsx scripts/model/rehearse.ts",
     "m2:orchestrate": "tsx scripts/experiments/m2/cli.ts orchestrate",
+    "m2:register": "tsx scripts/experiments/m2/cli.ts register",
     "m2:rehearse": "tsx scripts/experiments/m2/rehearse.ts",
     "m2:pilot": "tsx scripts/experiments/m2/cli.ts pilot",
     "m2:evaluate": "tsx scripts/experiments/m2/cli.ts evaluate",
+    "m2:analyze": "tsx scripts/experiments/m2/cli.ts analyze",
     "m2:package": "tsx scripts/experiments/m2/cli.ts package",
     "test:m2": "vitest run tests/unit/m2 tests/integration/m2"
   },
