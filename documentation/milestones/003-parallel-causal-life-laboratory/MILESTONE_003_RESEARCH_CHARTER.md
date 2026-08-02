@@ -199,17 +199,237 @@ specified and pre-registered rather than asserted from anecdotes.
 
 # 6. Scenario families
 
-This section will describe the provisional scenario families and the research
-questions each family is intended to make observable.
+> These are provisional research laboratories for testing one underlying
+> simulated-life architecture. They are not authorized implementations,
+> product commitments, or claims that the architecture can already support
+> them.
 
-> **Status:** TBD IN CHUNK 3.
+Each family is a candidate future evaluation context, not a selected scenario
+or a scenario-construction plan. Building or studying any family would require
+separate authorization.
+
+## 6.1 Colony-pressure laboratory
+
+**Provisional research focus.** This RimWorld-inspired systemic environment
+would place simulated lives amid:
+
+- scarcity and resource pressure;
+- work, competence, and practical responsibility;
+- emergencies and competing duties;
+- commitments and their consequences;
+- group formation;
+- resentment, gratitude, trust, and conflict; and
+- shared-world events that create later social history.
+
+> **Primary question:** Can distinct people create an emergent social history
+> inside a demanding systemic world?
+
+This family would test behavior under systemic pressure. Task efficiency may
+be an observable outcome, but it is neither the preferred outcome nor a
+sufficient measure of the social history produced under that pressure.
+
+## 6.2 Developmental epistemology laboratory
+
+**Provisional research focus.** The Truman-style family would provide a
+longitudinal test of development, belief formation, and world-model revision,
+including:
+
+- early development;
+- concept acquisition;
+- attention and curiosity;
+- social trust;
+- theory formation;
+- hypothesis testing;
+- false explanations;
+- belief revision; and
+- development of a model of self and world.
+
+An NPC merely saying "this is a simulation" is not success. A meaningful
+discovery would require causally grounded observations, accumulated evidence,
+competing explanations, hypothesis testing, and belief revision. Any future
+study would have to prevent premise leakage: the model must not simply be told
+the hidden answer.
+
+This family does not specify or authorize a child-development implementation,
+age model, prompt, sample size, or success threshold.
+
+## 6.3 Ambient-community laboratory
+
+**Provisional research focus.** The Apartment Building family would test lives
+that continue without centering the observer, including:
+
+- routines and employment;
+- friendships, romance, and household change;
+- financial and practical pressures;
+- visitors, secrets, conflict, arrivals, and departures;
+- quiet periods;
+- offscreen continuity; and
+- longitudinal relationship change.
+
+> **Primary question:** Can residents appear to have lives that existed before
+> observation and continue when the user looks away?
+
+Inventing a retrospective biography when an observer arrives would not satisfy
+this question. Future work would have to evaluate persistent causal continuity:
+events, relationships, commitments, and changes must endure and shape later
+conduct, including while residents are offscreen.
 
 # 7. Candidate allocations of cognitive authority
 
-This section will define a neutral comparison space for candidate allocations
-of cognitive authority without selecting or authorizing an architecture.
+> These are candidate conditions and controls. The charter does not presume
+> which allocation will perform best, and complexity must earn its place
+> experimentally.
 
-> **Status:** TBD IN CHUNK 3.
+Every condition below is provisional future work. The descriptions establish a
+neutral comparison space; they do not select an architecture or authorize an
+implementation, experiment, prompt, schema, model call, or runtime mechanism.
+
+## 7.1 Deterministic control
+
+**Model authority.** None. Generative cognition neither selects actions nor
+maintains cognitive state.
+
+**Engine authority.** The deterministic engine selects actions, maintains
+cognitive and world state, and owns legality and consequences.
+
+**Research question tested.** What social and behavioral emergence already
+exists in deterministic world dynamics, and what incremental value, if any,
+appears when bounded generative cognition is introduced?
+
+**Principal risk or limitation.** This condition cannot expose the effects of
+generative interpretation because it excludes that interpretation by design.
+It is nevertheless a mechanical control, not a condition presumed to be
+lifeless or inferior.
+
+## 7.2 Per-decision generative control
+
+**Model authority.** The model selects every high-level action from
+engine-legal affordances.
+
+**Engine authority.** The engine defines the legal affordances and remains
+authoritative over objective state, legality, fallback behavior, and
+consequences.
+
+**Research question tested.** As a direct comparator, what behavioral breadth
+and semantic comprehension appear, and what repetition, drift,
+latency/fallback effects, and long-horizon consequences arise?
+
+**Principal risk or limitation.** Repeated generative selection may repeat,
+drift, misunderstand context, or expose execution to latency and fallback
+effects. Milestone 2's result remains bounded to its exact tested condition and
+does not establish that all per-decision designs share those limitations.
+
+## 7.3 Episode-appraisal / policy-artifact cognition
+
+**Model authority.** The model interprets bounded motivational episodes and may
+produce an episode-scoped motivational artifact, including partial coverage or
+abstention. It does not select every action.
+
+**Engine authority.** The engine owns psychological primitives, objective world
+truth, legal action selection, and consequences. It uses the artifact as one
+influence when selecting among legal actions.
+
+**Research question tested.** Can bounded episodic interpretation create
+persistent, causally intelligible motivational influence without per-decision
+model control?
+
+**Principal risk or limitation.** The candidate may overinterpret events,
+encode semantic errors, or add complexity without behavioral value.
+
+Its candidate conceptual features are limited here to:
+
+- quiet-event candidates;
+- bounded reflection windows;
+- episode-scoped motivational artifacts;
+- engine-owned psychological primitives;
+- bounded acyclic motivational graphs;
+- multiple simultaneous motives;
+- explicit motivational conflict;
+- partial coverage and abstention;
+- immutable successor lineages; and
+- persistent memory, belief, relationship, and emotional residue after episode
+  closure.
+
+This is a candidate, not the accepted architecture. The full conceptual design
+has not been implemented or experimentally validated. This charter authorizes
+no schema, constant, operator vocabulary, prompt, or runtime mechanism for it.
+
+## 7.4 Reflection-only cognition
+
+**Model authority.** The model may review bounded experience and propose
+bounded memory, belief, relationship, or self-narrative consolidation subject
+to future engine validation.
+
+**Engine authority.** The deterministic engine selects actions, preserves
+objective history, and would validate any proposed consolidation. Reflection
+output cannot rewrite objective history.
+
+**Research question tested.** Can richer long-term lives emerge without
+generative action selection?
+
+**Principal risk or limitation.** Reflection may invent, self-reinforce, or
+distort narratives, or it may fail to affect later conduct.
+
+## 7.5 Planning-only cognition
+
+**Model authority.** The model forms bounded higher-level intentions or plans.
+
+**Engine authority.** Deterministic systems execute, interrupt, and revise
+plans against authoritative world state and legal action constraints.
+
+**Research question tested.** Does generative long-horizon direction add value
+without per-action model control?
+
+**Principal risk or limitation.** Plans may become stale, brittle, disconnected
+from execution, or sources of goal churn. This candidate defines no plan schema
+or caching implementation.
+
+## 7.6 Dialogue-only generation over engine-selected intent
+
+**Model authority.** The model verbalizes an engine-provided social intent
+within permitted content boundaries.
+
+**Engine authority.** The engine selects social intent and permissible content
+and owns authoritative consequences.
+
+**Research question tested.** Can conversational expression improve while
+behavioral and causal authority remain engine-owned, separating dialogue
+quality from behavioral authority?
+
+**Principal risk or limitation.** Fluent language may merely decorate shallow
+intent or stray beyond its bounds. Engine-selected intent is not presumed
+sufficient for believable social life.
+
+## 7.7 Mixed multi-timescale cognition
+
+**Model authority.** The model participates in bounded appraisal, reflection,
+consolidation, relationship or identity development, and developmental
+world-model change at different timescales.
+
+**Engine authority.** The engine owns objective state, legality, and
+consequences throughout, including deterministic reflexes, needs, movement,
+and physical action at short timescales.
+
+**Research question tested.** Which timescale-specific layers, if any, add
+value beyond simpler allocations, and does a combined allocation retain that
+value under ablation and comparison?
+
+**Principal risk or limitation.** This is the broadest and most complex
+candidate. Cross-layer inconsistency and experimental confounding are risks;
+every layer must earn its place through ablation and comparison rather than an
+assumption that more modules create better lives.
+
+The conceptual candidate division is:
+
+- **Seconds/minutes:** deterministic reflexes, needs, movement, and physical
+  action.
+- **Minutes/hours:** bounded episode appraisal.
+- **Hours/days:** reflection and consolidation.
+- **Weeks/years:** relationship and identity development.
+- **Months/lifetime:** developmental world-model change.
+
+These timescale bands describe candidate authority layers, not an implementation
+decomposition.
 
 # 8. Potentially distinctive research contribution
 
