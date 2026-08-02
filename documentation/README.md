@@ -12,8 +12,9 @@ historical.
 | ----------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------- |
 | [Vertical Slice 001 coding brief](reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                             | AUTHORITATIVE | The frozen specification of the simulation, scenarios, and experiment identity   |
 | [Technical reference](reference/TECHNICAL_REFERENCE.md)                                                     | ACTIVE        | The living engineering contract: determinism rules, decision lifecycle, evidence |
-| [Milestone 2 implementation brief](milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) | AUTHORITATIVE | The governing specification for current Milestone 2 work                         |
-| [Milestone 2 scope ruling](milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)    | AUTHORITATIVE | Amendments and rulings; **governs on any ambiguity with the brief**              |
+| [Milestone 2 implementation brief](milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) | HISTORICAL | The specification that governed Milestone 2 (closed; preserved unchanged)        |
+| [Milestone 2 scope ruling](milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)    | HISTORICAL    | Amendments and rulings that governed on any ambiguity with the brief (preserved) |
+| [Milestone 2 closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)             | COMPLETED     | The final Milestone 2 record: disposition, findings, and claim boundary          |
 | [Operator runbook](operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)                                     | ACTIVE        | How to launch, supervise, resume, and recover unattended experiment sequences    |
 
 ## 2. Current project state
@@ -23,10 +24,10 @@ historical.
 | Package version          | 1.9.0                                                                                                                                                        |
 | Frozen scenario data     | `vs001-1.0.0` (never changes)                                                                                                                                |
 | Current milestone        | Milestone 2 — sparse cognition (`sparse-cognition-policy-001` v1.0.0)                                                                                        |
-| Last completed phase     | Phase 3 — unattended orchestrator (PR #13, merged 2026-07-31 at pinned head `cd50a96`, merge `eaa2393`, merged-`main` CI green)                              |
-| Current phase            | Phase 4 — per-decision comparator: **COMPLETE** (PR #15 merged pinned to `17aba1f`, merge `8282dfe`, merged-`main` CI green; [status](milestones/002-sparse-cognition/phase-04-per-decision/README.md)). Stage A execution is in flight under the evidence-instrumentation revision (sparse visual capture + registered evidence ceilings) after the first launch was refused by its own evidence forecast — the guardrail working as designed, at zero live cost |
-| Next authorized work     | Stage A (Scenario A deterministic baseline + Scenario A M2 per-decision LIVE) registered against the current merged SHA; the ten-run calibration stays blocked until Stage A passes and its sealed evidence feeds the calibration registration |
-| Live model calls to date | Milestone 1 acceptance only; **no Milestone 2 live calls have been made** — evidentiary/live execution additionally requires the `m2:register` pinning ritual |
+| Last completed phase     | Phase 4 — per-decision comparator (PR #15 → merge `8282dfe`; evidence-instrumentation revision PR #16 → merge `cadcca7`), followed by Stage A acceptance **passed** (2026-08-01) and the registered ten-run calibration **completed** (2026-08-02) at frozen `cadcca7` |
+| Current phase            | **Milestone 2: CLOSED AFTER CALIBRATION.** Phases 1–4 and the registered ten-run calibration completed. The planned policy-patch implementation and paired comparison were not executed under Milestone 2 because the calibrated per-decision condition was not adopted as a credible behavioral preservation target. No sparse-cognition acceptance claim is made. ([Closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)) |
+| Next authorized work     | None — Milestone 2 is closed; successor research (revised charter, comparator/scenario remediation, packaging-format correction, policy-patch architecture as one candidate) is deferred work requiring separate authorization                                            |
+| Live model calls to date | Milestone 1 acceptance; Milestone 2 Stage A (47 calls, 2026-08-01) and the ten-run calibration (473 emitted / 472 accepted, 2026-08-02), all registered, sealed, and analyzed — no other live calls                                                                       |
 | Controlling documents    | Milestone 2 brief + scope ruling (see Start here)                                                                                                            |
 
 ## 3. Document-status legend
@@ -52,9 +53,12 @@ historical.
 3. **Milestone 2 — sparse cognition** ([index](milestones/002-sparse-cognition/README.md)) —
    brief and scope ruling (PR #10) → Phase 2 laboratory foundation (1.7.0,
    PR #12) → Phase 3 unattended orchestrator (1.8.0, PR #13) → Phase 4
-   per-decision comparator (1.9.0, PR #15 — COMPLETE, merged at
-   `8282dfe` with green merged-`main` CI) → Stage A acceptance under the
-   evidence-instrumentation revision. IN PROGRESS.
+   per-decision comparator (1.9.0, PR #15 merged at `8282dfe`; PR #16
+   evidence-instrumentation revision merged at `cadcca7`) → Stage A
+   acceptance passed (2026-08-01) → registered ten-run calibration
+   completed (2026-08-02) → **CLOSED AFTER CALIBRATION** without the
+   policy-patch comparison; no sparse-cognition acceptance claim
+   ([closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)).
 
 ## 5. Audit reading order
 

@@ -76,10 +76,16 @@ How the milestones build toward it:
 - **Milestone 1 (complete)** built the expensive baseline: Mara driven
   decision-by-decision by a live model, with the evidence pipeline proving
   every run valid and replayable.
-- **Milestone 2 (in progress)** builds the automated laboratory and then
-  runs the head-to-head experiment (`sparse-cognition-policy-001`): the
-  same story, with Mara driven both ways, judged on criteria pre-registered
-  before any data is collected:
+- **Milestone 2 (closed after calibration)** built the automated
+  laboratory, ran the per-decision condition live, and completed the
+  ten-run variance calibration — then **stopped before the head-to-head
+  experiment**: the calibrated per-decision behavior was highly
+  repetitive and misread the story's central promise, so it was not
+  adopted as the behavioral target the policy condition would have had
+  to preserve. No sparse-cognition acceptance claim is made
+  ([closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)).
+  The head-to-head design remains recorded, with its criteria
+  pre-registered before any data was collected:
 
 | Pre-registered bar    | What it demands                                                                                                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -89,12 +95,13 @@ How the milestones build toward it:
 | **Honest thinking**   | Nearly every policy-writing call traces to a named novelty trigger — no hidden "ask the model every minute anyway" loop                                                   |
 | **No safety erosion** | No new illegal actions, no replay divergence, no untreated lethal injury when Mara is the only possible helper — the hard guarantees hold exactly as before               |
 
-If the experiment passes, the supported claim is deliberately modest: in
-this one small simulation, a model-written policy preserved a
-pre-registered level of behavioral similarity while using at most a quarter
-as many model calls, with exact replay and no loss of simulation authority.
-Whether that generalizes to larger worlds, other models, or many characters
-is future work — not a Milestone 2 claim.
+Even if such an experiment passed, the supported claim would be
+deliberately modest: in this one small simulation, a model-written policy
+preserved a pre-registered level of behavioral similarity while using at
+most a quarter as many model calls, with exact replay and no loss of
+simulation authority. Milestone 2 did not run that experiment and makes
+no such claim; whether any of it generalizes to larger worlds, other
+models, or many characters remains future work.
 
 ## Why build the laboratory first?
 
@@ -156,17 +163,17 @@ grow indefinitely for its own sake.
 
 ## The project at a glance
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                                                                                                                                  |
-| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                                                                                                                |
-| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                                                                                                          |
-| **Current work**                | Milestone 2: Phase 4 — the model-driven baseline arm, its registered studies, and bounded tracing for long live runs — is **complete and merged**; the Stage A acceptance runs (deterministic baseline + the first live Milestone 2 run) are the active work under a sparse visual-capture evidence profile, after the first launch was refused by its own evidence-size forecast at zero live cost; the sparse policy system and head-to-head comparison follow later |
-| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                                                                                                             |
-| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                                                                                                     |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                                                                                                                                          |
+| **Current work**                | Milestone 2 is **closed after calibration**: Phases 1–4, Stage A acceptance, and the registered ten-run calibration completed with sealed evidence; the planned policy-patch implementation and paired comparison were not executed because the calibrated per-decision condition was not adopted as a credible behavioral preservation target ([closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)); successor research requires separate authorization |
+| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                                                                                                                                             |
+| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 This project deliberately versions several things separately. The three to
 keep apart while reading: the **software release** moves with every code
@@ -294,10 +301,10 @@ properties, in plain terms:
 Live-run setup and the operator walkthrough live in the
 [technical reference](documentation/reference/TECHNICAL_REFERENCE.md#live-run-operator-setup-and-walkthrough).
 
-## The automated laboratory (Milestone 2, in progress)
+## The automated laboratory (Milestone 2, closed after calibration)
 
-Milestone 2 turns the project from "an experiment you run by hand" into "a
-laboratory that runs experiments unattended" — and is being built in audited
+Milestone 2 turned the project from "an experiment you run by hand" into
+"a laboratory that runs experiments unattended" — built in audited
 phases:
 
 - **Phase 2 (landed):** the measurement tools. Behavioral "fingerprints" — a
@@ -331,12 +338,20 @@ phases:
   templates to one exact repository state immediately before execution
   ([report](documentation/milestones/002-sparse-cognition/phase-04-per-decision/MILESTONE_002_PHASE4_PER_DECISION_REPORT.md)).
 
-The first Milestone 2 live run is Stage A acceptance, now authorized and
-in progress: a deterministic Scenario A baseline followed by the same
-scenario driven live through the pinned gateway, both registered against
-one exact merged repository state. The ten-run calibration study follows
-only after Stage A passes and its sealed evidence is cryptographically
-bound into the calibration registration.
+The laboratory then ran for real. Stage A acceptance passed on
+2026-08-01 (a deterministic Scenario A baseline plus the same scenario
+driven live through the pinned gateway, both registered against one
+exact merged repository state), and the registered ten-run calibration
+completed on 2026-08-02 — ten valid runs, first attempt each, sealed
+evidence, and a registered analysis. The calibration's answer is what
+closed the milestone: the per-decision condition repeated itself almost
+exactly (median composite similarity 10,000 basis points), varied only
+in a consequence-free stretch after the repair was already done, and
+consistently described the story's central promise backwards. Rather
+than measure whether cheap policies could reproduce that, Milestone 2
+closed after calibration with no sparse-cognition acceptance claim —
+the full reasoning and claim boundary are in the
+[closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md).
 
 ## Pre-registered success criteria
 

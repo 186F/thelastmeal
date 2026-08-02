@@ -12,11 +12,17 @@ mandatory authenticated registration at formal launch with launch-time
 Stage A revalidation, and CI failure-path hygiene — all implemented
 (report §6.3) and verified. **The targeted verification passed: PR #15
 merged pinned to `17aba1f` (merge `8282dfe`), merged-`main` CI green,
-Phase 4 implementation declared complete.** Stage A acceptance follows
-under the post-merge evidence-instrumentation revision (sparse visual
-capture profile + registered evidence ceilings); the ten-run calibration
-stays blocked until Stage A passes and its sealed evidence feeds the
-calibration registration.
+Phase 4 implementation declared complete.** Under the post-merge
+evidence-instrumentation revision (sparse visual capture profile +
+registered evidence ceilings, merged as `cadcca7`), Stage A acceptance
+then **passed** (2026-08-01: deterministic baseline + first Milestone 2
+live run, both artifact-valid, study-valid, and replay-verified) and the
+registered ten-run calibration **completed** (2026-08-02: ten valid
+primaries, first attempt each, sealed archive and registered analysis).
+Milestone 2 subsequently closed after calibration without executing the
+Phase 5 policy-patch comparison — disposition, findings, and claim
+boundary in the
+[Milestone 2 closeout report](../MILESTONE_002_CLOSEOUT_REPORT.md).
 
 **Scope delivered** (implementation brief §31, scope ruling §14):
 
