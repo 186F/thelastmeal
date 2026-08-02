@@ -475,8 +475,10 @@ detail.
 
 **Bounded contribution hypothesis.** A registered model-versus-engine
 cognitive-authority schedule, compared from matched persistent-life ancestors
-while authoritative mechanics, evidence lineage, and outcomes remain fixed,
-was **not located within the bounded corpus reviewed for this charter**.
+under the same authoritative mechanics and preregistered outcome definitions,
+with branch-specific evidence lineage preserved and observed outcomes allowed
+to diverge, was **not located within the bounded corpus reviewed for this
+charter**.
 
 **Claim boundary.** The charter does not claim component-level priority,
 general benefit, or superiority over a fixed allocation. The hypothesis must
