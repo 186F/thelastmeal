@@ -1789,10 +1789,170 @@ work package. Each such package requires a separate, explicit gate.
 
 # 16. Charter acceptance criteria
 
-This section will list the conditions for determining whether the completed
-charter is ready for final Advisor and Operator review.
+Satisfying these criteria makes the charter eligible for final integration and
+review. It does not authorize implementation, evidence generation, live
+execution, or Work Packages 2–8.
 
-> **Status:** TBD IN CHUNK 6.
+The criteria evaluate this charter as a research-governance document. They are
+not system or architecture acceptance tests, work-package authorization, or a
+scientific result. Every group below must be satisfied; completion of one group
+does not compensate for a gap in another.
+
+## 16.1 Research objective and scope
+
+The charter is acceptable only if it:
+
+- states the revised north-star question accurately: which cognitive functions
+  should be deterministic, which should be generative, and at what timescales
+  each should operate so that long-running simulated lives remain persistent,
+  grounded, varied, causally intelligible, and compelling to observe;
+- treats call count, tokens, cost, latency, and related efficiency measures as
+  secondary operational diagnostics rather than the research objective or a
+  substitute for behavioral quality;
+- defines sparse cognition prospectively as bounded generative authority over
+  cognitive functions, not merely infrequent model calls, without revising the
+  registered meaning or evidence of Milestone 2; and
+- contains no implicit authorization to implement a candidate, construct a
+  scenario, execute a study, generate evidence, or begin a later work package.
+
+## 16.2 Historical and claim discipline
+
+The charter is acceptable only if it:
+
+- preserves Milestone 2 as immutable historical evidence and describes
+  accurately both what its registered calibration established and what it did
+  not establish;
+- distinguishes historical findings, project hypotheses, design proposals,
+  candidate architectures, future work, and exclusions rather than presenting
+  them as one level of claim;
+- makes no field-wide novelty or priority claim, architectural-superiority
+  claim, human-realism claim, or claim that the broad AI-NPC problem is solved;
+  and
+- bounds proposed contributions to the reviewed corpus and any future
+  conclusions to the registered simulated substrate, conditions, evidence,
+  outcome definitions, and evaluated replications.
+
+## 16.3 Scenario and architecture neutrality
+
+The charter is acceptable only if it:
+
+- presents all three scenario families as provisional research laboratories
+  requiring later selection and separate authorization;
+- presents every allocation in Section 7 as a candidate condition or control,
+  with model authority, engine authority, the research question tested, and the
+  principal risk or limitation stated for each;
+- treats episode-appraisal / policy-artifact cognition as one unvalidated
+  candidate rather than the accepted answer; and
+- neither prefers an architecture nor presumes that added complexity, more
+  generative authority, or fewer model calls will improve simulated lives.
+
+## 16.4 Related-work and citation quality
+
+The charter is acceptable only if it:
+
+- supports external factual claims with primary sources and labels preprints;
+- distinguishes source-reported findings, measured failures,
+  author-stated limitations, matters not evaluated, and inferences made by this
+  charter;
+- recognizes predecessor elements without renaming them as project inventions;
+- uses bounded contribution language, including "not located within the bounded
+  corpus reviewed for this charter," rather than unsupported field-wide
+  absence, novelty, priority, or superiority claims; and
+- contains complete, valid, and internally consistent citations and
+  primary-source references.
+
+## 16.5 Causal and parallel method
+
+The charter is acceptable only if it:
+
+- distinguishes independent runs, independent experiments, and multiple NPCs
+  inside one shared world as three different concurrency problems;
+- records concurrency as provenance and treats it as a possible treatment
+  effect, with serial-versus-parallel parity required before behavioral
+  interchangeability is assumed;
+- keeps logical simulation time, provider wall-clock time, and local queue time
+  distinct;
+- defines a causal fork from one authoritative common ancestor through one
+  preregistered intervention boundary, followed by branch-specific evidence
+  and replay lineage;
+- states that a shared seed alone is insufficient and prohibits naive ordinal
+  matching of decisions after causal divergence; and
+- requires paired replication and preregistered inference without selecting a
+  formula, alignment algorithm, threshold, sample size, statistical test, or
+  primary endpoint.
+
+## 16.6 Measurement quality
+
+The charter is acceptable only if it:
+
+- protects quiet, routine, rest, maintenance, stable relationships, and low
+  drama from automatic classification as behavioral failure;
+- distinguishes behavioral breadth from randomness, entropy from quality, and
+  operational efficiency from behavioral or human plausibility;
+- keeps engine-native observations, deterministic derived summaries,
+  model-assisted annotations, and human or observer judgments as four separate
+  evidence layers;
+- covers every Section 12 measurement family, including grounding and semantic
+  correctness and observer evaluation, and gives each an intended observation,
+  candidate signals, principal interpretation risk, and authoritative evidence
+  basis;
+- keeps task success, semantic correctness, identity expression, behavioral
+  breadth, consequentiality, and observer value distinct; and
+- requires authoritative trajectory provenance for every reported measure
+  while selecting no formula, composite, threshold, evaluator, sample,
+  protocol, endpoint, or acceptance rule.
+
+## 16.7 Work-package and governance completeness
+
+The charter is acceptable only if it:
+
+- orders all eight work packages by dependency and keeps Work Packages 2–8
+  provisional and unauthorized;
+- requires separate authorization and separately authorized implementation,
+  followed by the required keyless contract, replay, and evidence-path
+  validation, before evidence-generating architecture comparison;
+- covers historical separation, versioned change control, registration and
+  claim boundaries, attempts and replacements, concurrency and time
+  provenance, causal forks, measurement and evaluator governance, world and
+  cognitive authority, evidence preservation, and authority to proceed;
+- requires preregistration before every confirmatory evidence-generating
+  execution, including deterministic and fake-model or rehearsal conditions as
+  well as live-model conditions;
+- versions model identity or version, serving provider or route, prompts, model
+  authority, fallback behavior, worlds and affordances, semantic contracts,
+  cognitive treatments, metrics, analyses, execution architecture, and
+  concurrency profiles when materially changed;
+- preserves failed, interrupted, invalid, excluded, and replacement attempts
+  and prohibits retries merely to obtain a preferred trajectory;
+- retains deterministic-engine authority over objective world truth, legal
+  affordances, and committed consequences; and
+- keeps immutable evidence separate from versioned derived analysis with
+  traceable source identities.
+
+## 16.8 Authorization and document completion
+
+The charter is acceptable only if:
+
+- Sections 1–16 are complete and contain no unresolved drafting marker or
+  unfinished-status language;
+- the charter remains research direction and governance rather than
+  implementation or study authorization;
+- milestone navigation and README reconciliation occur only in an explicitly
+  authorized Chunk 7;
+- the required local documentation and diff checks pass;
+- the complete final PR head receives the unskipped full CI workflow required
+  in Chunk 7, and success on an earlier head is not treated as sufficient;
+- final readiness and merge require Advisor clearance and Operator
+  authorization;
+  and
+- the current head is not described as merge-ready merely because Section 16
+  is complete.
+
+When all criteria are satisfied, the charter may proceed to Chunk 7 final
+integration and audit. Approval of the charter establishes research direction,
+claim boundaries, sequencing, and governance only. It does not establish that
+any candidate architecture works or authorize implementation, an experiment,
+model calls, or evidence generation.
 
 # Primary-source references
 
