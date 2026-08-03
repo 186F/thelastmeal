@@ -1543,7 +1543,10 @@ is superior.
 **Completion and claim boundary.** Each added cognitive layer would have to be
 independently testable and removable through comparison or ablation. A reviewed
 reduced specification would not establish behavioral benefit or authorize its
-implementation or study.
+implementation or study. Before any Work Package 6 evidence-generating
+execution, each selected reduced condition must receive separate implementation
+authorization and pass the required keyless contract, replay, and evidence-path
+validation.
 
 ## Work Package 6 — First causally matched architecture-comparison study
 
@@ -1552,9 +1555,11 @@ implementation or study.
 **Purpose.** Compare approved candidate allocations from registered common
 ancestors using the Section 11 method and Section 12 measurement families.
 
-**Entry or dependency boundary.** Entry requires credible parity evidence, an
-approved causal world and semantic contract, approved reduced candidate
-specifications, and a separately preregistered analysis.
+**Entry or dependency boundary.** Entry requires credible parity evidence; a
+separately authorized, implemented, and keylessly validated causal world and
+semantic contract; separately authorized, implemented, and keylessly validated
+reduced candidate conditions; and a study and analysis preregistered before
+evidence-generating execution.
 
 **Completion and claim boundary.** Observed outcomes may diverge while outcome
 definitions and branch-evidence rules remain fixed. Any result would remain
@@ -1619,9 +1624,11 @@ evidence.
 ## 14.2 Versioned change control
 
 Formula or classification-rule changes must receive a new metric identity.
-Changes to prompts, model authority, fallback behavior, worlds, affordances,
-semantic contracts, or cognitive treatments must receive a new treatment,
-condition, or experiment version as appropriate.
+Changes to model identity or version, serving provider or route, prompts, model
+authority, fallback behavior, worlds, affordances, semantic contracts, or
+cognitive treatments require a new registered treatment, condition, or
+experiment version as appropriate, unless the preregistered design explicitly
+treats the difference as a condition.
 
 Analysis-rule changes must receive a new analysis version and may not silently
 alter a registered result. Execution-architecture or concurrency-profile
@@ -1634,8 +1641,10 @@ or change-control mechanism.
 
 ## 14.3 Registration and claim boundaries
 
-Every live dataset used for a confirmatory claim must have a preregistration.
-Where applicable, registration must identify:
+Every evidence-generating study or dataset used for a confirmatory
+claim—whether deterministic, fake-model/rehearsal, or live-model—must be
+governed by a preregistration completed before execution. Where applicable,
+registration must identify:
 
 - the treatment;
 - the common ancestor or ancestor-generation rule;
