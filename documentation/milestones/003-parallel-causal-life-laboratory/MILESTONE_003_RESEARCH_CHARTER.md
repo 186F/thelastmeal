@@ -827,17 +827,256 @@ review before stronger contribution language would be supportable.
 
 # 10. Parallel causal laboratory
 
-This section will explain the proposed scientific role of parallel execution
-without selecting an implementation stack.
+Concurrency is a scientific requirement for this research program because its
+questions are comparative and long-horizon. Future work must be able to
+examine multiple registered cognitive-authority allocations, independent
+ancestors, paired replications, and experimental families within practical
+evidence cycles. Concurrency is therefore more than a performance
+optimization. It can also alter a treatment, so throughput alone does not
+establish scientific validity.
 
-> **Status:** TBD IN CHUNK 5.
+## 10.1 Three distinct concurrency problems
+
+### Independent runs
+
+Independent runs are separate simulated worlds with no shared mutable state.
+They should be highly parallelizable, provided each retains its own run
+identity, registered configuration, state, and evidence.
+
+### Independent experiments
+
+Independent experiments are distinct registered studies that may share
+infrastructure while retaining separate identities, configurations, budgets,
+storage, and evidence. Shared infrastructure must not merge their treatment or
+evidence boundaries.
+
+### Multiple NPCs inside one shared world
+
+NPCs inside one shared world are causally coupled. Safe parallelism depends on
+their actual read/write, perception, communication, movement, and other world
+dependencies, together with the boundaries at which consequences become
+authoritative. This problem is not equivalent to parallelizing independent
+runs or independent experiments.
+
+## 10.2 Future capability target
+
+The future capability objective is to permit tens, hundreds, and eventually
+thousands of independent causal lives, and multiple experimental families, to
+run concurrently while preserving run isolation, treatment identity, replay,
+and evidence integrity.
+
+This is a future research-infrastructure target, not a claim about the current
+system and not an authorization to implement or operate such a laboratory.
+
+## 10.3 Concurrency profile as provenance and treatment
+
+Concurrency may change observed behavior through provider queueing or rate
+limiting, correlated upstream failures, local inference-broker delay, changed
+fallback or timeout frequency, hardware contention, scheduling or commit-order
+effects, and shared-world dependency mistakes. Every future study must
+therefore version and record a concurrency profile. When profiles differ
+between conditions or are varied deliberately, the profile is a registered
+experimental parameter rather than hidden infrastructure.
+
+Conceptually relevant provenance categories include:
+
+- execution architecture;
+- worker count;
+- start-wave or dispatch policy;
+- logical commit policy;
+- provider, project, and model identity;
+- local queue delay;
+- upstream latency;
+- rate-limit and failure windows;
+- fallback behavior; and
+- shared-world dependency policy, where applicable.
+
+These are provenance categories, not a schema, runtime design, or
+implementation specification.
+
+## 10.4 Serial-versus-parallel parity
+
+Parallel execution must earn behavioral use through a preregistered
+serial-versus-parallel parity study. The question is not merely whether both
+execution paths finish. Future parity work must examine whether execution
+architecture changes:
+
+- canonical events and world outcomes;
+- accepted model responses;
+- fallback, timeout, supersession, or rejection rates;
+- logical timing and commit boundaries;
+- evidence completeness and replay; and
+- behavioral or social trajectories where exact identity is not expected.
+
+This charter does not predeclare a parity threshold or statistical test. Until
+the relevant parity boundary is established, concurrency remains a recorded
+experimental factor rather than a behaviorally neutral assumption.
+
+## 10.5 Time boundaries
+
+Future evidence must distinguish:
+
+- **Logical simulation time:** the ordered time within the simulated world and
+  its causal history.
+- **Provider wall-clock time:** elapsed external-service time associated with a
+  request and response.
+- **Local queue time:** time spent waiting within the local inference path
+  before dispatch or use.
+
+Provider latency must not silently change simulated psychology or causality
+unless latency is explicitly part of the registered treatment. This charter
+does not prescribe the runtime mechanism by which that separation would be
+maintained.
+
+## 10.6 Retained research and implementation boundary
+
+[AI Metropolis](https://proceedings.mlsys.org/paper_files/paper/2025/hash/4f31327e046913c7238d5b671f5d820e-Abstract-Conference.html)
+provides a dependency-aware out-of-order scheduling precedent and reports false
+dependencies within its tested workloads. It does not establish
+serial-versus-parallel behavioral parity for this proposed laboratory.
+
+[Stout and Goldie](https://pmc.ncbi.nlm.nih.gov/articles/PMC2761656/)
+establish paired same-individual simulation and multiple paired replications
+while treating event synchronization as a substantive modeling choice.
+[Buffalo, Pearson, and Klein](https://arxiv.org/abs/2603.11084) show why shared
+state and a shared seed can lose stochastic-event correspondence after control
+flow diverges and present event-keyed generation as one possible technique.
+
+These retained sources inform the scientific boundary. They do not select a
+cloud provider, orchestration framework, worker count, browser or headless
+split, storage system, quota broker, scheduling algorithm, or implementation
+stack.
 
 # 11. Counterfactual causal twins
 
-This section will define the proposed causal-comparison method and the boundary
-between shared history and independently evolving descendants.
+Counterfactual cognitive twins are a proposed experimental method for comparing
+independent descendants of one serialized, authoritative ancestor after one
+preregistered cognitive-authority treatment difference. The term does not
+claim invention of paired simulation, common-random-number methods, state
+replay, or branching comparison, and it does not establish a causal guarantee.
+The method is intended to improve causal interpretability by bounding the
+intervention and preserving branch-specific evidence.
 
-> **Status:** TBD IN CHUNK 5.
+## 11.1 Common ancestor
+
+A future fork would begin from one authoritative ancestor serialized with all
+treatment-relevant state. Conceptual completeness includes:
+
+- world state and logical simulation time;
+- NPC identity and stable profile;
+- memories, beliefs, relationships, commitments, goals, and current
+  motivational or episode state;
+- legal affordances and the information available to the NPC;
+- engine, scenario, model, provider, prompt, policy, metric, and experiment
+  versions;
+- references to authoritative evidence; and
+- the random or stochastic-event identity required for paired comparison.
+
+These categories are a conceptual completeness requirement, not an approved
+serialization schema. They do not presume that every latent state is
+observable; they require future studies to identify and preserve the
+registered state needed to reconstruct and interpret the fork.
+
+## 11.2 Registered fork
+
+The proposed method is:
+
+```text
+One authoritative common ancestor
+        ↓
+One preregistered treatment difference
+        ↓
+Independent descendant branches
+        ↓
+Branch-specific evidence and replay
+        ↓
+Paired short- and long-horizon comparison
+```
+
+Here, independent means that each descendant evolves with separate branch
+state and evidence after the fork. Paired branches need not be statistically
+independent when the registered design intentionally correlates corresponding
+stochastic events.
+
+Candidate treatment differences may include the cognitive-authority
+allocations listed in
+[Section 7](#7-candidate-allocations-of-cognitive-authority). A future fork
+must register the intervention boundary before execution.
+
+**Held constant across branches:**
+
+- authoritative mechanics;
+- scenario and starting state;
+- outcome definitions and measurement rules; and
+- all treatment-irrelevant registered configuration.
+
+**Allowed to diverge after treatment:**
+
+- actions and conversations;
+- world events caused by descendants;
+- relationships, beliefs, goals, and consequences; and
+- every observed outcome downstream of the treatment.
+
+Holding outcome definitions constant does not require outcomes or trajectories
+to remain identical. Each descendant must preserve its own traceable evidence
+and replay lineage back to the common ancestor. Replay here means reconstructing
+registered state and evidence, not guaranteeing identical regeneration of
+stochastic model prose.
+
+## 11.3 Randomness and stochastic-event identity
+
+A shared snapshot plus a shared seed is insufficient when a treatment changes
+control flow, event order, or the order of random-number draws.
+Common-random-number methods already establish paired same-individual
+comparison and the need for multiple paired replications, while also warning
+that unjustified cross-scenario synchronization can support incorrect
+conclusions.
+[Keeping the Noise Down](https://pmc.ncbi.nlm.nih.gov/articles/PMC2761656/)
+
+A future design must define:
+
+- which stochastic events correspond across branches;
+- how corresponding events receive stable noise identities;
+- how branch-conditional events are represented when no counterpart exists;
+  and
+- how paired replication proceeds across multiple ancestor/seed units.
+
+Event-keyed hashing is one possible technique for decoupling noise identity
+from execution order, not a selected or exclusive implementation. The retained
+methodological preprint also makes clear that deciding which events correspond
+across worlds remains a substantive modeling commitment.
+[Realizing Common Random Numbers](https://arxiv.org/abs/2603.11084)
+
+## 11.4 Comparison after divergence
+
+After the first causal divergence, later decisions must not be matched naively
+by ordinal position. Depending on the registered question and available
+evidence, future analysis may compare:
+
+- the first causal divergence;
+- event- or state-aligned milestones where a defensible correspondence exists;
+- altered world opportunities and constraints;
+- persistence or recovery of motives, beliefs, goals, and relationships;
+- consequential and long-horizon trajectory differences; and
+- terminal outcomes and branch-specific failure modes.
+
+These are possible comparison families, not a frozen alignment algorithm,
+distance formula, primary endpoint, or threshold.
+
+## 11.5 Replication and claim boundary
+
+One twin pair is illustrative and is insufficient for a general claim. Future
+studies require multiple paired replications and preregistered inference,
+without this charter selecting a sample size, statistical test, or decision
+threshold.
+
+The method may improve causal interpretability for a registered simulated
+system by holding the ancestor and treatment-irrelevant conditions fixed while
+retaining separate descendant evidence. It does not automatically identify
+human psychological causation, eliminate model stochasticity, or make every
+event after divergence directly comparable. Any resulting claim must remain
+bounded to the registered treatment, simulated substrate, configurations,
+outcome definitions, and evaluated replications.
 
 # 12. Behavioral failure taxonomy and metrics
 
