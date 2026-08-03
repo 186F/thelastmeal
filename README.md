@@ -16,14 +16,13 @@ neutral reviewer tell the characters apart just by watching their behavior?
 
 A note on one word first: the people in a story that the computer plays are
 called NPCs — "non-player characters" — and this document uses "character"
-and "NPC" interchangeably. The bigger question behind the project: can
-AI-driven characters be believable, distinct personalities _without_ ever
-being allowed to break the rules of their world? And can they eventually be
-affordable? Today's approach asks the AI what to do at every single decision
-point. The research program's long-term goal ("sparse cognition") is for the
-AI to instead write short standing policies for a character and only be
-consulted when something genuinely new happens — the same believable
-behavior for a fraction of the AI calls.
+and "NPC" interchangeably. The project's north-star question is: **which
+cognitive functions should be deterministic, which should be generative, and
+at what timescales should each operate so that long-running simulated lives
+remain persistent, grounded, varied, causally intelligible, and compelling to
+observe?** Model calls, tokens, cost, and latency matter as operational
+diagnostics, but they are not the research objective or a substitute for
+behavioral quality.
 
 This repository is **Vertical Slice 001**, the first building block of that
 program. It contains the simulation, the browser app for watching and
@@ -33,147 +32,91 @@ whole experiments unattended.
 
 ## The big idea: sparse cognition
 
-When a language model drives Mara today, the simulation asks it what to do
-at each genuine decision point: it describes her situation and the concrete
-actions on offer, then folds the model's choice in when the answer arrives.
-The world never stops to wait — the clock keeps running, and a
-deterministic fallback covers her if a reply is late — but every question
-is a paid model call, dozens of them in every 45-minute story. That works;
-the first milestone proved it with a passing live sequence. It just cannot
-be the affordable long-term shape of an AI-driven character.
+When a language model drives Mara in the current system, it selects an action
+from engine-legal options at each genuine decision point. The world does not
+wait: a deterministic fallback covers late or failed responses, and every
+accepted action still passes through the simulation's authority boundary.
 
-**Sparse cognition** is the alternative this research program exists to
-test. "Sparse" is the opposite of "constant": rather than being consulted
-at every step, the model is occasionally asked to write a **policy** — a
-short set of standing "in situations like this, prefer actions like that"
-rules, expressed as plain data in a small fixed vocabulary the simulation
-owns. From then on the simulation applies those rules itself,
-deterministically and instantly, at each decision point. The model is
-consulted again only when a **novelty trigger** fires: something happens
-that the standing rules were never written to cover.
+For the current research program, **sparse cognition** means bounded generative
+authority over cognitive functions. It asks which forms of appraisal,
+reflection, planning, dialogue, memory, and development a model may influence,
+and on what timescale. How often the model is called is a separate question: a
+system can call frequently while granting narrow authority, or call rarely
+while granting broad authority.
 
-An everyday picture: instead of phoning an expert before every small
-choice, the character asks once for brief written instructions and only
-calls back when events go beyond what the instructions anticipated.
+The Milestone 3 charter therefore defines seven neutral candidate allocations:
 
-|                          | Per-decision (today's baseline)        | Policy-patch (sparse cognition)                                 |
-| ------------------------ | -------------------------------------- | --------------------------------------------------------------- |
-| When the model is called | At every genuine decision opportunity  | Only when a fixed, inspectable novelty trigger fires            |
-| What the model returns   | One chosen action                      | A short standing policy — data, not code                        |
-| Who decides in between   | Nobody: every decision is a model call | A local, deterministic policy interpreter in the simulation     |
-| Who has final authority  | The simulation's action gate           | The same gate — a policy has no more power than a direct choice |
+1. deterministic control;
+2. per-decision generative control;
+3. episode-appraisal / policy-artifact cognition;
+4. reflection-only cognition;
+5. planning-only cognition;
+6. dialogue-only generation over engine-selected intent; and
+7. mixed multi-timescale cognition.
 
-The crucial constraint: this hands the model **less** authority, not more.
-A policy is a piece of data that the simulation validates and installs
-through its normal event system. It cannot contain code, invent new kinds
-of actions, change the world directly, or bypass the legality gate that
-every decision already passes through. And because installed policies live
-inside the recorded event stream, a finished run still replays exactly —
-with no model connected at all.
+The episode-appraisal / policy-artifact design is one candidate, not the
+program's assumed destination. None of the seven is selected or authorized for
+implementation. Across every candidate, the deterministic engine remains the
+final authority over objective world state, legal affordances, and committed
+consequences. Model prose can express or propose cognition; it cannot make a
+world claim true or silently rewrite history.
 
-How the milestones build toward it:
-
-- **Milestone 1 (complete)** built the expensive baseline: Mara driven
-  decision-by-decision by a live model, with the evidence pipeline proving
-  every run valid and replayable.
-- **Milestone 2 (closed after calibration)** built the automated
-  laboratory, ran the per-decision condition live, and completed the
-  ten-run variance calibration — then **stopped before the head-to-head
-  experiment**: the calibrated per-decision behavior was highly
-  repetitive and misread the story's central promise, so it was not
-  adopted as the behavioral target the policy condition would have had
-  to preserve. No sparse-cognition acceptance claim is made
-  ([closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)).
-  The head-to-head design remains recorded, with its criteria
-  pre-registered before any data was collected:
-
-| Pre-registered bar    | What it demands                                                                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Fewer calls**       | The policy condition uses at most **25%** of the baseline's model calls, and no single scenario exceeds 35%                                                               |
-| **Real coverage**     | At least **80%** of Mara's decision opportunities are resolved by an installed policy — savings must not come from her quietly collapsing into scripted fallback behavior |
-| **Still Mara**        | Her behavior stays measurably close to the per-decision baseline, judged by pre-registered similarity thresholds over behavioral "fingerprints" of each run               |
-| **Honest thinking**   | Nearly every policy-writing call traces to a named novelty trigger — no hidden "ask the model every minute anyway" loop                                                   |
-| **No safety erosion** | No new illegal actions, no replay divergence, no untreated lethal injury when Mara is the only possible helper — the hard guarantees hold exactly as before               |
-
-Even if such an experiment passed, the supported claim would be
-deliberately modest: in this one small simulation, a model-written policy
-preserved a pre-registered level of behavioral similarity while using at
-most a quarter as many model calls, with exact replay and no loss of
-simulation authority. Milestone 2 did not run that experiment and makes
-no such claim; whether any of it generalizes to larger worlds, other
-models, or many characters remains future work.
+Milestone 1 established that one character could be driven through the live
+model gateway while preserving legal action, replay, and evidence requirements.
+Milestone 2 then built the automated laboratory and completed a registered
+ten-run per-decision calibration. That historical calibration found highly
+repetitive behavior and a consistent semantic error about the story's central
+promise, so Milestone 2 closed before the planned policy comparison and made no
+sparse-cognition acceptance claim. See the
+[closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)
+and
+[canonical analysis](documentation/milestones/002-sparse-cognition/calibration/m2-calibration-variance-a-001.analysis.md).
 
 ## Why build the laboratory first?
 
-The laboratory is not the final game this project hopes to become. It is the
-instrument for deciding whether the architecture above deserves to scale.
+The laboratory is a research instrument, not a claim that any candidate
+architecture works. Its event and evidence machinery makes a causal chain
+inspectable: what a character could know, which actions the engine offered,
+what a decision source proposed, whether the simulation accepted it, what
+happened in the world, and what later state followed. Exact replay,
+deterministic fallback, and versioned model, provider, prompt, and execution
+provenance help separate model behavior from engine behavior, operational
+failure, and presentation prose.
 
-One convincing run cannot answer that question. Language models can make
-different choices under identical starting conditions, and an NPC can appear
-intelligent for the wrong reason: the model may have caused the behavior, but
-so might a deterministic fallback, a race between the world and a late
-response, or a bug in the simulation. Before asking whether policy-driven
-Mara is still Mara, the project first has to measure **how different
-per-decision Mara normally is from herself** across repeated runs. That
-within-condition variation becomes the yardstick for every later comparison.
+The charter proposes matched comparisons among cognitive-authority allocations
+instead of a linear path toward one preferred design. A future causal-twin
+method would fork two descendants from one authoritative common ancestor,
+apply one preregistered difference, and preserve separate evidence and replay
+lineage after divergence. Multiple paired replications would be needed before
+drawing a bounded conclusion.
 
-The event and evidence machinery then makes the causal chain inspectable:
-what Mara knew, which actions the engine actually offered, what the model
-selected, whether the simulation accepted it, what happened in the world,
-and what later beliefs or memories followed. Without that chain, a striking
-moment is only an anecdote. With it, the project can distinguish model
-behavior from fallback behavior, engine behavior, provider failure, and
-presentation prose.
+Future measurement would keep distinct questions distinct: semantic
+correctness, character individuality, repetition and loop recovery,
+consequentiality, trajectory emergence, and independent observer evaluation.
+Operational diagnostics such as calls, cost, latency, failures, and fallbacks
+would explain how evidence was produced, not stand in for behavioral quality.
 
-The same machinery turns architectural changes into behavioral regression
-tests. A new prompt, model, memory representation, context selector, policy
-vocabulary, or call cadence can be evaluated on more than whether a demo
-"feels better": did Mara remain recognizable, become more repetitive, miss
-more tasks, use fewer calls, survive provider loss, or merely produce more
-persuasive explanations for the same actions?
-
-That is also how the project approaches the much larger population-scale
-question without pretending it has already solved it:
-
-```text
-one model-driven character acts lawfully
-        ↓
-measure how much that character naturally varies
-        ↓
-preserve most of that behavior with reusable local policies
-        ↓
-reduce model calls and continue through provider failure
-        ↓
-test whether larger populations are economically and operationally plausible
-```
-
-Much of the laboratory is therefore intended to become production
-infrastructure rather than disposable research scaffolding: engine-owned
-legal actions, deterministic fallbacks, model and provider provenance, cost
-budgets, exact replay, failure continuity, and release-to-release behavioral
-testing are all things a studio would need before shipping autonomous
-characters.
-
-There is a limit to that justification. Evidence infrastructure is useful
-only when it begins producing decisions. Once the per-decision baseline and
-its ordinary variance are established, the value of the project comes from
-running the sparse-cognition experiment and learning whether occasional AI
-input can really preserve a character — not from allowing the laboratory to
-grow indefinitely for its own sake.
+Parallel execution could make replicated scenario studies practical at higher
+throughput, but it is itself a possible treatment. Serial-versus-parallel parity
+must be established before their behavioral results are treated as
+interchangeable. The charter defines that research direction; no parallel-lab
+implementation, causal-twin study, scenario build, or later work package is
+currently authorized.
 
 ## The project at a glance
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model.                                                                                                                                          |
-| **Current work**                | Milestone 2 is **closed after calibration**: Phases 1–4, Stage A acceptance, and the registered ten-run calibration completed with sealed evidence; the planned policy-patch implementation and paired comparison were not executed because the calibrated per-decision condition was not adopted as a credible behavioral preservation target ([closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)); successor research requires separate authorization |
-| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                                                                                                                                                             |
-| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                                                                                                                                                                     |
+|                                 |                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What it is**                  | A deterministic browser simulation of three characters under pressure, built as a research instrument                                                                                                                                                                                                                                                         |
+| **Built with**                  | Vite, TypeScript, Three.js (browser); Node.js (tools, tests, AI gateway)                                                                                                                                                                                                                                                                                      |
+| **Implementation release**      | 1.9.0                                                                                                                                                                                                                                                                                                                                                         |
+| **Frozen experiment identity**  | Vertical Slice 001 — v1.0, configuration `vs001-1.0.0` (never changes with the release)                                                                                                                                                                                                                                                                       |
+| **AI integration status**       | **Live milestone complete:** a six-run formal sequence under experiment v1.2.0 passed every pre-registered threshold (2026-07-29 → 30; [acceptance report](documentation/milestones/001-model-integration/acceptance/MODEL_INTEGRATION_MILESTONE_001_LIVE_ACCEPTANCE_REPORT.md)). Day-to-day development and CI still run keylessly on a stand-in fake model. |
+| **Current work**                | Milestone 3 Item 2 is complete: the research charter and claim boundaries are established. No Milestone 3 implementation, live experiment, model call, evidence generation, or Work Package 2 activity is authorized or underway.                                                                                                                             |
+| **Current research direction**  | [`documentation/milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md`](documentation/milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md) — authoritative when merged to `main` for research direction, claim boundaries, sequencing, and governance only                                            |
+| **What you need to try it**     | Git, Node.js, and a Chromium-based browser — no account, API key, or payment                                                                                                                                                                                                                                                                                  |
+| **Authoritative specification** | [`documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md`](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                                                                                                                                                                                                                                    |
+| **Deep technical contract**     | [`documentation/reference/TECHNICAL_REFERENCE.md`](documentation/reference/TECHNICAL_REFERENCE.md)                                                                                                                                                                                                                                                            |
 
 This project deliberately versions several things separately. The three to
 keep apart while reading: the **software release** moves with every code
@@ -353,10 +296,11 @@ closed after calibration with no sparse-cognition acceptance claim —
 the full reasoning and claim boundary are in the
 [closeout report](documentation/milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md).
 
-## Pre-registered success criteria
+## Vertical Slice 001 correctness and distinctiveness criteria
 
-Recorded before results, and not to be tuned or redefined after observing
-results without creating a new experiment version (brief section 26).
+These criteria were recorded for the frozen Vertical Slice 001 before results
+and remain historical correctness and distinctiveness requirements for that
+slice, not the active Milestone 3 research objective (brief section 26).
 
 **Correctness — the simulation must never break its own rules:**
 
@@ -374,15 +318,6 @@ results without creating a new experiment version (brief section 26).
 - An anonymized action trace should permit a human reviewer to identify the NPC above the 33% chance baseline (later-study target: ≥ 70%).
 - A relevant memory must measurably alter behavior in a controlled comparison (B1/B2).
 - Memory and personality may affect preferences but may not bypass survival constraints, action legality, or the authoritative event system.
-
-**Future scalability targets** (recorded, not demonstrated in this slice).
-In plain terms: today's setup consults the AI at every decision point (the
-"per-decision" condition); the goal is a future "policy-patch" condition
-where the AI writes short standing rules for a character and is consulted
-only when something genuinely new happens:
-
-- The policy-patch condition should eventually use ≤ 25% of the model calls of the per-decision condition.
-- Model use should scale with novel causal situations, not raw ticks.
 
 ## Commands
 
@@ -507,7 +442,8 @@ the milestone chronology, and the audit reading order. The highlights:
 
 | Kind                     | Documents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Specification**        | [Vertical Slice 001 coding brief](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md) (authoritative), [Milestone 2 brief](documentation/milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) + [scope ruling](documentation/milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md) (authoritative for M2)                                                                                                                                                                                                                                                                                                                         |
+| **Research direction**   | [Milestone 3 research charter](documentation/milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md) — authoritative when merged to `main` for current research direction and claim boundaries only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Specification**        | [Vertical Slice 001 coding brief](documentation/reference/VERTICAL_SLICE_001_CODING_BRIEF.md) (authoritative), [Milestone 2 brief](documentation/milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) + [scope ruling](documentation/milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md) (historical; authoritative for M2 only)                                                                                                                                                                                                                                                                                                        |
 | **Engineering contract** | [Technical reference](documentation/reference/TECHNICAL_REFERENCE.md) — determinism rules, decision lifecycle, evidence pipeline, CI details, implementation assumptions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Operations**           | [Milestone 2 operator runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md), [live-run setup](documentation/reference/TECHNICAL_REFERENCE.md#live-run-operator-setup-and-walkthrough)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Operations**           | [Milestone 2 operator runbook](documentation/operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md) (historical), [live-run setup](documentation/reference/TECHNICAL_REFERENCE.md#live-run-operator-setup-and-walkthrough)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | **Reports & audits**     | Per-release implementation and audit reports linked from the version-history table above; Milestone 2 Phase 3 audits: [audit](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_AUDIT.md) · [re-audit](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_REAUDIT.md) · [focused re-audit](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FOCUSED_REAUDIT.md) · [final targeted audit](documentation/milestones/002-sparse-cognition/phase-03-orchestrator/audits/MILESTONE_002_PHASE3_ORCHESTRATOR_FINAL_TARGETED_AUDIT.md) |
