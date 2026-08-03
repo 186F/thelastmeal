@@ -1457,17 +1457,303 @@ they do not alone determine behavioral success.
 
 # 13. Planned future work packages
 
-This section will order provisional future work without authorizing any package
-beyond the current charter task.
+> **Authorization boundary:** Work Package 1 is the current charter task. Work
+> Packages 2–8 are provisional future gates. Listing or ordering them does not
+> authorize them, promise their completion, or freeze their technical design.
 
-> **Status:** TBD IN CHUNK 6.
+## Work Package 1 — Research charter and claim boundaries
+
+**Status.** Current Milestone 3 Item 2 work.
+
+**Purpose.** Establish the research objective, candidate comparison space,
+related-work boundary, causal method, measurement taxonomy, governance, and
+exclusions.
+
+**Entry or dependency boundary.** This package is limited to the staged charter
+and its review process. It creates no authority to enter a later package.
+
+**Completion and claim boundary.** Its completion artifact is the reviewed and
+merged Milestone 3 charter. Completion establishes the approved research and
+claim boundaries only; it does not authorize implementation, live execution,
+or Work Packages 2–8.
+
+## Work Package 2 — Minimum parallel-run laboratory specification
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Produce a versioned technical and evidence specification for
+isolated concurrent independent runs and independent studies.
+
+**Entry or dependency boundary.** Entry requires separate authorization after
+the charter. The package remains specification-only until implementation is
+separately authorized.
+
+**Completion and claim boundary.** A future specification would have to address
+run identity, isolation, scheduling provenance, evidence roots, model-request
+accounting, logical-time handling, failure disposition, and final aggregation.
+Its review would not implement the laboratory or establish behavioral parity,
+and this charter selects no implementation stack.
+
+## Work Package 3 — Serial-versus-parallel parity study
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Determine whether an approved execution architecture changes
+evidence, logical timing, model handling, or behavioral outcomes relative to
+serial execution.
+
+**Entry or dependency boundary.** Entry requires an approved minimum-laboratory
+specification and an implemented execution path separately authorized outside
+this charter.
+
+**Completion and claim boundary.** Completion requires preregistered parity
+evidence, not merely successful completion or speedup. Any conclusion would
+remain bounded to the registered execution and concurrency profiles, evidence,
+conditions, and outcomes.
+
+## Work Package 4 — Corrected causal test world and semantic contracts
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Version a world and model-facing semantic contract that removes
+known objective ambiguities while providing genuine identity-sensitive
+discretion.
+
+**Entry or dependency boundary.** Entry requires separate authorization and
+must preserve the existing Milestone 2 world and calibration as immutable
+history.
+
+**Completion and claim boundary.** A future completion would be a separately
+approved, versioned causal world and semantic contract with identities distinct
+from Milestone 2. This charter neither designs nor implements them, and their
+later existence would not revise what Milestone 2 established.
+
+## Work Package 5 — Reduced candidate cognitive architectures
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Specify the smallest testable forms of selected controls or
+candidates from Section 7 before implementing full complexity. Reduced means
+reduced experimental forms, not fewer model calls.
+
+**Entry or dependency boundary.** Entry requires separate selection and
+authorization of candidate specifications without presuming that any candidate
+is superior.
+
+**Completion and claim boundary.** Each added cognitive layer would have to be
+independently testable and removable through comparison or ablation. A reviewed
+reduced specification would not establish behavioral benefit or authorize its
+implementation or study.
+
+## Work Package 6 — First causally matched architecture-comparison study
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Compare approved candidate allocations from registered common
+ancestors using the Section 11 method and Section 12 measurement families.
+
+**Entry or dependency boundary.** Entry requires credible parity evidence, an
+approved causal world and semantic contract, approved reduced candidate
+specifications, and a separately preregistered analysis.
+
+**Completion and claim boundary.** Observed outcomes may diverge while outcome
+definitions and branch-evidence rules remain fixed. Any result would remain
+bounded to the registered substrate, ancestors, conditions, evidence, and
+evaluated replications rather than selecting a universally superior
+architecture.
+
+## Work Package 7 — Dead-end and observer-evaluation laboratory
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Validate selected Section 12 failure and quality measures and
+conduct separately preregistered observer studies.
+
+**Entry or dependency boundary.** Entry requires separate authorization,
+selected metric specifications, suitable authoritative trajectory evidence,
+and separate observer-study registrations. This charter selects no evaluator,
+formula, sample, threshold, or protocol.
+
+**Completion and claim boundary.** Model-assisted annotations, human judgments,
+deterministic summaries, and engine-native observations would remain separate
+evidence layers. A future result would be bounded to the validated measures and
+registered observer design rather than establishing a universal measure of
+believability.
+
+## Work Package 8 — Scale-out and additional scenario families
+
+**Status.** Provisional and not authorized.
+
+**Purpose.** Expand validated methods toward larger studies and later colony,
+developmental-epistemology, or ambient-community contexts.
+
+**Entry or dependency boundary.** Earlier methods must first demonstrate
+adequate validity, evidence integrity, and operational reliability, followed by
+separate authorization for any scale-out or scenario work.
+
+**Completion and claim boundary.** Scale is not success. Listing this package
+does not authorize construction of any Section 6 scenario family, and any
+future result would remain bounded to the separately registered scale and
+context.
+
+This sequence may be amended only through an explicit, versioned ruling. Later
+work must not silently reorder its dependencies.
 
 # 14. Governance and evidence rules
 
-This section will state the versioning, evidence, causal-provenance, and
-authority rules that future work would have to satisfy.
+The rules below govern future authorized specifications and studies. They do
+not authorize work or select how identities, registrations, records, or
+evidence will be implemented.
 
-> **Status:** TBD IN CHUNK 6.
+## 14.1 Historical separation
+
+As bounded in Section 4, Milestone 2 remains immutable historical evidence. A
+later finding may cite that record but may not rewrite what Milestone 2
+established.
+
+Milestone 3 work must use separate document, condition, treatment, metric,
+experiment, analysis, and evidence identities. No Milestone 2 condition,
+metric, threshold, result, or archive may be silently repurposed as Milestone 3
+evidence.
+
+## 14.2 Versioned change control
+
+Formula or classification-rule changes must receive a new metric identity.
+Changes to prompts, model authority, fallback behavior, worlds, affordances,
+semantic contracts, or cognitive treatments must receive a new treatment,
+condition, or experiment version as appropriate.
+
+Analysis-rule changes must receive a new analysis version and may not silently
+alter a registered result. Execution-architecture or concurrency-profile
+changes may not occur within one registered study unless its preregistered
+design explicitly treats those changes as conditions.
+
+One versioned object must not carry two materially different meanings. These
+identity obligations do not select a version format, registry, storage system,
+or change-control mechanism.
+
+## 14.3 Registration and claim boundaries
+
+Every live dataset used for a confirmatory claim must have a preregistration.
+Where applicable, registration must identify:
+
+- the treatment;
+- the common ancestor or ancestor-generation rule;
+- model, provider, and prompt lineage;
+- the execution and concurrency profile;
+- call and failure budgets;
+- the evidence contract;
+- exclusions;
+- outcomes; and
+- the analysis identity.
+
+Exploratory analyses must be labeled exploratory and may not silently become
+registered primary findings. Conclusions must remain bounded to the registered
+simulated substrate, conditions, evidence, and evaluated replications.
+
+These are conceptual registration obligations, not a registration schema. This
+charter selects no field structure, system, model, provider, budget value,
+outcome, or analysis method.
+
+## 14.4 Attempts, failures, and replacements
+
+Failed, interrupted, invalid, excluded, and replacement attempts must remain
+recorded evidence with typed dispositions. Replacement rules must be
+preregistered, and a replacement must not erase the original attempt.
+
+Operational failure, artifact invalidity, study invalidity, and behaviorally
+unfavorable outcomes must remain distinct. Researchers may not retry an attempt
+merely to obtain a preferred trajectory.
+
+These obligations do not select a disposition vocabulary, retry mechanism,
+record format, or storage design.
+
+## 14.5 Concurrency and time provenance
+
+Every future concurrent study must record the concurrency profile defined
+conceptually in Section 10. Provider queueing, rate limits, correlated failure
+windows, local queueing, fallback, timeout, supersession, rejection,
+scheduling, and commit behavior must be observable where relevant.
+
+Logical simulation time, provider wall-clock time, and local queue time must
+remain distinct. Parallel execution may be treated as behaviorally
+interchangeable with serial execution only after applicable parity evidence
+exists. A registered study may not silently change its execution architecture
+midstream.
+
+These are evidence obligations, not an implementation specification. They
+select no provider, timing mechanism, scheduler, worker arrangement, queue,
+commit mechanism, or concurrency value.
+
+## 14.6 Causal-fork governance
+
+Every future fork must identify one authoritative common ancestor, the
+registered intervention boundary, the configuration held constant, and the
+branch-specific lineage. Each branch must preserve its own evidence and replay
+lineage to the ancestor.
+
+A shared seed alone does not establish stochastic correspondence. Cross-branch
+stochastic-event identity and branch-conditional events must follow explicit,
+registered rules. After divergence, comparisons must follow registered causal
+or state correspondence rather than naive ordinal decision matching.
+
+These obligations preserve the Section 11 method without selecting a fork
+schema, event-identity mechanism, or alignment algorithm.
+
+## 14.7 Measurement and evaluator governance
+
+Section 12's engine-native, deterministic-derived, model-assisted, and human or
+observer layers must remain separate in collection and reporting.
+
+Model-assisted labels must record their model, version, prompt, inputs, and
+uncertainty and may not silently become ground truth. Human or observer studies
+must receive separate preregistration and retain the exact material shown to
+reviewers.
+
+A composite metric requires explicit authorization, must retain all component
+results, and must receive its own metric identity. Disagreement among evidence
+layers or metric families must be reported rather than resolved after the fact
+in favor of one condition.
+
+These rules select no metric formula, evaluator, prompt, sample, protocol,
+aggregation rule, or decision threshold.
+
+## 14.8 World and cognitive authority
+
+The deterministic engine remains final authority over objective world state,
+legal affordances, and committed consequences. Model prose is never
+authoritative proof that an event occurred or that a proposition about the
+world is true.
+
+The engine may authoritatively record that an NPC holds a belief or produced an
+utterance without making the belief or utterance true. Every future
+cognitive-authority handoff must be versioned and attributable in the evidence.
+No model response may silently rewrite history, identity, relationships,
+commitments, or evidence.
+
+## 14.9 Evidence integrity and preservation
+
+Immutable evidence roots must remain immutable. Derived analysis must be
+written separately and record its source identities. Evidence packaging,
+inventory, sealing, verification, and secret-handling rules must be versioned.
+
+When a packaging defect is corrected in a later version, the original package
+must remain preserved. Evidence loss, mutation, collision, adoption, or
+incomplete finalization must be treated as an explicit failure, not concealed.
+
+Where historical Milestone 2 identities are needed, future work must use the
+closeout record identified in Section 4 rather than restating archive hashes in
+this section. These preservation duties do not select a packaging format,
+inventory schema, sealing method, verifier, or secret-handling mechanism.
+
+## 14.10 Authority to proceed
+
+A charter, specification, or work-package listing does not authorize
+implementation or live execution. Every later work package requires separate
+Operator authorization and applicable Advisor review.
+
+Green CI, elapsed time, completed drafting, or an apparently obvious next
+action does not confer authority to proceed.
 
 # 15. Explicit exclusions
 
