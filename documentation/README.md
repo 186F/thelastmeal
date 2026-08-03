@@ -12,10 +12,13 @@ historical.
 | ----------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------- |
 | [Vertical Slice 001 coding brief](reference/VERTICAL_SLICE_001_CODING_BRIEF.md)                             | AUTHORITATIVE | The frozen specification of the simulation, scenarios, and experiment identity   |
 | [Technical reference](reference/TECHNICAL_REFERENCE.md)                                                     | ACTIVE        | The living engineering contract: determinism rules, decision lifecycle, evidence |
+| [Milestone 3 index](milestones/003-parallel-causal-life-laboratory/README.md)                              | ACTIVE        | Current Milestone 3 status, authorization boundary, and reading order             |
+| [Milestone 3 research charter](milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md) | AUTHORITATIVE | Current research direction, claim boundaries, sequencing, and governance only    |
 | [Milestone 2 implementation brief](milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) | HISTORICAL | The specification that governed Milestone 2 (closed; preserved unchanged)        |
 | [Milestone 2 scope ruling](milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)    | HISTORICAL    | Amendments and rulings that governed on any ambiguity with the brief (preserved) |
 | [Milestone 2 closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)             | COMPLETED     | The final Milestone 2 record: disposition, findings, and claim boundary          |
-| [Operator runbook](operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)                                     | ACTIVE        | How to launch, supervise, resume, and recover unattended experiment sequences    |
+| [Milestone 2 canonical calibration analysis](milestones/002-sparse-cognition/calibration/m2-calibration-variance-a-001.analysis.md) | COMPLETED | The registered calibration result preserved as historical evidence               |
+| [Milestone 2 operator runbook](operations/MILESTONE_002_CLAUDE_OPERATOR_RUNBOOK.md)                         | HISTORICAL    | The run procedure that governed completed Milestone 2 sequences                   |
 
 ## 2. Current project state
 
@@ -23,12 +26,12 @@ historical.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Package version          | 1.9.0                                                                                                                                                        |
 | Frozen scenario data     | `vs001-1.0.0` (never changes)                                                                                                                                |
-| Current milestone        | Milestone 2 — sparse cognition (`sparse-cognition-policy-001` v1.0.0)                                                                                        |
-| Last completed phase     | Phase 4 — per-decision comparator (PR #15 → merge `8282dfe`; evidence-instrumentation revision PR #16 → merge `cadcca7`), followed by Stage A acceptance **passed** (2026-08-01) and the registered ten-run calibration **completed** (2026-08-02) at frozen `cadcca7` |
-| Current phase            | **Milestone 2: CLOSED AFTER CALIBRATION.** Phases 1–4 and the registered ten-run calibration completed. The planned policy-patch implementation and paired comparison were not executed under Milestone 2 because the calibrated per-decision condition was not adopted as a credible behavioral preservation target. No sparse-cognition acceptance claim is made. ([Closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)) |
-| Next authorized work     | None — Milestone 2 is closed; successor research (revised charter, comparator/scenario remediation, packaging-format correction, policy-patch architecture as one candidate) is deferred work requiring separate authorization                                            |
+| Current milestone        | Milestone 3 — Parallel Causal Life Laboratory                                                                                                               |
+| Last completed phase     | Milestone 3 Item 2 — research charter and claim boundaries established                                                                                       |
+| Current phase            | **CHARTER ESTABLISHED.** No Milestone 3 implementation, experiment, model call, evidence generation, or Work Package 2 activity is authorized or underway.       |
+| Next authorized work     | None — Work Packages 2–8 are provisional and each requires separate Operator authorization and applicable Advisor review                                 |
 | Live model calls to date | Milestone 1 acceptance; Milestone 2 Stage A (47 calls, 2026-08-01) and the ten-run calibration (473 emitted / 472 accepted, 2026-08-02), all registered, sealed, and analyzed — no other live calls                                                                       |
-| Controlling documents    | Milestone 2 brief + scope ruling (see Start here)                                                                                                            |
+| Controlling documents    | The Milestone 3 charter controls current research direction and claim boundaries; the Vertical Slice 001 coding brief and technical reference continue to govern the current system                         |
 
 ## 3. Document-status legend
 
@@ -59,6 +62,14 @@ historical.
    completed (2026-08-02) → **CLOSED AFTER CALIBRATION** without the
    policy-patch comparison; no sparse-cognition acceptance claim
    ([closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)).
+4. **Milestone 3 — Parallel Causal Life Laboratory**
+   ([index](milestones/003-parallel-causal-life-laboratory/README.md)) — Item 2
+   established the
+   [research charter](milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md),
+   including the research objective, candidate allocation space, causal method,
+   measurement taxonomy, work-package sequence, claim boundaries, and
+   governance. **CHARTER ESTABLISHED**; no implementation, experiment, model
+   call, evidence generation, or Work Package 2 activity is authorized.
 
 ## 5. Audit reading order
 

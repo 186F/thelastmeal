@@ -1,12 +1,15 @@
 # Milestone 3 Research Charter — Parallel Causal Life Laboratory
 
-**Document status:** WORKING DRAFT under Milestone 3 Item 2.
+**Document status:** MILESTONE 3 RESEARCH CHARTER — Item 2 complete.
 
-**Authorization:** This document does not authorize implementation or
-experimentation.
+**Authority:** The version of this charter merged to `main` is authoritative
+for Milestone 3 research direction, claim boundaries, sequencing, and
+governance only. It does not authorize implementation, experimentation, model
+calls, or evidence generation.
 
-**Completion:** Each section remains incomplete until its assigned chunk is
-approved.
+**Completion:** Sections 1–16 are complete. Work Packages 2–8 remain
+provisional and unauthorized; each requires separate Operator authorization
+and applicable Advisor review.
 
 # 1. Executive statement
 
@@ -199,10 +202,10 @@ specified and pre-registered rather than asserted from anecdotes.
 
 # 6. Scenario families
 
-> These are provisional research laboratories for testing one underlying
-> simulated-life architecture. They are not authorized implementations,
-> product commitments, or claims that the architecture can already support
-> them.
+> These are provisional research laboratories for evaluating alternative
+> cognitive-authority allocations within a shared simulated-life research
+> program. They are not authorized implementations, product commitments, or
+> claims that any candidate architecture can already support them.
 
 Each family is a candidate future evaluation context, not a selected scenario
 or a scenario-construction plan. Building or studying any family would require
