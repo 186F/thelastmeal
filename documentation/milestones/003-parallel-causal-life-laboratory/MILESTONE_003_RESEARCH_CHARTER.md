@@ -1798,6 +1798,12 @@ not system or architecture acceptance tests, work-package authorization, or a
 scientific result. Every group below must be satisfied; completion of one group
 does not compensate for a gap in another.
 
+These criteria operate in two stages. The substantive charter criteria in
+Sections 16.1–16.7 and the pre-integration portions of Section 16.8 must pass
+before Chunk 7 is authorized. The document-status, navigation, exact-head CI,
+and final-clearance requirements in Section 16.8 are completed and audited
+during Chunk 7. Every final criterion remains mandatory before merge clearance.
+
 ## 16.1 Research objective and scope
 
 The charter is acceptable only if it:
@@ -1933,8 +1939,9 @@ The charter is acceptable only if it:
 
 The charter is acceptable only if:
 
-- Sections 1–16 are complete and contain no unresolved drafting marker or
-  unfinished-status language;
+- Sections 1–16 are substantively complete before Chunk 7; during Chunk 7, the
+  preamble and document status are reconciled so the exact final head contains
+  no unresolved drafting marker, placeholder, or unfinished-section language;
 - the charter remains research direction and governance rather than
   implementation or study authorization;
 - milestone navigation and README reconciliation occur only in an explicitly
@@ -1948,11 +1955,13 @@ The charter is acceptable only if:
 - the current head is not described as merge-ready merely because Section 16
   is complete.
 
-When all criteria are satisfied, the charter may proceed to Chunk 7 final
-integration and audit. Approval of the charter establishes research direction,
-claim boundaries, sequencing, and governance only. It does not establish that
-any candidate architecture works or authorize implementation, an experiment,
-model calls, or evidence generation.
+When all pre-integration criteria are satisfied, the charter may proceed to
+Chunk 7 final integration and audit. Item 2 may be cleared for merge
+consideration only after Chunk 7 completes the remaining document-status,
+navigation, exact-head CI, and final-clearance criteria. Approval of the charter
+establishes research direction, claim boundaries, sequencing, and governance
+only. It does not establish that any candidate architecture works or authorize
+implementation, an experiment, model calls, or evidence generation.
 
 # Primary-source references
 
