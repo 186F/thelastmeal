@@ -1080,10 +1080,380 @@ outcome definitions, and evaluated replications.
 
 # 12. Behavioral failure taxonomy and metrics
 
-This section will organize future behavioral and operational measurement
-families while leaving formulas and thresholds unspecified.
+The families below are candidates for future preregistration. They are not
+accepted metrics, claims about the present system, or evidence that any
+candidate architecture succeeds or fails. This charter selects no formula,
+weight, threshold, time window, sample size, judge model, annotation protocol,
+primary endpoint, or acceptance rule.
 
-> **Status:** TBD IN CHUNK 5.
+## Interpretive safeguards
+
+- **A dead end is not mere quiet, routine, rest, maintenance, or low drama.** A
+  trajectory becomes concerning when it persistently fails to assimilate
+  available novelty, revise or terminate exhausted goals or interactions,
+  create contextually meaningful consequence, or recover despite relevant
+  opportunities.
+- **Repetition is not automatically failure.** Stable routines and recurring
+  obligations may be appropriate. Recurrence becomes diagnostic when it is
+  context-insensitive, consequence-free, semantically redundant, or resistant
+  to relevant new evidence.
+- **Behavioral breadth is not randomness.** Variation matters only when it
+  remains compatible with the character and causally intelligible in context.
+- **Efficiency is not human plausibility.** Fast task completion, high reward,
+  or a low model-call count cannot stand in for an interesting and believable
+  life.
+- **Entropy is not quality.** High variation can be incoherent, while low
+  variation can be appropriate under strong constraints.
+- **Observer value is not constant spectacle.** A quiet life may remain
+  compelling when it is persistent, intelligible, and responsive to its
+  circumstances.
+- **Every candidate measure requires authoritative provenance.** It must link
+  back to the trajectory evidence that supports it. Model prose may assist
+  interpretation, but it is not authoritative evidence of world truth.
+
+## Measurement layers
+
+- **Engine-native observations** are canonical events, state transitions,
+  legal actions, engine-represented commitments and beliefs, relationships,
+  resources, and outcomes.
+- **Deterministic derived summaries** are reproducible trajectory signatures,
+  classifications, or counts computed from authoritative evidence under a
+  versioned definition.
+- **Model-assisted annotations** are exploratory labels. They must record the
+  model and version, prompt, inputs, and uncertainty; they may not silently
+  become ground truth and require independent validation before supporting a
+  consequential claim.
+- **Human or observer judgments** belong to a separately designed study,
+  blinded where appropriate and preregistered before confirmatory use.
+
+This taxonomy does not select an embedding or judge model, evaluator prompt,
+annotation platform, human sample, aggregation rule, or adjudication process.
+
+## 12.1 Repetition, loops, and recovery
+
+**Intended observation.** This family would identify context-insensitive action,
+dialogue, decision, or goal recurrence and whether the life can escape it. A
+justified routine remains distinct from a loop: recurrence in response to a
+continuing obligation, constraint, or maintenance need may be coherent even
+when its surface form repeats.
+
+**Candidate signals.** Candidate signals include:
+
+- repeated action sequences;
+- semantic dialogue repetition;
+- conversation-turn loops;
+- repeated goals without new consequence;
+- recurrent decision states;
+- failure to terminate exhausted interactions; and
+- whether and how a trajectory escapes a detected loop.
+
+**Principal interpretation risk.** Surface similarity may falsely label
+appropriate routine, recovery, caregiving, work, or obligation as failure, or
+may miss a semantic loop whose wording varies. Context, changed evidence,
+available alternatives, consequences, and recovery opportunities therefore
+matter to interpretation.
+
+**Authoritative evidence.** Supporting evidence would include ordered legal
+actions, decision states, goal and commitment records, accepted dialogue
+events, canonical consequences, available affordances, relevant perceptions,
+and the later events that show persistence or escape. An accepted utterance
+can establish what was said; its prose does not establish that what it says
+about the world is true.
+
+## 12.2 Consequentiality and meaningful quiet
+
+**Intended observation.** This family would examine whether activity or quiet
+periods participate in a persistent causal life. It distinguishes sterile
+inactivity from rest, contemplation, recovery, routine, and maintenance that
+remain coherent with needs, commitments, relationships, and later conduct.
+
+**Candidate signals.** Candidate signals include:
+
+- time since the last consequential world, belief, relationship, commitment,
+  or goal change;
+- the fraction of interactions that produce later effects;
+- persistence of relationship changes;
+- commitment follow-through;
+- whether conversation produces action, state change, belief revision, or
+  intentional maintenance; and
+- whether quiet periods remain causally coherent rather than sterile.
+
+**Principal interpretation risk.** A measure may reward constant drama, equate
+frequent state mutation with meaningful consequence, or penalize appropriate
+stability. Sparse visible change is not itself failure, and a large change is
+not necessarily meaningful to the life being studied.
+
+**Authoritative evidence.** Supporting evidence would include canonical world
+and agent state, belief, relationship, commitment, and goal transitions;
+event-to-event lineage; records of fulfilled or broken commitments; accepted
+interactions; and later conduct linked to the earlier event or maintained
+state.
+
+## 12.3 Grounding and semantic correctness
+
+**Intended observation.** This family would examine whether cognition and
+expression remain consistent with authoritative roles, commitments,
+actor-beneficiary direction, legal affordances, and information available to
+the NPC. It preserves Section 4's methodological distinction between legal
+action success and semantic understanding without adding a Milestone 2
+finding.
+
+**Candidate signals.** Candidate signals include:
+
+- consistency with authoritative roles, commitments, actor-beneficiary
+  direction, and legal affordances;
+- invented entities, events, relationships, or perceptions;
+- contradictions with information available to the NPC;
+- response to explicit correction or contrary evidence; and
+- legal or task-effective action success reported separately from semantic
+  understanding.
+
+**Principal interpretation risk.** Legal behavior may conceal semantic error,
+while informal phrasing, uncertainty, or a character's justified false belief
+may be mislabeled as an objective contradiction. Evaluation must separate
+world truth, the NPC's evidence boundary, the NPC's represented belief, and
+the meaning attributed to its action or language.
+
+**Authoritative evidence.** Supporting evidence would include canonical role,
+relationship, commitment, entity, and event records; legal affordance sets;
+the NPC's perception and information boundary; accepted actions and
+utterances; explicit corrections; and later belief or conduct changes. Model
+interpretation cannot replace those records.
+
+## 12.4 Belief and memory
+
+**Intended observation.** This family would examine whether remembered and
+inferred content is relevant, provenance-bearing, revisable, and capable of
+affecting later conduct without becoming a self-reinforcing substitute for
+evidence.
+
+**Candidate signals.** Candidate signals include:
+
+- belief correction after contrary evidence;
+- retrieval relevance;
+- memory self-reinforcement;
+- contradictory beliefs;
+- assimilation of novel events;
+- unjustified certainty;
+- provenance of remembered or inferred claims; and
+- whether memory changes later conduct.
+
+**Principal interpretation risk.** Persistent belief may be justified when
+evidence is ambiguous, and belief revision may be inappropriate when a source
+is unreliable. Conversely, fluent or frequently retrieved memories may appear
+coherent while amplifying an unsupported claim. Retrieval, truth, belief, and
+behavioral influence must remain distinct.
+
+**Authoritative evidence.** Supporting evidence would include stored belief
+and memory records, their source-event references and confidence or
+uncertainty where represented, retrieval records, the NPC's accessible
+evidence, canonical contrary events or corrections, successor belief state,
+and linked later actions. A memory record proves what was stored, not that its
+content is objectively true.
+
+## 12.5 Individuality, breadth, and convergence
+
+**Intended observation.** This family would examine whether characters remain
+recognizably distinct while retaining more than one defensible response where
+circumstances permit discretion. It would also identify convergence, mutual
+echoing, caricature, or generic optimization that erases meaningful
+individuality.
+
+**Candidate signals.** Candidate signals include:
+
+- behavioral repertoire breadth;
+- within-character variation;
+- between-character distinguishability;
+- persona convergence or mutual echoing;
+- caricature collapse;
+- generic optimization across supposedly distinct characters; and
+- whether variation remains recognizably and causally compatible with the
+  character.
+
+**Principal interpretation risk.** Situational constraints may make distinct
+characters act alike, while superficial variety may be random, incoherent, or
+irrelevant. Stable identity may also be mistaken for rigidity. Comparisons
+must account for available opportunities, history, and character-compatible
+reasons rather than treating difference itself as success.
+
+**Authoritative evidence.** Supporting evidence would include stable character
+profiles, histories and experienced evidence, legal opportunities, ordered
+actions, accepted dialogue events, world consequences, and relationship,
+belief, goal, and commitment trajectories across comparable contexts. Any
+model-assisted similarity label would remain separate from these records.
+
+## 12.6 Goal behavior and recovery
+
+**Intended observation.** This family would examine whether goals and plans
+persist when appropriate, revise when circumstances change, terminate when
+satisfied or exhausted, and recover from blockage without churning or
+fixating.
+
+**Candidate signals.** Candidate signals include:
+
+- goal churn;
+- abandoned plans;
+- repetitive fixation;
+- plan/world mismatch;
+- replanning after changed conditions;
+- appropriate goal termination; and
+- recovery from blocked, impossible, or obsolete goals.
+
+**Principal interpretation risk.** Persistence can be commitment rather than
+fixation, and abandonment can be rational adaptation rather than failure.
+Frequent replanning can reflect a volatile world, while apparent stability can
+conceal a stale plan. Interpretation must retain the goal's status, evidence,
+constraints, and available recovery opportunities.
+
+**Authoritative evidence.** Supporting evidence would include goal and plan
+lineage, commitment state, success or impossibility conditions where
+represented, canonical world changes, legal affordances, action attempts and
+outcomes, interruption or termination records, and successor goals and
+conduct.
+
+## 12.7 Social life and offscreen continuity
+
+**Intended observation.** This family would examine whether relationships and
+social processes change, persist, and produce traceable consequences both in
+view and offscreen, rather than resetting to generic interaction at each
+scene.
+
+**Candidate signals.** Candidate signals include:
+
+- conversation termination;
+- relationship-network change;
+- convergence toward generic friendliness or hostility;
+- rumor propagation and correction;
+- conflict resolution or meaningful persistence;
+- effects of promises and commitments;
+- arrivals, departures, and household change where relevant; and
+- whether offscreen events leave durable, traceable consequences.
+
+**Principal interpretation risk.** Stable relationships and unresolved
+conflict may be appropriate, while frequent network change may be arbitrary.
+The absence of visible interaction does not establish the absence of a social
+life, and a narrated offscreen event does not establish that it occurred.
+
+**Authoritative evidence.** Supporting evidence would include accepted social
+events and dialogue, relationship and network state, promise and commitment
+records, rumor source and transmission lineage, conflict-relevant world
+events, residence or household state where applicable, offscreen canonical
+events, and the later behavior and consequences they shape.
+
+## 12.8 Trajectory structure and emergence
+
+**Intended observation.** This family would examine how a small registered
+difference relates to persistent, amplified, convergent, reversed, or
+otherwise consequential descendant trajectories, and whether surprising
+outcomes remain causally traceable.
+
+**Candidate signals.** Candidate signals include:
+
+- the first causal divergence;
+- persistence, amplification, convergence, or reversal after divergence;
+- depth of downstream consequence;
+- emergence from small differences;
+- causal traceability of surprising outcomes; and
+- outcome diversity without treating mere stochastic wobble as emergence.
+
+**Principal interpretation risk.** A later difference may reflect unmatched
+opportunity, unsupported cross-branch event correspondence, or incidental
+noise rather than the registered treatment. Conversely, later convergence may
+hide materially different paths. Surprise and diversity do not by themselves
+establish emergence or quality.
+
+**Authoritative evidence.** Supporting evidence would include the serialized
+common ancestor, registered intervention, branch-specific canonical events
+and state, evidence and replay lineage, stable stochastic-event identities
+where correspondence is justified, and downstream consequences. Consistent
+with Section 11, post-divergence branches would be aligned only through a
+defensible registered correspondence, not mechanically by decision ordinal.
+
+## 12.9 Observer evaluation
+
+**Intended observation.** This family would examine how independent observers
+experience a persistent life, including whether it remains interesting,
+legible, recognizable, and lived rather than empty. Observer value is distinct
+from mechanical success and does not require constant spectacle.
+
+**Candidate signals.** Candidate judgments include:
+
+- interest in continuing to watch or investigate;
+- perceived life beyond the current scene;
+- surprise;
+- causal intelligibility;
+- character recognizability;
+- perceived repetition;
+- perceived nonsense;
+- perceived agency; and
+- whether quiet periods feel lived rather than empty.
+
+**Principal interpretation risk.** Observer judgments may reward drama,
+verbosity, familiarity, or presentation artifacts; confuse surprise with
+incoherence; or vary with what evidence the observer sees. They cannot by
+themselves establish world truth, human realism, or a mechanism's cause.
+
+**Authoritative evidence.** The evaluated material would require traceable
+derivation from branch-specific canonical events and state, with the evidence
+shown to each observer and their responses retained. Observer judgments would
+remain a separate layer rather than being recast as engine-native facts.
+
+Confirmatory observer evaluation requires a separately preregistered study
+covering reviewer population, blinding, assignment, exclusions, prompts,
+primary outcomes, and analysis. This charter does not specify any of those
+details.
+
+## 12.10 Operational diagnostics
+
+**Intended observation.** This family would describe the execution conditions,
+failures, and evidence-path behavior under which a trajectory was produced. It
+supports interpretation and reproducibility rather than defining believable
+behavior.
+
+**Candidate signals.** Candidate diagnostics include:
+
+- calls;
+- tokens;
+- cost;
+- provider and local latency;
+- failures;
+- fallbacks;
+- queue delay;
+- supersession or rejection;
+- concurrency profile; and
+- evidence completeness.
+
+**Principal interpretation risk.** Cheap, fast, reliable, or call-sparse
+execution may still produce poor behavior, while an expensive or slow
+condition may not produce better behavior. Operational differences may also
+confound a comparison if they change fallback, timing, or evidence coverage.
+
+**Authoritative evidence.** Supporting evidence would include versioned run
+and concurrency provenance, request and local-queue records, provider and
+local timing, failure and fallback records, supersession or rejection events,
+cost and token accounting, finalization and replay status, and evidence
+completeness records linked to the trajectory.
+
+Operational diagnostics explain how an architecture produced its evidence;
+they do not alone determine behavioral success.
+
+## Cross-family rules
+
+- No single scalar score may silently collapse these families. Any future
+  composite would require explicit authorization and preregistration while
+  retaining its components.
+- Task success, semantic correctness, identity expression, behavioral breadth,
+  consequentiality, and observer value remain distinct properties.
+- Confirmatory metrics and thresholds require future preregistration and
+  versioned definitions.
+- A formula change requires a new metric identity. The corresponding
+  governance belongs to future Section 14 work and is not specified here.
+- Disagreement among metric families or measurement layers is evidence to
+  inspect, not permission to select the most favorable result after the fact.
+- Model-assisted annotations and human judgments must be reported separately
+  from engine-native observations and deterministic derived summaries.
+- Every reported measure must identify the timescale and evidence window it
+  summarizes. This charter does not select either.
 
 # 13. Planned future work packages
 
