@@ -2,9 +2,11 @@
 
 ## Status
 
-**WORKING SPECIFICATION PACKAGE — CHUNK 1 DOCUMENT SHELL**
+**WORKING SPECIFICATION PACKAGE — CHUNK 2 COMPLETED, AWAITING ADVISOR REVIEW**
 
-This package is incomplete. At this head, it contains only the document structure and normative-writing framework authorized for Chunk 1. Requirements remain incomplete until their assigned later chunks receive explicit Advisor approval.
+Chunk 2 is completed and awaiting Advisor review. Chunk 3 is not authorized.
+
+This package is incomplete. At this head, it contains the document structure and normative-writing framework from Chunk 1, plus the Chunk 2 status, purpose, scope, terminology, non-goals, and current-system baseline in Sections 1 through 5 of the main specification. Sections 6 through 21 and the conformance document remain shells. Requirements remain incomplete until their assigned later chunks receive explicit Advisor approval.
 
 ## Purpose
 
@@ -12,7 +14,7 @@ This package develops a versioned, implementation-neutral technical and evidence
 
 ## Current authorization
 
-Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work only. Chunk 2 and all later drafting remain unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
+Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work and Chunk 2 scope, terminology, non-goal, and baseline drafting only. Chunk 3 is not authorized, and all later drafting remains unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
 
 No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized.
 
