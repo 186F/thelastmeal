@@ -1,6 +1,6 @@
 # Work Package 2 — Minimum Parallel-Run Laboratory Specification
 
-**Status: WORKING DRAFT — CHUNK 2 SCOPE, TERMINOLOGY, AND BASELINE.** This is a working specification package, and Work Package 2 is specification-only. No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized. Implementation requires a later, separate Operator authorization and applicable Advisor review. Requirements remain incomplete until their assigned chunks receive approval.
+**Status: WORKING DRAFT — CHUNK 3 IDENTITY, LINEAGE, AND ISOLATION INVARIANTS.** This is a working specification package, and Work Package 2 is specification-only. No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized. Implementation requires a later, separate Operator authorization and applicable Advisor review. Requirements remain incomplete until their assigned chunks receive approval.
 
 ## 1. Status, authority, and version
 
@@ -391,15 +391,582 @@ None of the nine items is an **Open question** in the Section 4.3 sense. Item 3 
 
 ## 6. Entity, identity, and lineage model
 
-Scope note: This section will define the future conceptual entities, identifiers, and lineage relationships.
+### 6.1 What this section establishes
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 3 and is not authorized in Chunk 1.
+This section defines the conceptual entities that a conforming laboratory identifies, the lineage relationships among them, and the requirements that keep those identities and relationships auditable while many independent runs and many independent studies execute at the same time. It is implementation-neutral: it names roles, relationships, and properties, and it selects no identifier format, no registry, no store, no schema, and no naming convention. Sections 6.3 through 6.8 hold the entity register, Sections 6.9 through 6.16 hold the normative requirements, Section 6.17 records options deliberately left unselected, and Section 6.18 records what is assigned to later chunks.
+
+Every substantive statement here is a Required future invariant carrying exactly one `WP2-ID-###` identifier, a Design rationale introduced by a **Rationale.** lead-in, or an Unselected option introduced by an **Unselected option.** lead-in, in the Section 4.3 sense. The register entries of Sections 6.3 through 6.8 state the model those requirements govern rather than carrying an obligation of their own, as Section 6.2 records, and Section 6.18 states this section's boundaries rather than an obligation of its own. Nothing in this section is a Current fact or a Current limitation; those belong to Section 5, and WP2-SCOPE-010 keeps a current mechanism from being read as a requirement. Every defined term used here carries the meaning Section 3.1 assigns it, as WP2-SCOPE-005 requires.
+
+**Rationale.** Section 1.1 states, in the present tense and of the head at which it is read, that Sections 6 through 21 hold no substantive content, and Section 4.2 states in the same form that the remaining eleven namespaces hold no assigned identifier at this head. Neither sentence is accurate at the head this chunk produces: Sections 6 and 7 now hold substantive content, and identifiers are now assigned in the `WP2-ID-###` and `WP2-ISO-###` namespaces, which leaves nine of the reserved namespaces unassigned rather than eleven. Sections 1 through 5 are not revised by this chunk, so neither sentence can be corrected here; both are recorded as inconsistencies this document now carries with itself, in the way Section 5.14 records a carried item, and both are left to the final integration chunk that the staged instructions assign, whose required work includes removing incomplete-section language. The consequence Section 1.1 draws is unaffected and holds on independent grounds: Sections 8 through 21 and the conformance document still hold no substantive content, and Section 1.4 records that no established specification version exists, so the contract remains incomplete and cannot be treated as a settled technical baseline.
+
+### 6.2 How the entity register is read
+
+Each register entry states the same eight attributes in the same order.
+
+| Attribute | What the entry states |
+| --- | --- |
+| Identity scope | The domain within which the identity distinguishes one instance of the entity from every other instance of that entity. |
+| Issuing or governing authority | The role answerable for assigning the identity and for recording it. |
+| Required parent or source references | The identities that the entity's own record has to name. |
+| Cardinality | The counts that hold between this entity and the entities it references or is referenced by. |
+| Version required | Whether a reference to an instance of the entity is incomplete without a version. |
+| Identity begins to exist | The point from which the identity exists and can be referenced. |
+| Exists without physical execution | Whether an instance can exist when no execution attempt has run. |
+| Reuse and supersession | What may and may not be done with the identity after it has been assigned. |
+
+**Rationale.** An authority named in the register is a role — the party or process answerable for assigning and recording an identity — and never a component, service, registry, database, or store. Naming a role selects no mechanism, and WP2-SCOPE-015 prohibits such a selection throughout this document. The register states the model; the obligations it carries are stated as requirements in Sections 6.9 through 6.16, and WP2-ID-002 is what makes each entry's required references testable. A cell that assigns a question to a later section states a boundary rather than an answer, consistent with Section 4.3's rule that a required invariant is created only where an assigned chunk states it.
+
+### 6.3 Governing and registered-design identities
+
+**Specification identity and established specification version.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | This specification package, distinguished from every other document of Milestone 3; an established version is distinguished from every other established version of this same package. |
+| Issuing or governing authority | The Work Package 2 governance process described in Section 1.4, operating under the authorities Section 1.2 records. |
+| Required parent or source references | None inside the laboratory. An established version records the exact drafting head from which it was established. |
+| Cardinality | One specification identity carries zero or more established versions over time. Zero or more studies cite one established version. |
+| Version required | Yes. A citation of this specification is complete only with an established version, and Section 1.4 records that none exists at this head. |
+| Identity begins to exist | The specification identity exists with this document; an established version exists only at the assignment Section 1.4 describes. |
+| Exists without physical execution | Yes, entirely. Neither the specification identity nor an established version depends on any execution. |
+| Reuse and supersession | An established version is never revised in place; a change produces a later established version. Section 1.5 prohibits substituting this identity or version for any other identity in this register. |
+
+**Study identity and version.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every study the laboratory admits, including every study executing concurrently with it. |
+| Issuing or governing authority | The registration authority that admits a preregistered study declaration. |
+| Required parent or source references | The experiment identity and version the study instantiates, and the condition and treatment identities of its registered design. |
+| Cardinality | One study is the child of exactly one experiment version. One study is the parent of zero or more planned runs and of exactly one study evidence root. |
+| Version required | Yes. |
+| Identity begins to exist | At registration, before any planned run of the study is dispatched. |
+| Exists without physical execution | Yes. A registered study that never dispatches an execution attempt retains its identity and version. |
+| Reuse and supersession | Never reused for a materially different registered design. Charter Section 14.2 governs which design changes require a new registered treatment, condition, or experiment version, WP2-ID-005 prohibits one study identity and version from carrying two materially different meanings, and WP2-SCOPE-016 prohibits reusing a Milestone 2 study identity here. |
+
+**Study-plan and registration identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every registration the laboratory admits, including registrations admitted concurrently. |
+| Issuing or governing authority | The registration authority. |
+| Required parent or source references | Exactly one study identity and version, the condition and treatment identities of the registered design it binds, every concurrency-profile identity the study registers, and the planned runs the registration declares. |
+| Cardinality | One registration binds exactly one study identity and version. It declares the planned runs it registers, and the study's registered sample size counts those planned runs. |
+| Version required | Yes. A registration is established once, and a material change to what it binds produces a later registration identity or version rather than an edit. |
+| Identity begins to exist | When the registration is admitted, which charter Section 14.3 requires to precede execution. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused. A superseded registration retains its identity and is named explicitly by the registration that supersedes it. |
+
+**Experiment identity and version.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every design family the laboratory admits. |
+| Issuing or governing authority | The research-design governance described in charter Section 14.2. |
+| Required parent or source references | None inside the laboratory. An experiment version is the parent of the condition identities it declares. |
+| Cardinality | One experiment version declares the condition identities of its registered arms and is the parent of zero or more studies. |
+| Version required | Yes. |
+| Identity begins to exist | When the design family and its version are established, before any study registers against them. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused for a materially different design family. Charter Section 14.2 governs which changes require a new experiment version, and WP2-SCOPE-016 prohibits reusing a Milestone 2 experiment identity here. |
+
+**Analysis identity and version.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every analysis the laboratory admits. |
+| Issuing or governing authority | The research-design governance described in charter Sections 14.2 and 14.7. |
+| Required parent or source references | The metric identities and versions the analysis computes and the classes of evidence it consumes. |
+| Cardinality | One analysis version is referenced by zero or more study registrations and produces zero or more study aggregations. |
+| Version required | Yes. |
+| Identity begins to exist | When the analysis and its version are established. Charter Section 14.3 lists the analysis identity among what a registration identifies where applicable, so an analysis relied on for a confirmatory claim is established before the execution its registration governs; an analysis that no registration references, including one charter Section 14.3 requires to be labeled exploratory, begins to exist when it is established. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused for a materially different analysis rule. Charter Section 14.2 requires an analysis-rule change to receive a new analysis version and prohibits silently altering a registered result. |
+
+**World or scenario identity and version.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every registered world or scenario definition the laboratory admits. |
+| Issuing or governing authority | The research-design governance described in charter Section 14.2, which requires a change to worlds, affordances, or semantic contracts to receive a new registered treatment, condition, or experiment version as appropriate. |
+| Required parent or source references | None inside the laboratory. It is referenced by the study registration and by each planned run that instantiates it. |
+| Cardinality | One world or scenario version is instantiated by zero or more planned runs. |
+| Version required | Yes. |
+| Identity begins to exist | When the world or scenario definition and its version are established. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused for materially different authoritative mechanics, affordances, semantic contracts, or starting state; charter Section 14.2 requires such a change to receive a new registered treatment, condition, or experiment version as appropriate, and WP2-ID-005 prohibits one world or scenario version from carrying two materially different meanings. This identity names a definition, and the identity of one executed instance of that definition is a planned-run identity; the two are never substituted for one another. |
+
+**Rationale.** Charter Section 14.8 makes the deterministic engine final authority over objective world state, legal affordances, and committed consequences, and it denies model prose the standing to prove that an event occurred. That is authority over what is true inside an executed world, and it is a different thing from the governance that establishes, records, and versions a world or scenario definition, which charter Section 14.2 governs and which this entry names as the issuing authority. The engine is named here only in describing what charter Section 14.8 settles, because Section 6.2 keeps every authority in this register a role rather than a component.
+
+**Condition identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every condition of one experiment version, recorded together with that experiment identity and version. |
+| Issuing or governing authority | The research-design governance described in charter Section 14.2. |
+| Required parent or source references | Exactly one experiment identity and version. |
+| Cardinality | One condition belongs to exactly one experiment version and is referenced by zero or more studies and by zero or more planned runs. |
+| Version required | No. A condition identity is not independently versioned; it is qualified by the experiment identity and version that declares it. |
+| Identity begins to exist | When the experiment version declaring it is established. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused for a materially different registered arm. Charter Section 14.2 governs whether such a change requires a new condition identity or a new experiment version. |
+
+**Treatment identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every registered treatment the laboratory admits, recorded together with the experiment version and condition it belongs to. |
+| Issuing or governing authority | The research-design governance described in charter Section 14.2. |
+| Required parent or source references | The condition identity it realizes, and the identity-bearing values Section 3.1 lists for a treatment, including model identity, serving provider and route identity, prompt version, and any registered authority allocation. |
+| Cardinality | One treatment realizes exactly one condition and is referenced by zero or more registrations and by every planned run registered under it. |
+| Version required | No separate version. The treatment identity itself changes when its registered composition changes. |
+| Identity begins to exist | When the registered design fixing its values is established, before execution. |
+| Exists without physical execution | Yes. |
+| Reuse and supersession | Never reused for a different set of identity-bearing values. Charter Section 14.2 requires a change to model identity or version, serving provider or route, prompts, model authority, fallback behavior, worlds, affordances, semantic contracts, or cognitive treatments to receive a new registered treatment, condition, or experiment version, unless the preregistered design explicitly treats the difference as a condition. |
+
+### 6.4 Planning, execution, and replacement identities
+
+**Planned-run identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every planned run the laboratory admits, across all studies, all registrations, and all concurrent execution. |
+| Issuing or governing authority | The registration authority that admits the study plan declaring the planned run. |
+| Required parent or source references | Exactly one study identity and version, the condition and treatment identities under which it is planned, and the world or scenario identity and version it instantiates. |
+| Cardinality | One planned run is the child of exactly one study, declares exactly one independent run, and is the parent of zero or more execution attempts. |
+| Version required | No. A material change to what a planned run declares produces a different planned run, and charter Section 14.2 governs whether it also requires a new registration. |
+| Identity begins to exist | When the planned run is declared in an admitted study plan, before and independently of any physical execution. |
+| Exists without physical execution | Yes. A planned run that is pending, cancelled, rejected, or otherwise never launched remains a recorded planned run with zero execution attempts and no authoritative accepted outcome. |
+| Reuse and supersession | Never reused. Cancellation, rejection, exclusion, supersession, failure, or completion never frees the identity, and a later planned run never takes it. |
+
+**Execution-attempt identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every execution attempt the laboratory admits, across all studies, all planned runs, and all laboratory workers executing at the same time. |
+| Issuing or governing authority | The laboratory authority that admits an execution attempt for its planned run. |
+| Required parent or source references | Exactly one planned-run identity, exactly one laboratory-worker identity, and, where the attempt was in fact admitted or carried out under one, the dispatch-wave identity it belongs to and the identity of every lease under which it was admitted or carried out. An attempt that belongs to no dispatch wave names none, and an attempt admitted under no lease names none. |
+| Cardinality | One execution attempt has exactly one planned-run parent, exactly one run evidence root, and zero or more model requests. One planned run has zero or more execution attempts. |
+| Version required | No. A repeated execution of the same planned run is a further execution attempt with its own identity rather than a version of an earlier one. |
+| Identity begins to exist | When the execution attempt is admitted for its planned run, which may precede the first byte it writes. |
+| Exists without physical execution | No. An execution-attempt identity is created only for an admitted physical execution of a planned run, which is why a planned run with zero attempts has none. |
+| Reuse and supersession | Never reused. A failed, interrupted, excluded, or superseded execution attempt keeps its identity, its terminal disposition, and the evidence it actually produced, consistent with charter Section 14.4. |
+
+**Explicit replacement lineage.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every admitted registered replacement, identified by the replacing and replaced execution attempts it relates within the planned run they share. |
+| Issuing or governing authority | The authority that admits a replacement under the study's preregistered replacement policy. |
+| Required parent or source references | Exactly one replacing execution-attempt identity, exactly one replaced execution-attempt identity, the planned-run identity both share, and the registered replacement policy under which the replacement was admitted. |
+| Cardinality | One replacement lineage record relates exactly one replacing execution attempt to exactly one replaced execution attempt. One planned run carries zero or more replacement lineage records. |
+| Version required | No. |
+| Identity begins to exist | When the replacement is admitted, which is the same act that admits the replacing execution attempt for the planned run the two attempts share; the replacing execution-attempt identity this record is required to name therefore exists from that admission, which the execution-attempt entry above permits to precede the first byte that attempt writes. |
+| Exists without physical execution | Yes, in the narrow sense that the record may exist while the replacing execution attempt it names, admitted by the same act that admitted the replacement, has not yet executed physically; it never exists without a replaced execution attempt, which Section 3.1 defines as one physical execution. |
+| Reuse and supersession | Never rewritten to name a different predecessor. A material error in a recorded replacement lineage is corrected under WP2-ID-025 and WP2-ID-026. |
+
+### 6.5 Execution-agency identities
+
+**Laboratory-worker identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every laboratory worker the laboratory operates, concurrently and over time. |
+| Issuing or governing authority | The laboratory authority that admits a laboratory worker into service. |
+| Required parent or source references | None from the study lineage. The execution host or environment a laboratory worker occupies is recorded as an attribute of the laboratory worker rather than as its identity. |
+| Cardinality | One laboratory worker carries out zero or more execution attempts, and one execution attempt is carried out under exactly one laboratory-worker identity. |
+| Version required | No. Whether the composition of an execution agent is recorded as versioned provenance is part of the concurrency profile, whose contents are assigned to Section 10. |
+| Identity begins to exist | When the laboratory worker is admitted into service, before any unit of work is assigned to it. |
+| Exists without physical execution | Yes. A laboratory worker that never carries out an execution attempt retains its identity. |
+| Reuse and supersession | Never reassigned to a different execution agent. Whether a restarted execution agent retains its identity or receives a new one is a lifecycle question assigned to Section 8; Section 3.1 already records that a process restart is not itself a resume, a retry, a new execution attempt, or a replacement. |
+
+**Lease identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every lease the laboratory issues, where it uses leases at all. |
+| Issuing or governing authority | The laboratory authority that issues claims on units of work. |
+| Required parent or source references | Exactly one laboratory-worker identity as holder and exactly one planned-run identity as subject. |
+| Cardinality | One lease names exactly one laboratory worker and exactly one planned run. One planned run is the subject of zero or more leases over time. Whether more than one lease over one planned run may be valid at one instant, and how that is decided, is assigned to Section 9. |
+| Version required | No. |
+| Identity begins to exist | When the lease is issued. |
+| Exists without physical execution | Yes. A lease may be issued and then expire, be revoked, or be released without any execution attempt having been launched under it. |
+| Reuse and supersession | Never reissued. A lease keeps its identity after it ends, whether it expired, was released, was revoked, or was superseded, so that what was carried out under it remains attributable. For an expired, revoked, or superseded lease, WP2-ISO-021 requires in addition that the evidence actually produced under it remain attributable to the laboratory worker, the lease, and the execution attempt that produced it, and preservable for later disposition. |
+
+**Rationale.** The subject of a lease is stated here as the planned run over which the claim is made, because that is the unit whose authoritative outcome a claim can decide and the unit this register already gives an identity. *Unit of work*, the phrase Section 3.1's lease row uses for the same subject, is read that way wherever this specification names the subject of a claim; it introduces no entity beyond the ones Sections 6.3 through 6.8 register, and it is a reading convenience rather than a further defined term of Section 3.1. Whether a laboratory issues leases at all, and the acquisition, duration, renewal, expiry, and arbitration rules if it does, are assigned to Section 9.
+
+**Dispatch-wave identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every dispatch wave the laboratory releases, where it groups dispatch into waves at all. |
+| Issuing or governing authority | The laboratory scheduling authority. |
+| Required parent or source references | None from the study lineage. A dispatch wave names the execution attempts released under it. |
+| Cardinality | One dispatch wave references zero or more execution attempts, and one execution attempt belongs to at most one dispatch wave. |
+| Version required | No. |
+| Identity begins to exist | When the scheduling decision that defines the wave is recorded. |
+| Exists without physical execution | Yes. A dispatch wave whose members are all cancelled before release retains its identity. |
+| Reuse and supersession | Never reused. A dispatch-wave identity never substitutes for the identity of a study, a planned run, or an execution attempt, and never becomes a join key between them. |
+
+### 6.6 Model-request identity
+
+**Model-request identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | One logical model request, distinguished from every other model request across all concurrently executing studies and execution attempts once its recorded identity carries the lineage WP2-ID-016 requires; WP2-ID-022 governs whether a locally scoped request identifier may form part of that identity. |
+| Issuing or governing authority | The authority that owns the decision the model request serves, which Section 3.1 and WP2-SCOPE-009 keep distinct from serving provider identity and from route identity. |
+| Required parent or source references | Exactly one execution-attempt identity, the planned-run and study identities above it, and the deciding episode or decision the request serves. |
+| Cardinality | One execution attempt originates zero or more model requests, and one model request belongs to exactly one execution attempt. |
+| Version required | No. |
+| Identity begins to exist | When the logical request is originated, which precedes any dispatch of it. |
+| Exists without physical execution | No. A model request arises only inside an execution attempt, although it may exist without any dispatch to a provider ever occurring. |
+| Reuse and supersession | Never reused. A transport or delivery retry repeats the delivery of one already-identified request and keeps that identity, as Section 3.1 defines; a new logical request receives a new identity. |
+
+### 6.7 Evidence and derived-result identities
+
+**Run-evidence-root identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every run evidence root in the laboratory, across all studies and all concurrent execution. |
+| Issuing or governing authority | The laboratory authority that creates or reserves the root for its execution attempt. |
+| Required parent or source references | Exactly one execution-attempt identity, and through it the planned-run and study identities. |
+| Cardinality | One run evidence root belongs to exactly one execution attempt, and one execution attempt has exactly one run evidence root. |
+| Version required | No. |
+| Identity begins to exist | When the root is created or reserved under the identity of the execution attempt it belongs to. |
+| Exists without physical execution | No. A run evidence root belongs to an execution attempt, so a planned run with zero execution attempts has none. |
+| Reuse and supersession | Never adopted by, transferred to, or shared with another execution attempt. Section 3.1 records that the root is immutable once its attempt reaches a terminal state; its storage location is an attribute rather than its identity under WP2-ID-018. |
+
+**Study-evidence-root identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every study evidence root in the laboratory. |
+| Issuing or governing authority | The laboratory authority that creates or reserves the root for its study. |
+| Required parent or source references | Exactly one study identity and version. |
+| Cardinality | One study evidence root belongs to exactly one study and contains or references the run evidence root of every execution attempt belonging to that study, together with zero or more sealed packages. |
+| Version required | No. |
+| Identity begins to exist | When the root is created or reserved under the study's registration. |
+| Exists without physical execution | Yes. A study evidence root may exist before any execution attempt of that study has run. |
+| Reuse and supersession | Never adopted by or transferred to another study. It is an identity-bearing logical namespace or registered set under WP2-ID-019, and its storage location is an attribute rather than its identity. |
+
+**Sealed-package identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every sealed package the laboratory produces. |
+| Issuing or governing authority | The laboratory authority that performs the sealing operation. |
+| Required parent or source references | The identity of the evidence boundary it seals, the inventory it authenticates, and the versioned packaging and sealing rules it applied. |
+| Cardinality | One sealed package seals exactly one identified evidence boundary. One boundary is sealed by zero or more sealed packages over time; charter Section 14.9 requires an original package to remain preserved when a packaging defect is corrected in a later version, and the sealing contract is assigned to Section 13. |
+| Version required | Yes for the packaging and sealing rules the package identifies, which charter Section 14.9 requires to be versioned. The package identity itself is not separately versioned. |
+| Identity begins to exist | When the sealing operation commits. |
+| Exists without physical execution | Yes. The identity comes into existence with the sealing operation, and a boundary whose inventory holds no evidence produced by an execution attempt can still be sealed. |
+| Reuse and supersession | Never reused and never rewritten. A later package over the same boundary is a distinct sealed package that identifies its own boundary and inventory, as WP2-ID-020 and WP2-SCOPE-008 require. |
+
+**Study-aggregation identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every study aggregation the laboratory produces. |
+| Issuing or governing authority | The analysis authority governed by charter Sections 14.2 and 14.7. |
+| Required parent or source references | Exactly one study identity and version, exactly one analysis identity and version, and the exact set of source evidence from which the aggregation derives, named by identity. |
+| Cardinality | One study aggregation names exactly one study and exactly one analysis version. One study carries zero or more study aggregations. |
+| Version required | No separate version. The aggregation names the analysis version it applied, and a different analysis version produces a distinct study aggregation rather than a revision of an existing one. |
+| Identity begins to exist | When the aggregation is produced and recorded. |
+| Exists without physical execution | No. Section 3.1 defines an aggregation as the derived combination of evidence from multiple execution attempts into a study-level result, so a study aggregation derives from a non-empty set of evidence that execution attempts produced, and none exists for a study whose planned runs produced no execution attempt. The row above states that the identity begins to exist when the aggregation is produced and recorded, so no aggregation identity is reserved ahead of the evidence it names; what makes a study aggregation complete is assigned to Section 15, and a study-level record of a study that produced no evidence would be a distinct record assigned there rather than a study aggregation. |
+| Reuse and supersession | Never reused and never rewritten in place. Section 3.1 records that aggregation is written outside the immutable evidence it reads, and charter Section 14.9 requires derived analysis to record its source identities. |
+
+### 6.8 Concurrency-profile identity reference
+
+**Concurrency-profile identity.**
+
+| Attribute | Statement |
+| --- | --- |
+| Identity scope | Every concurrency profile the laboratory records. |
+| Issuing or governing authority | The registration authority, under the obligation charter Section 10.3 places on every future study to version and record a concurrency profile. |
+| Required parent or source references | The study registration that adopts the profile. How a profile references dispatch waves, laboratory workers, execution attempts, or contention conditions is assigned to Section 10. |
+| Cardinality | One study registers at least one concurrency profile. Every further cardinality is assigned to Section 10. |
+| Version required | Yes, as charter Section 10.3 requires. |
+| Identity begins to exist | At registration, because charter Section 14.3 lists the execution and concurrency profile among what a registration identifies. |
+| Exists without physical execution | Yes, for the same reason. |
+| Reuse and supersession | WP2-ID-005 and charter Section 14.2 apply, and charter Section 14.5 prohibits a registered study from silently changing its execution architecture midstream. Profile contents, fields, and comparison rules are assigned to Section 10. |
+
+**Rationale.** This entry is a reference only. The contents of the concurrency profile are assigned to Section 10, and the entry is present here so that Section 6's graph names the identity rather than leaving a silent gap where a later section will attach.
+
+### 6.9 General identity requirements
+
+**WP2-ID-001.** Every entity instance a conforming laboratory creates from the register in Sections 6.3 through 6.8 **MUST** carry an explicitly recorded identity that is not derived solely from a storage path or location, a wall-clock timestamp, an execution or record ordering, or a locally scoped identifier whose scope is narrower than the identity scope the register states for that entity.
+
+**WP2-ID-002.** A conforming laboratory **MUST** record, with the identity record of every entity instance it creates, each parent or source reference that the register entry for that entity states as required.
+
+**WP2-ID-003.** Every identity a conforming laboratory assigns **MUST** distinguish its instance from every other instance of the same entity throughout the identity scope the register states for that entity, including across every study and every execution attempt running at the same time.
+
+**WP2-ID-004.** Where the register states that a version is required for an entity, every reference to an instance of that entity **MUST** carry that instance's version together with its identity.
+
+**WP2-ID-005.** A conforming laboratory **MUST NOT** use one recorded identity, or one recorded identity-and-version pair, to carry two materially different meanings.
+
+**Rationale.** WP2-ID-005 restates charter Section 14.2's rule inside this contract so that a conformance check can be written against it. It is not a prohibition on correcting an error: WP2-ID-025 and WP2-ID-026 state how a material identity error is corrected without breaking it. WP2-SCOPE-016 separately prohibits reusing a Milestone 2 identity as a Work Package 2 or Milestone 3 identity, and Section 1.5 separately prohibits substituting the specification identity or version for any other identity here.
+
+### 6.10 Planned runs and execution attempts
+
+**WP2-ID-006.** A planned-run identity **MUST** exist and be recorded before, and independently of, any physical execution of that planned run.
+
+**WP2-ID-007.** A conforming laboratory **MUST** represent one planned run as the parent of zero or more execution attempts, so that a planned run which is pending, cancelled, rejected, or otherwise never launched remains a recorded planned run carrying a complete identity, no execution attempt, and no authoritative accepted outcome.
+
+**WP2-ID-008.** Every execution attempt **MUST** name exactly one planned-run parent in its own identity record.
+
+**WP2-ID-009.** A planned run **MUST NOT** acquire more than one authoritative accepted outcome.
+
+**Rationale.** WP2-ID-009 bounds the count without presuming that the count is ever reached. Section 3.1 defines the authoritative commit as the point, if reached, at which exactly one execution attempt's result becomes the authoritative recorded outcome of its planned run, and it records that the point is not reached at all where a planned run has no execution attempt or where no attempt's result is accepted. A planned run with zero authoritative accepted outcomes therefore conforms. How an authoritative commit is reached, and how competing claimants are arbitrated, is assigned to Section 9.
+
+### 6.11 Replacement lineage
+
+**WP2-ID-010.** A registered replacement **MUST** be recorded as an additional execution attempt of the same planned run, and therefore of the same independent run, rather than as a new planned run, a new independent run, a new study, or a modification of the execution attempt it replaces.
+
+**WP2-ID-011.** The lineage record of a registered replacement **MUST** name explicitly the specific execution attempt that it replaces.
+
+**WP2-ID-012.** A conforming laboratory **MUST NOT** establish which execution attempt a registered replacement replaces from an identifier suffix, a record or execution ordering, a storage path, a timestamp, or physical proximity alone.
+
+**Rationale.** WP2-ID-012 does not prohibit an identifier from carrying a suffix, a record set from being ordered, or a timestamp from being recorded; it prohibits treating any of those, by itself, as the statement of which attempt was replaced. WP2-ID-011 requires that statement to be made. Charter Section 14.4 requires replacement rules to be preregistered and prohibits a replacement from erasing the original attempt, and Section 3.1 records that a registered replacement never erases, renumbers, overwrites, or conceals the original attempt or its evidence. WP2-SCOPE-006 separately prohibits recording a replacement interchangeably with a process restart, a resume, or a transport or delivery retry.
+
+### 6.12 Laboratory-worker, lease, and dispatch-wave distinctions
+
+**WP2-ID-013.** Where a conforming laboratory assigns laboratory-worker, lease, or dispatch-wave identities, each of them **MUST** be recorded as an identity distinct from planned-run identity and from execution-attempt identity.
+
+**WP2-ID-014.** A laboratory-worker identity, a lease identity, or a dispatch-wave identity **MUST NOT** be recorded, reported, or joined as though it were the identity of a planned run or of an execution attempt.
+
+**WP2-ID-015.** Assigning, reassigning, or changing the laboratory worker, the lease, the dispatch wave, or the execution host of an execution attempt **MUST NOT** by itself change the identity of that attempt's planned run or the registered treatment that planned run carries.
+
+**Rationale.** WP2-ID-015 governs what an assignment does by itself. It does not deny that execution architecture can matter scientifically: charter Section 10.3 treats a deliberately varied concurrency profile as a registered experimental parameter rather than hidden infrastructure, and charter Section 14.2 requires an execution-architecture or concurrency-profile change within one registered study to have been declared as a condition of the preregistered design. Where that is so, the difference is carried by the registered treatment and the recorded concurrency profile rather than arising as an unrecorded consequence of assignment. The contents of that profile are assigned to Section 10.
+
+### 6.13 Model-request attribution
+
+**WP2-ID-016.** Every model request **MUST** be attributable, through explicitly recorded lineage, to the study, the planned run, the execution attempt, and the deciding episode or decision that it serves.
+
+**Rationale.** This requirement fixes what a model request has to be attributable to. It does not fix which record carries each identity, and it does not require that any of them be a field on the request itself. WP2-SCOPE-009 separately requires decision authority, serving provider identity, and route identity to remain three separately identified properties wherever each is recorded. Record placement, join keys, provider-behavior records, and budget attribution mechanics are assigned to Section 12; WP2-ISO-015 states only the isolation property that request and response records have to satisfy.
+
+### 6.14 Evidence-root, sealed-package, and aggregation identity
+
+**WP2-ID-017.** Every run evidence root **MUST** belong to exactly one execution attempt.
+
+**WP2-ID-018.** A conforming laboratory **MUST NOT** treat a filesystem path, an object-store key, or any other storage location as the sole identity of a run evidence root or of a study evidence root.
+
+**WP2-ID-019.** A study evidence root **MUST** be an identity-bearing logical namespace or registered set capable of containing or referencing all evidence belonging to its study.
+
+**WP2-ID-020.** Every sealed package **MUST** identify the evidence boundary it seals and the inventory it authenticates.
+
+**WP2-ID-021.** Every study aggregation **MUST** identify the study, the analysis version, and the exact set of source evidence from which it derives.
+
+**Rationale.** WP2-ID-018 makes a storage location an attribute of an evidence root rather than its identity, which is what allows a root to be moved, replicated, or referenced from more than one record without becoming a different root and without two roots at different locations being assumed distinct on that basis alone. WP2-ID-020 gives WP2-SCOPE-008's reporting obligation its identity counterpart: the requirement that per-execution sealing, whole-evidence-root sealing, any study-level sealing boundary, and study aggregation be distinct operations is only auditable if each seal names the boundary it authenticates. Evidence formats, inventory contents, sealing procedure, and verification are assigned to Section 13, and what makes a study aggregation complete is assigned to Section 15.
+
+### 6.15 Identifier scoping and explicitly recorded lineage
+
+**WP2-ID-022.** A locally scoped identifier **MUST** form part of a recorded identity only where the complete persisted namespace in which that identity is recorded makes it unambiguous across every study and every execution attempt that may run concurrently.
+
+**WP2-ID-023.** Every lineage relationship this section requires **MUST** be recorded explicitly at the time it is established, so that it can be read from the record rather than reconstructed from wall-clock ordering, storage paths, identifier names, or directory layout.
+
+**Rationale.** WP2-ID-022 permits a locally scoped identifier and states the condition on its use: what has to be unambiguous is the complete recorded identity, not the local fragment considered alone. A locally scoped identifier qualified by the lineage WP2-ID-002 requires can satisfy it; the same fragment recorded without that qualification cannot. WP2-ID-023 is what makes WP2-ID-011, WP2-ID-016, and WP2-ID-021 auditable, because a lineage that has to be inferred cannot be checked against the record that was supposed to state it.
+
+### 6.16 Reuse, supersession, and correction
+
+**WP2-ID-024.** Cancellation, failure, exclusion, supersession, or completion of a unit **MUST NOT** free that unit's identity for reuse.
+
+**WP2-ID-025.** Correction of a material identity error **MUST** be recorded as a new identity, or as a new version, that explicitly names the identity or version it supersedes.
+
+**WP2-ID-026.** A conforming laboratory **MUST NOT** correct a material identity error by changing the meaning of an already-recorded identity or version in place.
+
+**Rationale.** These three requirements keep the record readable backwards. Charter Section 14.4 requires failed, interrupted, invalid, excluded, and replacement attempts to remain recorded evidence with typed dispositions, and charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed; an identity that could be freed and reissued, or silently redefined, would defeat both. What counts as a material error, and the disposition vocabulary that records one, are assigned to Section 14.
+
+### 6.17 Options deliberately left unselected
+
+**Unselected option.** Identifier form. An identity this section requires may be carried by a randomly generated value, a content-derived digest, a hierarchical composite of its parent identities, an authority-issued sequence, or another form entirely. This specification selects none of them and states only the properties any selection has to satisfy, in WP2-ID-001, WP2-ID-003, and WP2-ID-022.
+
+**Unselected option.** Issuance and reservation mechanism. The role that issues an identity may be discharged by a declaration in source, a registration file, a service, a database, a filesystem or object-store transaction, or another mechanism. The register names the authority as a role; WP2-SCOPE-015 prohibits selecting the mechanism, and Section 7.20 records the related storage and transaction options.
+
+**Unselected option.** Lineage record placement. A required lineage reference may be recorded inline on the child record, in a separate lineage record, in an index, or in more than one of those. WP2-ID-023 requires only that it be explicit and readable from the record, and Section 12 rather than this section decides where model-request lineage is written.
+
+**Unselected option.** Namespace disambiguation strategy. Uniqueness within a stated identity scope may be achieved by a globally unique value, by composition from parent identities, by an authority-enforced reservation, or by another strategy. WP2-ID-003 and WP2-ID-022 state the property; no strategy is preferred here.
+
+### 6.18 Boundaries assigned to later chunks
+
+This section defines what exists, what it references, and what may never be conflated with what. It deliberately defines none of the following, each of which the staged instructions assign elsewhere: the lifecycle states and transitions of a planned run, an execution attempt, or a laboratory worker, which belong to Section 8; scheduling policy, dispatch policy, lease acquisition, duration, renewal, expiry, and the mechanics by which an authoritative commit is reached, which belong to Section 9; the contents, fields, and comparison rules of a concurrency profile, which belong to Section 10; the separation of logical simulation time, provider wall-clock time, and local queue time beyond the isolation boundary Section 7 states, which belongs to Section 11; the placement of model-request records, the joins among them, and budget accounting algorithms, which belong to Section 12; evidence formats, inventory contents, packaging, and sealing procedure, which belong to Section 13; the failure and disposition taxonomy, which belongs to Section 14; the rules that make a study aggregation complete, which belong to Section 15; and the conformance checks for every requirement stated here, which belong to Section 17 and to the conformance document.
 
 ## 7. Isolation invariants
 
-Scope note: This section will define the future isolation invariants across independent runs and studies.
+### 7.1 The three isolation levels
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 3 and is not authorized in Chunk 1.
+Isolation is required at three levels, and this section states each requirement against the levels it binds.
+
+| Level | What it separates |
+| --- | --- |
+| Level 1 — study isolation | Two independent studies, whether or not they share infrastructure. |
+| Level 2 — independent-run isolation | Two independent runs, including two independent runs belonging to one study. |
+| Level 3 — execution-attempt isolation | Two execution attempts of one planned run. |
+
+A requirement stated to hold at all three isolation levels holds separately and independently at each of them, and is not satisfied by holding at one or two of them. A requirement that binds only some of the three names the levels it binds.
+
+*Isolation unit* is used in this section as a collective shorthand for whichever of a study, an independent run, and an execution attempt the applicable isolation level distinguishes. It introduces no entity beyond the three that Section 3.1 defines and Section 6 registers, and it is a reading convenience rather than a defined term of Section 3.1.
+
+Section 3.2 already states two separate obligations. WP2-SCOPE-001 requires the concurrent execution of independent runs, each retaining its own identity, registered configuration, mutable state, stochastic-event state, budgets, timing records, and replay lineage together with the failure history and separate run evidence root of every one of its own execution attempts. WP2-SCOPE-002 requires the concurrent execution of independent studies on shared infrastructure, each retaining its own study identity, registered configuration, mutable state, budget scope, treatment, storage namespace, and evidence lineage. WP2-SCOPE-003 prohibits the identity, registered configuration, mutable state, budget scope, treatment, storage namespace, or evidence lineage of two studies, or of two independent runs, from being merged as a consequence of their sharing infrastructure. This section states the invariants that make those separations checkable boundary by boundary. As in Section 6, every substantive statement here is a Required future invariant carrying exactly one `WP2-ISO-###` identifier, a Design rationale, or an Unselected option, in the Section 4.3 sense.
+
+### 7.2 General isolation requirements
+
+**WP2-ISO-001.** Sharing a host, a process, a process pool, a network path, a storage service, a credential boundary, or any other physical or logical infrastructure among isolation units **MUST NOT** merge their identities, their registered treatments, their mutable state, their evidence, or their budget attribution, at any of the three isolation levels.
+
+**WP2-ISO-002.** Mutable records held in a service shared by more than one isolation unit **MUST** be authoritatively partitioned by the study, planned-run, and execution-attempt lineage that applies to each record, so that every such record resolves to exactly one owning isolation unit.
+
+**WP2-ISO-003.** An independent run or an execution attempt **MUST NOT** read, overwrite, finalize, cancel, clean up, or adopt the mutable state of another independent run or of another execution attempt.
+
+**WP2-ISO-004.** An independent run or an execution attempt **MUST NOT** read, overwrite, finalize, seal, cancel, clean up, adopt, or record as its own the evidence of another independent run or of another execution attempt; reading an asset shared under WP2-ISO-008, and the identity and provenance verification WP2-ISO-026 and WP2-ISO-029 require before an existing location is acted on, are not reads this requirement prohibits.
+
+**WP2-ISO-005.** Two execution attempts of one planned run **MUST NOT** continue one another in place.
+
+**Rationale.** WP2-ISO-003 and WP2-ISO-004 bind an executing isolation unit acting on its own behalf, and both of them prohibit reading, so that neither an independent run nor an execution attempt can condition what it does on a sibling's mutable state or on evidence a sibling produced. A separately identified operation that is not one of the units whose evidence it reads — a study aggregation under WP2-ID-021, a study-level seal under WP2-SCOPE-008, or a verification pass over completed evidence — lies outside WP2-ISO-004, which binds only an independent run or an execution attempt. Section 6.7 registers the sealed package under the laboratory authority that performs the sealing operation and the study aggregation under the analysis authority governed by charter Sections 14.2 and 14.7, so each of those is an operation acting under its own identity and lineage rather than a unit acting on its own behalf; WP2-ISO-022 bounds what it may attest, and what it may write and when it may declare a result are assigned to Sections 13 and 15. WP2-ISO-005 is the isolation counterpart of Section 3.1's definitions: a resume re-enters an identity-matched unit of work without continuing an interrupted execution attempt in place and without erasing what that attempt produced, and a process restart is not itself a resume, a retry, a new execution attempt, or a replacement. Lifecycle states and transitions are assigned to Section 8.
+
+### 7.3 Mutable in-memory state
+
+**WP2-ISO-006.** Mutable in-memory state that carries an isolation unit's identity, registered configuration, registered treatment, simulated-world state, stochastic-event state, budget accounting, request records, or evidence **MUST NOT** be shared between isolation units, or carried over from one isolation unit to another, at any of the three isolation levels.
+
+**Rationale.** What this prohibits is the state carried across a boundary, not the reuse of the thing that carried it. A process, a container, a thread, a connection pool, or a loaded code module that holds none of the listed state is outside the requirement, and reusing one is neither required nor prohibited here. Shared immutable assets are governed separately by WP2-ISO-008.
+
+### 7.4 Filesystem and object namespace
+
+**WP2-ISO-007.** Every isolation unit **MUST** write its mutable state and its evidence into a storage namespace bound to its own recorded identity and disjoint from the namespace into which any other isolation unit at the same isolation level writes; a record the unit contributes to a service shared with other isolation units is governed by WP2-ISO-002 instead.
+
+**Rationale.** The requirement compares units at the same isolation level, so containment across levels — a study evidence root that contains or references the run evidence roots of the execution attempts belonging to that study — is not prohibited by it. The closing clause keeps it from prohibiting a shared registry, index, or state service that WP2-ISO-002 already partitions by lineage; what it governs is the namespace a unit writes into as its own. It selects no storage class, directory layout, key format, nesting rule, or naming convention; Section 7.20 records those as unselected, and WP2-ID-018 keeps the resulting location from becoming the root's identity.
+
+### 7.5 Shared immutable assets
+
+**WP2-ISO-008.** An asset that contributes to an isolation unit's registered treatment, its registered configuration, its simulated-world state, its stochastic inputs, or its evidence **MUST** be shared between isolation units only where it is content-addressed or otherwise version-pinned, remains read-only for the whole duration of its use by every sharing isolation unit, and is recorded in each sharing unit's evidence by its exact identity or content digest.
+
+**Rationale.** The staged instructions permit a shared immutable asset only where it is content-addressed or otherwise version-pinned and where the sharing cannot merge mutable state or evidence lineage. WP2-ISO-008 states those conditions and adds two that make the sharing checkable afterwards: the asset stays read-only for the whole duration of every sharing unit's use of it, so that no sharing unit can change what another one read; and each sharing unit's evidence names the exact identity or digest it read, so that what was read can be reconstructed and compared rather than assumed. Sharing under this requirement licenses no merging of mutable state or evidence lineage, which WP2-ISO-001, WP2-ISO-004, and WP2-ISO-006 continue to prohibit.
+
+### 7.6 Configuration and environment
+
+**WP2-ISO-009.** Every configuration value that contributes to an isolation unit's registered treatment **MUST** be resolved from that unit's own registered configuration and recorded with that unit's evidence.
+
+**WP2-ISO-010.** A process-wide, host-wide, session-wide, or otherwise ambient configuration or environment value **MUST NOT** determine a treatment-bearing property of an isolation unit unless that value is recorded against the unit for which it took effect.
+
+**Rationale.** Together these keep an ambient default from becoming an unrecorded part of what a study tested. They do not prohibit ambient configuration as such — an operational value that carries no treatment-bearing property is outside them — and they select no configuration mechanism, file format, or precedence rule. Charter Section 14.2 governs when a change to a treatment-bearing value requires a new registered treatment, condition, or experiment version.
+
+### 7.7 Random and stochastic-event state
+
+**WP2-ISO-011.** Mutable random-generator state, and any other mutable stochastic-event state, **MUST NOT** be shared between, inherited by, or carried over into isolation units at any of the three isolation levels.
+
+**WP2-ISO-012.** Where a registered design deliberately pairs stochastic inputs across isolation units, including a common-random-number design, each paired stochastic input **MUST** be registered before execution, immutable once registered, identified explicitly in the evidence of every isolation unit that consumes it, and recorded with event-level lineage sufficient to identify which stochastic events correspond across those units.
+
+**Rationale.** WP2-ISO-011 prohibits accidental sharing of mutable generator state. It does not prohibit a deliberate paired-randomness or common-random-number design, which WP2-ISO-012 permits under the four stated conditions, because such a design supplies a registered immutable input rather than a shared mutable generator. Charter Section 11.3 requires a future design to define which stochastic events correspond across branches, how corresponding events receive stable noise identities, how branch-conditional events are represented where no counterpart exists, and how paired replication proceeds; charter Section 14.6 states that a shared seed alone does not establish stochastic correspondence, and charter Section 11.3 names event-keyed hashing as one possible technique rather than a selected one. This section selects none, and it does not decide which events correspond, which charter Section 11.3 records as a substantive modeling commitment belonging to a registered design.
+
+### 7.8 Event streams and logical clocks
+
+**WP2-ISO-013.** The logical clock and the authoritative event stream of one independent simulated world **MUST** remain isolated from the logical clock and the authoritative event stream of every other independent simulated world.
+
+**WP2-ISO-014.** Wall-clock order **MUST NOT** be used as an implicit causal relation, ordering guarantee, or identity join between isolation units.
+
+**Rationale.** WP2-ISO-014 prohibits an implicit use, not the recording of wall-clock time: charter Section 10.5 requires future evidence to distinguish logical simulation time, provider wall-clock time, and local queue time, and charter Section 14.5 requires the three to remain distinct, all of which presupposes that wall-clock time is recorded. What is prohibited is treating temporal adjacency as though it established a causal relation or an identity correspondence that WP2-ID-023 requires to be recorded explicitly. WP2-ISO-013 is likewise consistent with a registered causal fork: charter Section 11.2 requires each descendant branch to evolve with separate branch state and evidence after the fork while preserving its own replay lineage back to the common ancestor, and that ancestor is a serialized recorded state from which each branch's own logical clock and event stream proceed rather than a live stream shared between branches. The time-domain rules beyond this isolation boundary are assigned to Section 11.
+
+### 7.9 Model-request and response records
+
+**WP2-ISO-015.** Idempotency state, request and response records, and budget state held by any component that serves model requests for more than one isolation unit **MUST** be keyed so that two model requests originating in different execution attempts remain distinct records even where the locally scoped request identifiers they carry are equal.
+
+**Rationale.** Section 5.3 records that the repository's current engine-owned decision-request identifier restarts its counter for each model-backed browser run, so the same identifier recurs across model-backed browser runs and identifies a request only in combination with the `runId` of the model-backed browser run it belongs to. This requirement closes that case for the future contract: equality of a locally scoped request identifier is never by itself sufficient to make two records the same record, to answer one unit's request from another unit's recorded result, or to charge one unit's call to another unit's budget. It does not prohibit a locally scoped request identifier, which WP2-ID-022 permits under its stated condition, and it does not require any particular component: a laboratory that serves model requests separately for every execution attempt satisfies it as readily as one that serves many. Where these records live, which idempotency rule applies to a genuine repeat of one request, and how budgets are reserved and refused are assigned to Section 12.
+
+### 7.10 Token, cost, call, and failure budgets
+
+**WP2-ISO-016.** Token, cost, call, and failure accounting **MUST** be attributed to the study, the planned run, and the execution attempt that incurred it, and kept distinguishable from the accounting of every other isolation unit at each of the three isolation levels.
+
+**Rationale.** This requirement governs attribution, not ceilings. A shared or hierarchical budget ceiling — a study-level live-call budget spanning many planned runs, for example — is not prohibited by it, provided every charge retains its own attribution. Budget algorithms, reservation, exhaustion behavior, and refusal typing are assigned to Section 12, and WP2-SCOPE-015 prohibits this specification from selecting any numeric operating parameter, including a quota, a budget, or a threshold.
+
+### 7.11 Logs and diagnostics
+
+**WP2-ISO-017.** Every log or diagnostic record a conforming laboratory retains **MUST** carry explicit attribution to each entity of the Section 6 register whose activity it describes, naming every isolation unit whose activity it describes and, where the entity whose activity it describes is not an isolation unit, naming that laboratory worker, lease, dispatch wave, or other registered entity.
+
+**WP2-ISO-018.** A log or diagnostic record **MUST NOT** overwrite another isolation unit's record, be written into a shared stream without per-record attribution, or be admitted as evidence of an isolation unit other than one whose activity it describes.
+
+**Rationale.** The attribution target is the entity the record describes rather than an isolation unit in every case, because Section 6.5 registers entities that exist and act without any isolation unit's activity to describe: a laboratory worker admitted into service before it carries out an execution attempt, a lease issued and then ended with no execution attempt launched under it, and a dispatch wave whose members are all cancelled before release. Naming the described entity keeps such diagnostics retainable and attributable without inventing an isolation unit for them, while WP2-ID-013 and WP2-ID-014 continue to require those identities to be recorded as distinct identities and prohibit reporting or joining any of them as though it were the identity of a planned run or of an execution attempt. A shared log stream is permitted where each record carries its own attribution, so these requirements select no destination, transport, format, or retention rule. Whether a diagnostic record is evidence at all, and what evidentiary weight it carries, is assigned to Section 13; Section 3.1's separation of decision authority from serving provider identity and route identity continues to apply wherever those are recorded, under WP2-SCOPE-009.
+
+### 7.12 Finalization and authoritative-commit state
+
+**WP2-ISO-019.** The finalization state of an execution attempt, and the record of whether that attempt's result has become authoritative, **MUST** be held separately for each execution attempt and never shared with another execution attempt, including another execution attempt of the same planned run.
+
+**Rationale.** The single authoritative accepted outcome that WP2-ID-009 bounds is a property of the planned run, reached at most once and possibly never; it is recorded by reference to the one execution attempt whose result was accepted rather than by sharing finalization state among attempts, which is what keeps every other attempt's own finalization state intact and separately readable. Section 3.1 defines what finalization comprises for one attempt, the mechanics of reaching an authoritative commit are assigned to Section 9, and the evidence contract for finalization is assigned to Section 13.
+
+### 7.13 Lease authority and superseded output
+
+**WP2-ISO-020.** A laboratory worker whose lease over a unit of work has expired, been revoked, or been superseded **MUST NOT** mutate that unit's authoritative state or cause its own output to become that unit's authoritative outcome.
+
+**WP2-ISO-021.** Evidence actually produced under an expired, revoked, or superseded lease **MUST** remain attributable to the laboratory worker, the lease, and the execution attempt that produced it, and preservable for later disposition.
+
+**Rationale.** These two requirements bind a laboratory that uses leases; a laboratory that issues none satisfies them vacuously, and neither of them requires a lease mechanism to exist. Together they separate authority from evidence: losing a claim removes the power to make an outcome authoritative, and it does not license destroying, orphaning, or silently discarding what was already produced, which charter Section 14.4 requires to remain recorded evidence with a typed disposition and charter Section 14.9 requires not to be concealed. Lease acquisition, duration, renewal, expiry, and arbitration between competing claimants are assigned to Section 9, and the disposition vocabulary for superseded output is assigned to Section 14.
+
+### 7.14 Evidence inventories and sealing
+
+**WP2-ISO-022.** An evidence inventory or a seal **MUST NOT** include, claim, or attest evidence that lies outside the boundary which that inventory or seal itself identifies.
+
+**Rationale.** This is the isolation counterpart of WP2-SCOPE-008 and WP2-ID-020: those require the sealing layers to be distinct operations and each seal to name its boundary, and this one prohibits a seal from reaching past the boundary it named. It states no sealing procedure, digest algorithm, inventory contents, or verification rule. Sections 6.14 and 7.21 assign inventory contents, sealing procedure, and verification to Section 13, and under Section 4.3 a required invariant is created only where the assigned chunk states it, so this section settles none of them. WP2-SCOPE-015 separately prohibits this specification from selecting a serialization or archive technology, so none is selected here or in Section 13.
+
+### 7.15 Cancellation and cleanup
+
+**WP2-ISO-023.** A cancellation or cleanup operation **MUST** act only within the namespace, the mutable state, and the in-flight work of the isolation unit that owns it and of the isolation units that unit's explicitly recorded lineage places below it, and not within those of any other isolation unit — a sibling study, a sibling independent run, or an execution attempt of a different planned run among them.
+
+**WP2-ISO-024.** A cancellation or cleanup operation **MUST NOT** delete, truncate, overwrite, or render unverifiable the evidence of a sibling isolation unit, of an earlier execution attempt, or of any unit that has already reached a terminal state.
+
+**Rationale.** Charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed, and charter Section 14.4 requires failed, interrupted, invalid, excluded, and replacement attempts to remain recorded evidence; a cleanup that reached beyond its owner would defeat both silently. A cancellation issued at study level acts on that study and on the planned runs and execution attempts that its explicitly recorded lineage places below it, which WP2-ID-002 and WP2-ID-023 require to be readable from the record rather than reconstructed; what WP2-ISO-023 prohibits is reaching into a unit that lineage does not place below the cancelling unit, such as a sibling study, a sibling independent run, or an execution attempt of a different planned run. WP2-ISO-024 continues to bind the operation inside its own lineage, so reaching an earlier execution attempt or a unit already in a terminal state never licenses destroying what that unit produced. The cancellation lifecycle, its typed dispositions, and the containment of sibling units after a failure are assigned to Sections 8 and 14.
+
+### 7.16 Secrets
+
+**WP2-ISO-025.** Secret material made available to one isolation unit **MUST NOT** become available to another study, another independent run, another execution attempt, or another provider session as a consequence of a shared process, a shared credential store, a shared connection, or any other shared infrastructure.
+
+**Rationale.** This states the isolation boundary for secrets and nothing else. Secret custody, injection, rotation, redaction, scanning of evidence, and the security boundary in general are assigned to Section 16, and Section 7.20 records the custody mechanisms left unselected.
+
+### 7.17 Identity, namespace, and output-root collisions
+
+**WP2-ISO-026.** A location that a conforming laboratory did not itself create or reserve under the exact evidence-root identity it expects, and whose provenance it has not verified, **MUST** be treated as an existing-root collision, whether that location is empty or non-empty.
+
+**WP2-ISO-027.** A conforming laboratory **MUST NOT** adopt as the evidence root of any isolation unit, or write evidence into, a location that WP2-ISO-026 makes an existing-root collision.
+
+**WP2-ISO-028.** A location created by the same authenticated creation or reservation transaction that bound it to the evidence-root identity a conforming laboratory expects **MUST NOT** be treated as an existing-root collision under WP2-ISO-026.
+
+**WP2-ISO-029.** A resume or a recovery operation **MUST** verify the exact identity and the provenance of an existing location before acting on that location or on the evidence it holds.
+
+**Rationale.** These four requirements answer the narrow scope question that Section 5.14 item 3 leaves to this chunk — whether a pre-existing empty directory counts as an existing output root for the safe-failure requirement. It does. Emptiness describes a location's current contents and is not evidence of its provenance: an empty location may have been created by another study, by an interrupted unit that had not yet written anything, by an unrelated process, or by an operator, and adopting it silently would bind an evidence root to a namespace whose ownership is unknown, which WP2-ISO-007 prohibits and which WP2-ID-018 prevents the location itself from settling. WP2-ISO-028 keeps the rule from refusing the ordinary case, in which the laboratory created the location itself under the identity it expects and has an authenticated record of doing so; WP2-ISO-029 keeps resume and recovery available on the same terms, by verification rather than by assumption. Section 5.14 is not revised by this chunk, and this rationale records where its item 3 is answered. Charter Section 14.9 requires evidence collision and adoption to be treated as explicit failures rather than concealed. What counts as an authenticated creation or reservation transaction is a mechanism this specification does not select; Section 7.20 records that.
+
+### 7.18 Safe, typed, evidence-preserving refusal
+
+**WP2-ISO-030.** A conforming laboratory **MUST** refuse the operation rather than proceed on each of the following seven conditions, taken separately: a duplicate identity within the identity scope the Section 6 register states for that entity; a namespace collision; an attempt to adopt a location that WP2-ISO-026 makes an existing-root collision; a conflict over the ownership of an evidence root; an attempted exercise of authority under an expired, revoked, or superseded lease; an attribution of a record to a study, an independent run, or an execution attempt other than the one whose lineage that record carries; and any operation that cannot demonstrate its own owning lineage before it mutates state or evidence.
+
+**WP2-ISO-031.** Every refusal that WP2-ISO-030 requires **MUST** be recorded as a distinguishable refusal that identifies each of the seven conditions the refused operation met and records such owning lineage as that operation demonstrated, stating that none was demonstrated where the operation demonstrated none rather than asserting or reconstructing one.
+
+**WP2-ISO-032.** A refusal that WP2-ISO-030 requires **MUST NOT** delete, overwrite, truncate, or render unverifiable any evidence that existed before the refused operation or that the refused operation had already produced.
+
+**Rationale.** *Typed* here means distinguishable and recorded: the refusal can be told apart from a refusal of a different condition and from an untyped error, and it names every condition it met, because one operation can meet more than one — an attempt to adopt a location that WP2-ISO-026 makes an existing-root collision and that another study also claims as its own evidence root meets both the third and the fourth condition of WP2-ISO-030. A refusal under the seventh condition is by definition the refusal of an operation whose owning lineage was not demonstrated, so what WP2-ISO-031 requires of that record is that the absence be stated, not that an undemonstrated lineage be supplied; WP2-ID-023 requires the lineage relationships Section 6 states to be read from the record rather than reconstructed from ordering, storage paths, identifier names, or layout. This section defines no failure-class taxonomy, no disposition vocabulary, no retry or replacement rule, and no error-code set; the failure and disposition model is assigned to Section 14, and how a refusal is exercised in a conformance check is assigned to Section 17 and the conformance document. Whether the refused unit may later be replaced remains governed by the study's preregistered replacement policy, in the sense Section 3.1 gives *registered replacement*.
+
+### 7.19 Throughput and resource sharing
+
+**WP2-ISO-033.** Sharing a host, a process, a pool, a connection, a credential boundary, a storage service, or any other resource among isolation units, and any measure taken to increase execution throughput, **MUST NOT** be used to relax, suspend, defer, or make conditional any requirement of this section.
+
+**Rationale.** WP2-SCOPE-013 already prohibits trading isolation, request and outcome attribution, preservation of failed or interrupted attempts, logical-time integrity, replay verification, or evidence completeness for execution throughput. WP2-ISO-033 applies that prohibition to the requirements of this section specifically, so that a conformance check can be written against a laboratory that satisfies each isolation requirement in a low-contention configuration and relaxes it under load. Charter Section 8.5 records that throughput does not establish scientific validity and that parallel execution is not presumed behaviorally neutral, and Section 2.3 records that infrastructure conformance would establish neither.
+
+### 7.20 Options deliberately left unselected
+
+**Unselected option.** Namespace realization. The namespace WP2-ISO-007 requires may be realized as a directory tree, an object-store prefix, a database schema, a tenant, or another arrangement. The property required of any of them is stated in WP2-ISO-007 and WP2-ID-018; no storage class, layout, key format, or naming convention is selected.
+
+**Unselected option.** Partitioning mechanism in a shared mutable service. The authoritative partitioning WP2-ISO-002 requires may be realized by separate stores, per-unit keys, row-level ownership, tenancy, or another mechanism. No database, object store, or storage service is selected.
+
+**Unselected option.** Creation or reservation transaction. The authenticated creation or reservation transaction WP2-ISO-028 refers to may be realized by an exclusive-create filesystem operation, a conditional object-store write, a database insertion, an authority-issued reservation, or another mechanism. The property required is that the transaction bind the location to the expected evidence-root identity in a way the laboratory can later authenticate.
+
+**Unselected option.** Claim mechanism. Where a laboratory claims units of work at all, the claim may be realized by a lock, a lease, a fencing token, an ownership record, or another mechanism. The property required by this section is stated in WP2-ISO-020 and WP2-ISO-021; lease algorithms, durations, and renewal are assigned to Section 9, and WP2-SCOPE-015 prohibits this specification from selecting a lease duration or any other numeric operating parameter.
+
+**Unselected option.** Stochastic-input identity scheme. The event-level lineage WP2-ISO-012 requires may be realized by event-keyed hashing, by registered per-event noise tables, or by another scheme. Charter Section 11.3 names event-keyed hashing as one possible technique rather than a selected one, and this section selects none.
+
+**Unselected option.** Log destination and transport. The attribution WP2-ISO-017 and WP2-ISO-018 require may be carried in a per-unit stream, a shared stream with per-record attribution, a structured record store, or another arrangement. No destination, transport, format, or retention rule is selected.
+
+**Unselected option.** Secret custody. The boundary WP2-ISO-025 requires may be realized by per-unit credential issuance, an external secret manager, process-scoped injection, or another mechanism. No provider, manager, or deployment topology is selected, and the wider security boundary is assigned to Section 16.
+
+### 7.21 Boundaries assigned to later chunks
+
+This section states isolation boundaries and the refusals that protect them. It deliberately defines none of the following: lifecycle states and transitions, including the cancellation lifecycle, which belong to Section 8; queueing, dispatch, and lease algorithms and authoritative-commit mechanics, which belong to Section 9; concurrency-profile contents, which belong to Section 10; the time-domain rules beyond the boundary WP2-ISO-013 and WP2-ISO-014 state, which belong to Section 11; model-request record placement and budget algorithms, which belong to Section 12; evidence formats, inventory contents, packaging, sealing procedure, and verification, which belong to Section 13; the failure and disposition taxonomy behind the typed refusals WP2-ISO-031 requires, which belongs to Section 14; study-aggregation completion, which belongs to Section 15; secret handling beyond the isolation boundary WP2-ISO-025 states, which belongs to Section 16; and the conformance checks, fault injections, and pass conditions for every requirement stated here, which belong to Section 17 and to the conformance document.
 
 ## 8. Run and attempt lifecycle
 
