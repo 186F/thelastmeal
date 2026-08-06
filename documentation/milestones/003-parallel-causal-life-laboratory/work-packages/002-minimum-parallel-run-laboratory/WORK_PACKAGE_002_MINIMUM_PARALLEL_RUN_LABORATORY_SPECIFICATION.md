@@ -601,7 +601,7 @@ Each register entry states the same eight attributes in the same order. The regi
 
 | Attribute | Statement |
 | --- | --- |
-| Identity scope | Every dispatch wave the laboratory releases, where it groups dispatch into waves at all. |
+| Identity scope | Every dispatch wave the laboratory forms, across all scheduling decisions and regardless of whether any admitted member attempt is ultimately released. |
 | Issuing or governing authority | The laboratory scheduling authority. |
 | Required parent or source references | None from the study lineage. A dispatch wave names every admitted execution attempt assigned to or grouped for release under its scheduling decision, whether that attempt is ultimately released, cancelled before release, or never begins execution activity. |
 | Cardinality | One dispatch wave names zero or more admitted execution attempts, and one execution attempt belongs to at most one dispatch wave. |
