@@ -2,11 +2,11 @@
 
 ## Status
 
-**WORKING SPECIFICATION PACKAGE — CHUNK 4 COMPLETED, AWAITING ADVISOR REVIEW**
+**WORKING SPECIFICATION PACKAGE — CHUNK 5 COMPLETED, AWAITING ADVISOR REVIEW**
 
-Chunk 4 is completed and awaiting Advisor review. Chunk 5 is not authorized.
+Chunk 5 is completed and awaiting Advisor review. Chunk 6 is not authorized.
 
-This package is incomplete. At this head, it contains the document structure and normative-writing framework from Chunk 1, the Chunk 2 status, purpose, scope, terminology, non-goals, and current-system baseline, the Chunk 3 entity, identity, and lineage model and isolation invariants, and the Chunk 4 run and attempt lifecycle, scheduling, leasing, authoritative commit, concurrency-profile provenance, and time-domain contract — Sections 1 through 11 of the main specification. Sections 12 through 21 and the conformance document remain shells. Requirements remain incomplete until their assigned later chunks receive explicit Advisor approval.
+This package is incomplete. At this head, it contains the document structure and normative-writing framework from Chunk 1, the Chunk 2 status, purpose, scope, terminology, non-goals, and current-system baseline, the Chunk 3 entity, identity, and lineage model and isolation invariants, the Chunk 4 run and attempt lifecycle, scheduling, leasing, authoritative commit, concurrency-profile provenance, and time-domain contract, and the Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary contract — Sections 1 through 12 and Section 16 of the main specification. Sections 13 through 15 and Sections 17 through 21 of the main specification and the conformance document remain shells. Requirements remain incomplete until their assigned later chunks receive explicit Advisor approval.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This package develops a versioned, implementation-neutral technical and evidence
 
 ## Current authorization
 
-Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work, Chunk 2 scope, terminology, non-goal, and baseline drafting, Chunk 3 identity, lineage, and isolation drafting, and Chunk 4 lifecycle, scheduling, concurrency-provenance, and time drafting only. Chunk 5 is not authorized, and all later drafting remains unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
+Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work, Chunk 2 scope, terminology, non-goal, and baseline drafting, Chunk 3 identity, lineage, and isolation drafting, Chunk 4 lifecycle, scheduling, concurrency-provenance, and time drafting, and Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary drafting only. Chunk 6 is not authorized, and all later drafting remains unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
 
 No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized.
 
