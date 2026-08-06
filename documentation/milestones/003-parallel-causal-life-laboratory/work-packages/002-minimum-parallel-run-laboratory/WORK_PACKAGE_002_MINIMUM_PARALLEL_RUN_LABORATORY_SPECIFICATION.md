@@ -1,6 +1,6 @@
 # Work Package 2 — Minimum Parallel-Run Laboratory Specification
 
-**Status: WORKING DRAFT — CHUNK 3 IDENTITY, LINEAGE, AND ISOLATION INVARIANTS.** This is a working specification package, and Work Package 2 is specification-only. No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized. Implementation requires a later, separate Operator authorization and applicable Advisor review. Requirements remain incomplete until their assigned chunks receive approval.
+**Status: WORKING DRAFT — CHUNK 4 LIFECYCLE, SCHEDULING, CONCURRENCY PROVENANCE, AND TIME.** This is a working specification package, and Work Package 2 is specification-only. No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized. Implementation requires a later, separate Operator authorization and applicable Advisor review. Requirements remain incomplete until their assigned chunks receive approval.
 
 ## 1. Status, authority, and version
 
@@ -978,27 +978,1058 @@ This section states isolation boundaries and the refusals that protect them. It 
 
 ## 8. Run and attempt lifecycle
 
-Scope note: This section will define the future lifecycle vocabulary and state relationships for runs and attempts.
+### 8.1 What this section establishes
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 4 and is not authorized in Chunk 1.
+This section defines two connected lifecycle models — one for the planned run and one for the execution attempt — together with the transition, authority, provenance, restart, resume, replacement, and cancellation requirements that keep those models auditable while many independent runs and many independent studies execute at the same time. The two models are connected but separate. A planned run and an execution attempt are distinct entities in the Section 6 register, they reach their states for different reasons and under different authorities, and neither this section nor a conforming laboratory represents them as one state machine or as one enumeration. This section is implementation-neutral: it names states, dispositions, transitions, authorities, and recorded facts, and it selects no state store, encoding, transition mechanism, scheduler, recovery procedure, or numeric operating parameter.
+
+Section 8.2 states how the two lifecycle models are read and carries the requirement that makes them binding. Section 8.3 establishes the lifecycle vocabulary this specification makes controlling for Sections 8 through 21. Section 8.4 separates the six status dimensions. Sections 8.5 and 8.6 hold the planned-run and execution-attempt models. Sections 8.7 through 8.14 hold the remaining requirements. Section 8.15 records options deliberately left unselected, and Section 8.16 records what is assigned to later chunks.
+
+Every substantive statement here is a Required future invariant carrying exactly one `WP2-LIFE-###` identifier, a Design rationale introduced by a **Rationale.** lead-in, or an Unselected option introduced by an **Unselected option.** lead-in, in the Section 4.3 sense, or else the vocabulary definitions of Section 8.3 and the status-dimension table of Section 8.4, whose normative force flows through WP2-LIFE-002, WP2-LIFE-003, and WP2-LIFE-004 rather than through an identifier of their own, an entry of the two lifecycle models in Sections 8.5 and 8.6, whose normative force flows through WP2-LIFE-001 rather than through an identifier of its own, or a boundary statement in Section 8.16. The model entries supply the normative lifecycle definitions that WP2-LIFE-001 incorporates and makes binding clause by clause, so their individual table cells carry no separate requirement identifier. Nothing in this section is a Current fact or a Current limitation; those belong to Section 5, and WP2-SCOPE-010 keeps a current mechanism from being read as a requirement. Every defined term used here carries the meaning Section 3.1 assigns it, as WP2-SCOPE-005 requires.
+
+**Rationale.** Section 1.1 states, in the present tense and of the head at which it is read, that Sections 6 through 21 hold no substantive content; Section 4.2 states in the same form that the remaining eleven namespaces hold no assigned identifier at this head; and the rationale of Section 6.1 records that the identifiers assigned there leave nine of the reserved namespaces unassigned rather than eleven. None of the three is accurate at the head this chunk produces: Sections 8 through 11 now hold substantive content, identifiers are now assigned in the `WP2-LIFE-###`, `WP2-SCHED-###`, and `WP2-TIME-###` namespaces as well, and six of the reserved namespaces rather than nine remain unassigned. This chunk revises no part of Sections 1 through 7, so none of the three sentences can be corrected here; all three are recorded as inconsistencies this document now carries with itself, in the way Section 5.14 records a carried item and the rationale of Section 6.1 records its own, and all three are left to the final integration chunk that the staged instructions assign, whose required work includes removing incomplete-section language. The operative conclusions those passages draw are unaffected and hold on independent grounds: Sections 12 through 21 and the conformance document still hold no substantive content, and Section 1.4 records that no established specification version exists, so the contract remains incomplete and cannot be treated as a settled technical baseline.
+
+### 8.2 How the two lifecycle models are read
+
+Each entry of the two models states the same eight facts in the same order. The models supply normative lifecycle definitions, which WP2-LIFE-001 incorporates and makes binding clause by clause, except for the specific question an entry expressly assigns to a later section. Entry into a dimension's initial value is recorded in the same way, with no prior value to name, and an entry's minimum-transition-provenance clause states what that initial recording names.
+
+| Fact | What the entry states |
+| --- | --- |
+| Owning entity | The entity whose status the state or disposition is, and therefore the entity whose record carries it. |
+| Entry condition | The condition whose occurrence entitles the recording authority to record entry into the state or disposition. |
+| Permitted predecessor classes | The values within the same status dimension from which entry is permitted. |
+| Permitted successor classes | The values within the same status dimension to which a later transition is permitted. |
+| Terminal | Whether the model permits any successor within that status dimension. |
+| Authority permitted to record the transition | The role entitled to record entry into the state or disposition. |
+| Effect on the authoritative outcome | What entry into the state or disposition does, and does not, do to the authoritative-outcome state of the applicable planned run. |
+| Minimum transition provenance | The facts the transition record has to name, in addition to whatever WP2-LIFE-013 requires of every transition. |
+
+**WP2-LIFE-001.** Every planned run and every execution attempt that a conforming laboratory registers, admits, records, references, or relies upon **MUST** conform, in every status dimension the applicable model governs, to every clause of the applicable model entry in Sections 8.5 and 8.6 — its owning entity, entry condition, permitted predecessor classes, permitted successor classes, terminality, authority permitted to record the transition, effect on the authoritative outcome, and minimum transition provenance — except only the specific question or clause that the entry expressly assigns to a later section, an exemption that reaches no other clause of that fact or entry.
+
+**Rationale.** An authority named in a model entry is a role — the party or process answerable for recording a transition — and never a component, service, scheduler, or store, exactly as Section 6.2 keeps every authority in the entity register a role. Naming a role selects no mechanism, and WP2-SCOPE-015 prohibits such a selection throughout this document. WP2-LIFE-001 is what makes each entry's clauses binding without giving any individual table cell a requirement identifier of its own; the requirements of Sections 8.7 through 8.14 state the obligations that hold across entries. A cell that assigns a question to a later section states a boundary rather than an answer, consistent with Section 4.3's rule that a required invariant is created only where an assigned chunk states it. The two models are stated separately because the entities are separate: a planned run's operational position, its authoritative-outcome state, and its study disposition are properties of a declared unit of intended evidence, whereas an execution attempt's operational position, finalization state, evidence validity, study disposition, and lineage relations are properties of one admitted physical execution, and Section 6.4 already registers the two as distinct identities with distinct authorities and cardinalities.
+
+### 8.3 Controlling lifecycle vocabulary
+
+The terms below carry exactly the meanings given here throughout Sections 8 through 21 and the reporting governed by this specification, wherever they name a lifecycle event or recorded value of a planned run or an execution attempt. They refine, and never displace, the Section 3.1 definitions: *process restart*, *resume*, *transport or delivery retry*, *registered replacement*, *finalization*, and *authoritative commit* keep the meanings Section 3.1 assigns them; *admission* keeps the meaning Section 3.1's execution-attempt entry and the Section 6.4 register entry state; and the terms below name the lifecycle events and roles those definitions presuppose. An occurrence of one of these words in Sections 1 through 7, or in a sense outside that lifecycle use — the release of a lease or of assignment authority, or the admission of a study, a registration, a replacement, or a laboratory worker into service among them — is ordinary description rather than a use of a term defined here, and the expressly declared pair Start and launch names one event with two spellings.
+
+- **Admission** is the act by which the applicable laboratory authority creates an execution-attempt identity for one specific physical execution of one planned run, as Section 3.1 and the Section 6.4 register entry state. It is the first event of an execution attempt's lifecycle.
+- **Release** is the act by which the scheduling authority records that an admitted execution attempt may begin execution activity, whether or not the laboratory groups releases into dispatch waves.
+- **Start**, equivalently **launch**, is the first execution activity carried out under an execution attempt by its owning laboratory worker.
+- **Execution activity** is work carried out under an execution attempt's identity that advances the simulated world of its planned run, consumes that attempt's registered budget, or produces evidence other than the attempt's own admission, assignment, and transition records.
+- **Transition** is a recorded change of one entity's recorded value within one status dimension, from a prior value to a next value.
+- **Recording authority** is the role that the applicable model entry names as entitled to record a given transition.
+- **Terminal** describes a value from which the applicable model permits no successor within its status dimension. Terminality bounds further transitions and nothing else: identity, transition history, disposition, and produced evidence all remain preserved.
+- **Orchestrator restart** is a restart of the process or processes carrying out the laboratory's scheduling, admission, arbitration, and record-keeping roles, as distinct from a restart of an execution agent. It is a process restart in the Section 3.1 sense, named separately here because Section 8.10 states recovery obligations that attach to it specifically.
+
+**WP2-LIFE-002.** The normative prose of Sections 8 through 21 and the reporting governed by this specification **MUST** use the terms defined in Section 8.3 and the state and disposition names of the models in Sections 8.5 and 8.6, wherever they name a lifecycle event or recorded value of a planned run or an execution attempt, with the meanings assigned there, each naming a distinct event or recorded value rather than a synonym for another.
+
+**Rationale.** Sections 3 through 7 were drafted before these lifecycle events were named, and they use *launched*, *release*, and *start* in ordinary description. This section establishes the controlling meanings for Sections 8 through 21 without revising those earlier sections, whose reconciliation belongs to the final integration chunk the staged instructions assign. WP2-SCOPE-006 already prohibits recording a planned run, an execution attempt, a process restart, a resume, a transport or delivery retry, and a registered replacement as interchangeable events; WP2-LIFE-002 extends the same discipline to the finer lifecycle events those six presuppose, so that a later conformance check can tell an admission from a release, a release from a start, and a start from a finalization.
+
+### 8.4 The six status dimensions
+
+Six status dimensions are kept separate throughout. A laboratory records each of them for the entity it belongs to, and the recorded value of no one of them is supplied by reading another, even where an entry condition in Sections 8.5 and 8.6 makes two of them move on one triggering fact.
+
+| Status dimension | What it records | Whose status it is | Where its values are stated |
+| --- | --- | --- | --- |
+| Operational lifecycle state | Where the entity stands in its own execution or scheduling progression. | The planned run, and separately the execution attempt. | Sections 8.5 and 8.6. |
+| Attempt finalization state | The typed outcome of the finalization Section 3.1 defines for one execution attempt, or that finalization has not been reached. | The execution attempt. | Section 8.6. |
+| Planned-run authoritative-outcome state | Whether the planned run has an authoritative accepted outcome and, if so, which execution attempt it names. | The planned run. | Section 8.5. |
+| Artifact or evidence validity | Whether the evidence an execution attempt produced has been determined valid against the applicable evidence rules. | The execution attempt. | Section 8.6; the determination vocabulary and the evidence rules are assigned to Sections 13 and 14. |
+| Study validity or exclusion | Whether the unit counts toward the study's registered result under the study's registered validity and exclusion rules. | The planned run, and separately the execution attempt. | Sections 8.5 and 8.6; the disposition vocabulary is assigned to Section 14 and the study-level consequences to Section 15. |
+| Replacement or supersession lineage | The explicit replacement relations an execution attempt bears to other execution attempts of the same planned run, and the recorded supersession of its own output. | The execution attempt. | Section 8.6, over the replacement-lineage entity Section 6.4 registers for a replacement relation, and over the superseding execution attempt or authority the Section 8.6 entry names for a supersession. |
+
+**WP2-LIFE-003.** A conforming laboratory **MUST** record each of the six status dimensions of Section 8.4 as a separately recorded status of the entity to which that dimension belongs.
+
+**WP2-LIFE-004.** A conforming laboratory **MUST NOT** represent two or more of the six status dimensions as one combined value, or infer the recorded value of one of them from the recorded value of another.
+
+**Rationale.** Collapsing these dimensions is what makes a concurrent laboratory unauditable: a single status word that means at once "the process ended", "the evidence validated", "this result is the authoritative one", and "this unit counts toward the study" cannot distinguish an attempt that finished cleanly but lost an acceptance race from one that was excluded by a registered rule, and it cannot represent a planned run that holds three terminal attempts and no authoritative outcome at all. Charter Section 14.4 requires operational failure, artifact invalidity, study invalidity, and behaviorally unfavorable outcomes to remain distinct, and Section 5.10 records that the repository already keeps a pipeline verdict and a scientific verdict as two separate recorded values. WP2-LIFE-004 prohibits inference between dimensions rather than the recording of a rule that relates them: a registered rule that decides a study disposition from an evidence-validity determination is permitted, and what it produces is a further recorded determination with its own provenance rather than a value read off another dimension.
+
+**Rationale.** The conceptual states the staged instructions name for this section are accounted for across the two models and their six dimensions rather than in one enumeration, as follows. *Registered* and *queued or eligible* are the planned-run operational values Registered and Schedulable, joined at the attempt level by Admitted and Released. *Leased or assigned* is not a separate operational value: it is the assignment and the assignment-authority grant that the Admitted entry's entry condition requires and that Section 9 governs, because a grant may be renewed, revoked, or superseded many times while an attempt stays in one operational value, and representing the two as one value would flatten facts that vary independently. *Starting*, *running*, and *finalizing* are the attempt operational values of the same names. *Completed* and *failed* are the attempt operational values Completed and Failed, each read together with the separate finalization value the attempt holds. *Cancelled* is the attempt operational value Cancelled and, at the other two scopes, the planned-run value Cancelled at planned-run scope and the study-scope cancellation WP2-LIFE-027 records. *Invalid or excluded* is not one value but two dimensions: the evidence-validity dimension records whether an attempt's evidence was determined valid, and the study-validity dimension records separately, at both planned-run and attempt scope, whether the unit counts toward the study's registered result. *Replaced or superseded* is the lineage dimension: a replacement value records an explicit relation between two attempts of one planned run rather than a status of either attempt in isolation, and a supersession value records a status of the one attempt whose output was superseded.
+
+### 8.5 The planned-run lifecycle model
+
+The planned run carries three of the six status dimensions. Its values are as follows.
+
+| State or disposition | Status dimension | Terminal in its dimension |
+| --- | --- | --- |
+| **Registered** | Operational lifecycle | No |
+| **Schedulable** | Operational lifecycle | No |
+| **Attempted** | Operational lifecycle | No |
+| **Cancelled at planned-run scope** | Operational lifecycle | Yes |
+| **Closed to further attempts** | Operational lifecycle | Yes |
+| **No authoritative outcome recorded** | Authoritative outcome | No |
+| **Authoritatively accepted** | Authoritative outcome | Yes |
+| **Planned-run study disposition undetermined** | Study validity or exclusion | No |
+| **Planned-run study disposition recorded** | Study validity or exclusion | Yes |
+
+**Registered.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The registration declaring the planned run is admitted, as the Section 6.3 study-plan and registration entry and the Section 6.4 planned-run entry state. |
+| Permitted predecessor classes | None. This is the initial operational value of every planned run. |
+| Permitted successor classes | Schedulable; Cancelled at planned-run scope. |
+| Terminal | No. |
+| Authority permitted to record the transition | The registration authority that admits the registration. |
+| Effect on the authoritative outcome | None. A registered planned run has no authoritative outcome, and WP2-LIFE-005 keeps it validly represented without one. |
+| Minimum transition provenance | The planned-run identity; the study identity and version; the registration identity and version; the condition and treatment identities; the world or scenario identity and version; the registered concurrency-profile identity and version WP2-SCHED-036 requires it to identify; and the recording authority. |
+
+**Schedulable.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The scheduling authority records that the planned run is eligible for scheduling under the registered, versioned scheduling policy its study identifies. |
+| Permitted predecessor classes | Registered; Attempted, where every execution attempt admitted for the planned run has reached a terminal operational value and the applicable registered authority permits a further attempt. |
+| Permitted successor classes | Attempted; Cancelled at planned-run scope; Closed to further attempts. |
+| Terminal | No. |
+| Authority permitted to record the transition | The laboratory scheduling authority. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The planned-run identity; the identity and version of the scheduling policy applied; the prior and next values; the recording authority; the reason or triggering fact; and the time-domain facts Section 11 makes applicable. |
+
+**Attempted.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | An execution attempt of the planned run is admitted. Where the planned run already holds this value, the admission of a further execution attempt permitted by the registered scheduling policy identified under WP2-SCHED-009 records no further transition in this dimension, and that admission's provenance is carried by the attempt's own Admitted transition under Section 8.6. |
+| Permitted predecessor classes | Schedulable. |
+| Permitted successor classes | Schedulable; Closed to further attempts; Cancelled at planned-run scope. |
+| Terminal | No. |
+| Authority permitted to record the transition | The laboratory authority that admits execution attempts. |
+| Effect on the authoritative outcome | None by itself. An authoritative outcome is reached only through the acceptance operation Section 9 governs, and WP2-LIFE-006 keeps successful finalization from producing one on its own. |
+| Minimum transition provenance | The planned-run identity; the admitted execution-attempt identity; that attempt's owning laboratory-worker identity and run-evidence-root identity; the identity of the assignment-authority grant WP2-SCHED-013 requires; the dispatch-wave identity where the attempt belongs to one; the recording authority; the reason or triggering fact; and the time-domain facts Section 11 makes applicable. |
+
+**Cancelled at planned-run scope.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | A cancellation recorded under WP2-LIFE-027 and issued at planned-run scope, or issued at the scope of the study whose recorded lineage places this planned run below it, takes effect on this planned run. |
+| Permitted predecessor classes | Registered; Schedulable; Attempted. |
+| Permitted successor classes | None. |
+| Terminal | Yes. WP2-LIFE-012 keeps the planned run's identity, recorded execution attempts, transition history, and evidence preserved after it. |
+| Authority permitted to record the transition | The authority that the study's registered cancellation policy names for cancellation at the scope from which the cancellation was issued. |
+| Effect on the authoritative outcome | The planned run reaches no authoritative outcome after this value is recorded. Where an authoritative outcome was already recorded, the cancellation neither removes nor revises it, and a race between the two operations is resolved under WP2-SCHED-031 and recorded under WP2-SCHED-032. |
+| Minimum transition provenance | The planned-run identity; the study identity and version; the identity of the cancellation record, the scope at which it was issued, and its issuing authority; the reason; each execution attempt of this planned run whose recorded status the cancellation changed; the recording authority; and the time-domain facts Section 11 makes applicable. |
+
+**Closed to further attempts.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The applicable registered authority records that no further execution attempt of this planned run may be admitted. The rules that decide when a further attempt may or must be admitted, including replacement eligibility and sample-size treatment, are assigned to Section 14, and the study-level consequences of closure are assigned to Section 15. |
+| Permitted predecessor classes | Schedulable; Attempted. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The laboratory authority that admits execution attempts, acting under the study's registered replacement or continuation policy. |
+| Effect on the authoritative outcome | None by itself. A planned run may be closed to further attempts with an authoritative outcome or without one. |
+| Minimum transition provenance | The planned-run identity; the identity and version of the registered policy under which closure was recorded; the reason; every execution attempt admitted for the planned run together with its terminal operational value and finalization state; the recording authority; and the time-domain facts Section 11 makes applicable. |
+
+**No authoritative outcome recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The registration declaring the planned run is admitted. This is the initial value of every planned run's authoritative-outcome dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Authoritatively accepted. |
+| Terminal | No, and it may nevertheless hold permanently. WP2-LIFE-008 keeps a planned run that never leaves it validly represented. |
+| Authority permitted to record the transition | The registration authority records the initial value. No authority changes it except through the acceptance operation Section 9 governs. |
+| Effect on the authoritative outcome | While this value holds, the planned run has no authoritative accepted outcome. |
+| Minimum transition provenance | The planned-run identity and the registration that declared it. |
+
+**Authoritatively accepted.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The acceptance operation that Section 9 governs completes successfully for exactly one execution attempt of this planned run. |
+| Permitted predecessor classes | No authoritative outcome recorded. |
+| Permitted successor classes | None. |
+| Terminal | Yes. WP2-ID-009 prohibits a planned run from acquiring more than one authoritative accepted outcome, and WP2-ID-026 prohibits changing the meaning of an already-recorded identity or version in place; a material error is corrected under WP2-ID-025. |
+| Authority permitted to record the transition | The authority that the registered, versioned authoritative-commit policy names. |
+| Effect on the authoritative outcome | This value is the authoritative outcome, and WP2-LIFE-007 requires it to name exactly one accepted execution attempt. |
+| Minimum transition provenance | The planned-run identity; the accepted execution-attempt identity; that attempt's recorded finalization state; the identity and version of the authoritative-commit policy applied; the assignment-authority grant under which the acceptance was recorded; the verification facts WP2-SCHED-026 requires; the recording authority; and the time-domain facts Section 11 makes applicable. |
+
+**Planned-run study disposition undetermined.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The registration declaring the planned run is admitted. This is the initial value of every planned run's study-validity dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Planned-run study disposition recorded. |
+| Terminal | No, and it may hold for as long as the study's registered rules leave the question open. |
+| Authority permitted to record the transition | The registration authority records the initial value. |
+| Effect on the authoritative outcome | None. Study validity and exclusion never by themselves determine, remove, or revise an authoritative outcome. |
+| Minimum transition provenance | The planned-run identity and the study identity and version. |
+
+**Planned-run study disposition recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The planned run. |
+| Entry condition | The study or analysis authority records this planned run's disposition against the study's registered validity and exclusion rules. |
+| Permitted predecessor classes | Planned-run study disposition undetermined. |
+| Permitted successor classes | None. A later determination is recorded as a further determination that names the one it supersedes, consistent with WP2-LIFE-016; a correction to this record is made under WP2-LIFE-017. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The study or analysis authority governed by charter Sections 14.2 and 14.7. |
+| Effect on the authoritative outcome | None. Recording that a planned run is excluded from a study result neither removes nor revises the authoritative outcome that planned run reached. |
+| Minimum transition provenance | The planned-run identity; the study identity and version; the identity and version of the registered validity or exclusion rule applied; the evidence the determination rested on; the recording authority; and the reason. The vocabulary of dispositions is assigned to Section 14 and the study-level consequences to Section 15. |
+
+### 8.6 The execution-attempt lifecycle model
+
+The execution attempt carries five of the six status dimensions. Its values are as follows.
+
+| State or disposition | Status dimension | Terminal in its dimension |
+| --- | --- | --- |
+| **Admitted** | Operational lifecycle | No |
+| **Released** | Operational lifecycle | No |
+| **Starting** | Operational lifecycle | No |
+| **Running** | Operational lifecycle | No |
+| **Finalizing** | Operational lifecycle | No |
+| **Completed** | Operational lifecycle | Yes |
+| **Failed** | Operational lifecycle | Yes |
+| **Cancelled** | Operational lifecycle | Yes |
+| **Finalization not reached** | Attempt finalization | No |
+| **Finalization succeeded** | Attempt finalization | Yes |
+| **Finalization failed** | Attempt finalization | Yes |
+| **Evidence validity undetermined** | Artifact or evidence validity | No |
+| **Evidence validity determined** | Artifact or evidence validity | Yes |
+| **Attempt study disposition undetermined** | Study validity or exclusion | No |
+| **Attempt study disposition recorded** | Study validity or exclusion | Yes |
+| **No replacement or supersession relation recorded** | Replacement or supersession lineage | No |
+| **Replacement relation recorded** | Replacement or supersession lineage | No |
+| **Supersession relation recorded** | Replacement or supersession lineage | No |
+
+**Admitted.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The laboratory authority admits one specific physical execution of one planned run, creating the execution-attempt identity and its one run evidence root, naming as its owner exactly one laboratory worker already admitted into service, and recording the assignment-authority grant WP2-SCHED-013 requires. |
+| Permitted predecessor classes | None. Admission is the first event of an execution attempt's lifecycle. |
+| Permitted successor classes | Released; Failed; Cancelled. |
+| Terminal | No. |
+| Authority permitted to record the transition | The laboratory authority that admits execution attempts. |
+| Effect on the authoritative outcome | None. WP2-LIFE-010 keeps admission from being recorded, reported, or counted as release, start, running, completion, finalization, or authoritative acceptance. |
+| Minimum transition provenance | The execution-attempt identity; the planned-run identity; the study identity and version; the owning laboratory-worker identity; the run-evidence-root identity; the assignment-authority grant identity; the dispatch-wave identity where the attempt belongs to one; the registered concurrency-profile identity and version WP2-SCHED-036 requires it to identify; the recording authority; the reason or triggering fact; and the time-domain facts Section 11 makes applicable. |
+
+**Released.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The scheduling authority records that the admitted attempt may begin execution activity. A laboratory that decides admission and release at one point records both events, each with its own provenance; one recorded event never stands for both, and WP2-SCHED-001 keeps the two distinct. |
+| Permitted predecessor classes | Admitted. |
+| Permitted successor classes | Starting; Failed; Cancelled. |
+| Terminal | No. |
+| Authority permitted to record the transition | The laboratory scheduling authority. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity; the dispatch-wave identity where release was decided as part of a wave; the current assignment-authority grant identity; the recording authority; the reason or triggering fact; and the local-queue-time facts Section 11 makes applicable. |
+
+**Starting.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The owning laboratory worker begins execution activity under the attempt, before the simulated world of its planned run has begun to advance. |
+| Permitted predecessor classes | Released. |
+| Permitted successor classes | Running; Failed; Cancelled. |
+| Terminal | No. |
+| Authority permitted to record the transition | The owning laboratory worker. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity; the owning laboratory-worker identity; the current assignment-authority grant identity; the execution-environment and host or runner identity the observed concurrency provenance records under Section 10; the recording authority; and the laboratory-worker wall-clock runtime start boundary Section 11 makes applicable. |
+
+**Running.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The simulated world of the attempt's planned run begins to advance under the engine authority that charter Section 14.8 makes final over objective world state, legal affordances, and committed consequences. |
+| Permitted predecessor classes | Starting. |
+| Permitted successor classes | Finalizing; Failed; Cancelled. |
+| Terminal | No. |
+| Authority permitted to record the transition | The owning laboratory worker, on the engine-owned facts charter Section 14.8 makes authoritative. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity; the owning laboratory-worker identity; the current assignment-authority grant identity; the recording authority; and the logical-simulation-time and laboratory-worker wall-clock runtime facts Section 11 makes applicable. |
+
+**Finalizing.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | Execution activity under the attempt has ended and the finalization Section 3.1 defines has begun for it. |
+| Permitted predecessor classes | Running. |
+| Permitted successor classes | Completed; Failed; Cancelled. |
+| Terminal | No. |
+| Authority permitted to record the transition | The finalizing authority the laboratory names for finalization of an execution attempt. |
+| Effect on the authoritative outcome | None by itself, under WP2-LIFE-006. |
+| Minimum transition provenance | The execution-attempt identity; the run-evidence-root identity; the current assignment-authority grant identity; the recording authority; and the finalization-time facts Section 11 makes applicable. |
+
+**Completed.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | Finalization of the attempt concluded with every applicable strict criterion holding, so that the attempt's finalization state is recorded as Finalization succeeded. |
+| Permitted predecessor classes | Finalizing. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The finalizing authority. |
+| Effect on the authoritative outcome | A completed attempt becomes eligible for consideration by the acceptance operation Section 9 governs, and nothing more; WP2-LIFE-006 and WP2-SCHED-025 keep completion from making the attempt authoritative by itself. |
+| Minimum transition provenance | The execution-attempt identity; the run-evidence-root identity; the recorded finalization state; the identity and version of the finalization rules applied; the recording authority; and the finalization-time facts Section 11 makes applicable. The evidence contract for finalization is assigned to Section 13. |
+
+**Failed.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The attempt meets a condition that the applicable authority records as a terminal operational failure of that attempt. |
+| Permitted predecessor classes | Admitted; Released; Starting; Running; Finalizing. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The admitting or scheduling authority for a failure recorded before start; the owning laboratory worker, or the authority that observed the failure, for a failure recorded during execution activity; the finalizing authority for a failure recorded during finalization. |
+| Effect on the authoritative outcome | None. A failed attempt is not the authoritative outcome of its planned run, and its failure does not by itself change that planned run's authoritative-outcome state; WP2-SCHED-025 separately bars consideration of any attempt whose recorded finalization state is not Finalization succeeded. |
+| Minimum transition provenance | The execution-attempt identity; the prior operational value; the reason or triggering fact; the observing authority and the recording authority; the evidence the attempt had produced; and the time-domain facts Section 11 makes applicable. The failure-class vocabulary and the typed dispositions are assigned to Section 14. |
+
+**Cancelled.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | A cancellation recorded under WP2-LIFE-027 reaches this execution attempt, whether it was issued at study, planned-run, or execution-attempt scope. |
+| Permitted predecessor classes | Admitted; Released; Starting; Running; Finalizing. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The authority that the study's registered cancellation policy names for cancellation at the scope from which the cancellation was issued. |
+| Effect on the authoritative outcome | None by itself. A cancelled attempt is not the authoritative outcome of its planned run, WP2-SCHED-026 requires the acceptance operation to verify the cancellation state of the study, planned run, and attempt, and a race between cancellation and acceptance is resolved under WP2-SCHED-031 and recorded under WP2-SCHED-032. |
+| Minimum transition provenance | The execution-attempt identity; the identity of the cancellation record, the scope at which it was issued, and its issuing authority; the reason; the prior operational value; the recording authority; the evidence the attempt had produced before cancellation; and the time-domain facts Section 11 makes applicable. |
+
+**Finalization not reached.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The attempt is admitted. This is the initial value of every execution attempt's finalization dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Finalization succeeded; Finalization failed. |
+| Terminal | No, and it holds permanently for an attempt that never reaches finalization. |
+| Authority permitted to record the transition | The admitting authority records the initial value. |
+| Effect on the authoritative outcome | None. An attempt holding this value is not eligible for authoritative acceptance under WP2-SCHED-025. |
+| Minimum transition provenance | The execution-attempt identity and the planned-run identity. |
+
+**Finalization succeeded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The finalization Section 3.1 defines concluded for this attempt with every applicable strict criterion holding. |
+| Permitted predecessor classes | Finalization not reached. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The finalizing authority. |
+| Effect on the authoritative outcome | Necessary and not sufficient. WP2-SCHED-025 permits only an attempt holding this value to be considered for authoritative acceptance, and WP2-LIFE-006 prohibits treating the value as itself making the attempt authoritative. |
+| Minimum transition provenance | The execution-attempt identity; the run-evidence-root identity; each evidence source validated and its verdict; the identity and version of the finalization rules applied; the recording authority; and the finalization-time facts Section 11 makes applicable. |
+
+**Finalization failed.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | Finalization was attempted for this attempt and at least one applicable strict criterion did not hold, or finalization could not be completed. |
+| Permitted predecessor classes | Finalization not reached. |
+| Permitted successor classes | None. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The finalizing authority. |
+| Effect on the authoritative outcome | None. An attempt holding this value is not eligible for authoritative acceptance under WP2-SCHED-025. |
+| Minimum transition provenance | The execution-attempt identity; the stage at which finalization did not complete; the reason; the evidence preserved; the recording authority; and the finalization-time facts Section 11 makes applicable. The failure classes are assigned to Section 14 and the evidence contract to Section 13. |
+
+**Evidence validity undetermined.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt, for the evidence held in its run evidence root. |
+| Entry condition | The attempt is admitted. This is the initial value of every execution attempt's evidence-validity dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Evidence validity determined. |
+| Terminal | No, and it may hold permanently where no determination is ever made. |
+| Authority permitted to record the transition | The admitting authority records the initial value. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity and the run-evidence-root identity. |
+
+**Evidence validity determined.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt, for the evidence held in its run evidence root. |
+| Entry condition | The authority the laboratory names for evidence validation records a determination of whether that evidence is valid against the applicable evidence rules. The determination vocabulary and the evidence rules themselves are assigned to Sections 13 and 14. |
+| Permitted predecessor classes | Evidence validity undetermined. |
+| Permitted successor classes | None. A later determination is recorded as a further determination that names the one it supersedes, consistent with WP2-LIFE-016; a correction to this record is made under WP2-LIFE-017. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The evidence-validation authority. |
+| Effect on the authoritative outcome | None by itself. |
+| Minimum transition provenance | The execution-attempt identity; the run-evidence-root identity; the identity and version of the evidence rules applied; the determination recorded; the evidence the determination rested on; the recording authority; and the time-domain facts Section 11 makes applicable. |
+
+**Attempt study disposition undetermined.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The attempt is admitted. This is the initial value of every execution attempt's study-validity dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Attempt study disposition recorded. |
+| Terminal | No, and it may hold for as long as the study's registered rules leave the question open. |
+| Authority permitted to record the transition | The admitting authority records the initial value. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity, the planned-run identity, and the study identity and version. |
+
+**Attempt study disposition recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The study or analysis authority records this attempt's disposition against the study's registered validity and exclusion rules. |
+| Permitted predecessor classes | Attempt study disposition undetermined. |
+| Permitted successor classes | None. A later determination is recorded as a further determination that names the one it supersedes, consistent with WP2-LIFE-016; a correction to this record is made under WP2-LIFE-017. |
+| Terminal | Yes. |
+| Authority permitted to record the transition | The study or analysis authority governed by charter Sections 14.2 and 14.7. |
+| Effect on the authoritative outcome | None. Recording that an attempt is excluded from a study result neither removes nor revises an authoritative outcome that names it. |
+| Minimum transition provenance | The execution-attempt identity; the planned-run identity; the study identity and version; the identity and version of the registered validity or exclusion rule applied; the evidence the determination rested on; the recording authority; and the reason. The vocabulary of dispositions is assigned to Section 14 and the study-level consequences to Section 15. |
+
+**No replacement or supersession relation recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt. |
+| Entry condition | The attempt is admitted. This is the initial value of every execution attempt's lineage dimension. |
+| Permitted predecessor classes | None. |
+| Permitted successor classes | Replacement relation recorded; Supersession relation recorded. |
+| Terminal | No, and it holds permanently for an attempt that neither replaces, is replaced by, nor is superseded by anything. |
+| Authority permitted to record the transition | The admitting authority records the initial value. |
+| Effect on the authoritative outcome | None. |
+| Minimum transition provenance | The execution-attempt identity and the planned-run identity. |
+
+**Replacement relation recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt, as one participant in the replacement-lineage record Section 6.4 registers. |
+| Entry condition | A registered replacement is admitted that relates this attempt, as either the replacing or the replaced attempt, to exactly one other execution attempt of the same planned run. |
+| Permitted predecessor classes | No replacement or supersession relation recorded; Replacement relation recorded, where the attempt participates in more than one such relation, each recorded separately; Supersession relation recorded. |
+| Permitted successor classes | A further replacement relation, each recorded separately; Supersession relation recorded. |
+| Terminal | No. |
+| Authority permitted to record the transition | The authority that admits a replacement under the study's preregistered replacement policy. |
+| Effect on the authoritative outcome | None by itself. WP2-LIFE-026 keeps the admission of a replacement from changing the replaced attempt's recorded operational lifecycle state, terminal disposition, or evidence, and WP2-ID-009 continues to bound the planned run at no more than one authoritative accepted outcome. |
+| Minimum transition provenance | The replacement-lineage record identity; the replacing and replaced execution-attempt identities; the planned-run identity both share; the identity and version of the registered replacement policy applied; the recording authority; the reason; and the time-domain facts Section 11 makes applicable. Replacement eligibility and sample-size treatment are assigned to Section 14. |
+
+**Supersession relation recorded.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity | The execution attempt whose output was superseded. |
+| Entry condition | An authority records that this attempt's output has been superseded, whether because it was produced under an expired, revoked, or superseded assignment authority or because another execution attempt of the same planned run reached the authoritative outcome. |
+| Permitted predecessor classes | No replacement or supersession relation recorded; Replacement relation recorded; Supersession relation recorded, where the attempt's output is superseded more than once, each recorded separately. |
+| Permitted successor classes | A further supersession relation, each recorded separately; Replacement relation recorded, where a registered replacement later relates this attempt to another execution attempt of the same planned run. |
+| Terminal | No. |
+| Authority permitted to record the transition | The authority that the registered authoritative-commit policy or the registered assignment-authority policy names. |
+| Effect on the authoritative outcome | A superseded attempt is not the authoritative outcome. WP2-SCHED-021 keeps a stale holder from mutating the planned run's authoritative-outcome state or any execution attempt's recorded status, and WP2-SCHED-029 requires the superseded attempt to be preserved with a distinguishable non-authoritative result. |
+| Minimum transition provenance | The execution-attempt identity; the execution attempt or authority that superseded it, where one is named; the identity and version of the policy applied; the reason; the recording authority; the evidence the superseded attempt produced; and the time-domain facts Section 11 makes applicable. The disposition vocabulary for superseded output is assigned to Section 14. |
+
+**Rationale.** The eight operational values form one progression per attempt, and the remaining ten values are the four other dimensions' own progressions, which advance independently of it. That is why an attempt cancelled before release holds a terminal operational value, Finalization not reached, Evidence validity undetermined, Attempt study disposition undetermined, and no lineage relation, all at once, and why none of those five is inferable from any other. The model also fixes what an authority may record: a laboratory worker records the beginning of its own execution activity, a finalizing authority records the outcome of finalization, a scheduling authority records release, and only the authority the registered authoritative-commit policy names records an authoritative acceptance. The Section 6.4 register already assigns the corresponding identities and their issuing authorities, and WP2-ID-014 continues to prohibit reporting or joining a laboratory-worker, lease, or dispatch-wave identity as though it were the identity of a planned run or an execution attempt.
+
+### 8.7 Planned runs, attempts, and the authoritative outcome
+
+**WP2-LIFE-005.** A planned run **MUST** remain a validly represented planned run of its study from the admission of the registration declaring it and for the whole of its lifecycle, whether or not any execution attempt has been admitted, released, started, finalized, or accepted for it.
+
+**WP2-LIFE-006.** A conforming laboratory **MUST NOT** treat the successful finalization of an execution attempt as, by itself, making that attempt's result the authoritative accepted outcome of its planned run.
+
+**WP2-LIFE-007.** The authoritative-outcome state of a planned run, where the value Authoritatively accepted is recorded at all, **MUST** name exactly one execution attempt of that planned run whose recorded finalization state is Finalization succeeded.
+
+**WP2-LIFE-008.** A planned run for which the value Authoritatively accepted is never recorded **MUST** remain a validly represented planned run carrying its complete identity, every execution attempt admitted for it, and every one of their recorded dispositions.
+
+**Rationale.** These four requirements state, in lifecycle terms, what Section 6 states in identity terms. WP2-ID-006 and WP2-ID-007 already establish that a planned-run identity exists before and independently of physical execution and that a planned run has zero execution attempts exactly where none was ever admitted; WP2-ID-009 bounds the authoritative accepted outcome at no more than one. What Section 8 adds is that none of the planned run's lifecycle values, and no absence of one, makes the planned run invalid or unrepresentable. Separating finalization from acceptance is the invariant that a concurrent laboratory most easily loses: with one nonterminal execution attempt at a time per planned run and one writer, "finished successfully" and "is the authoritative result" coincide, and Section 5.5 records that the repository's current orchestration is exactly that arrangement. With several attempts of one planned run able to finalize successfully, they cannot coincide, and Section 9 states the acceptance operation that decides between them.
+
+### 8.8 Admission, pre-start status, and terminal identity
+
+**WP2-LIFE-009.** An execution attempt **MUST** own its one run evidence root from the point of its admission, before and independently of any execution activity carried out under it.
+
+**WP2-LIFE-010.** A conforming laboratory **MUST NOT** record, report, or count the admission of an execution attempt as its release, its start, its running, its completion, its finalization, or the authoritative acceptance of its planned run.
+
+**WP2-LIFE-011.** An execution attempt cancelled or failed before any execution activity began under it **MUST** remain represented with its identity, its run evidence root, its owning laboratory-worker identity, its recorded transition history, its terminal disposition, and whatever evidence it in fact produced.
+
+**WP2-LIFE-012.** A conforming laboratory **MUST NOT** erase, overwrite, truncate, or render unreadable the identity, the recorded transition history, the terminal disposition, or the produced evidence of an execution attempt or of a planned run that has reached a terminal value in any status dimension.
+
+**Rationale.** The admission model these requirements carry is the one the approved Section 3.1 and Section 6.4 entries state: identity begins at admission, admission may precede all execution activity, and an admitted attempt that never starts is a recorded execution attempt rather than a nonentity. WP2-LIFE-009 states the consequence for the run evidence root that the Section 6.7 register entry already requires, so that a pre-start terminal disposition has a namespace to be recorded against without relaxing the one-root-per-attempt cardinality. WP2-LIFE-012 governs erasure and unreadability; WP2-ID-024 separately prohibits a terminal value from freeing an identity for reuse, and charter Section 14.4 requires failed, interrupted, invalid, excluded, and replacement attempts to remain recorded evidence with typed dispositions. Section 5.9 records that the repository's current per-execution seal already authenticates an empty evidence set for an interruption that preceded any evidence creation, which is evidence that a pre-start terminal disposition is representable, not a requirement of this specification.
+
+### 8.9 Transition authority, provenance, and history
+
+**WP2-LIFE-013.** Every transition a conforming laboratory records **MUST** name the execution attempt or planned run whose status changed, the study above it and, where the changed status is an execution attempt's, the planned run above it, the status dimension, the prior recorded value, the next recorded value, the authority that recorded the transition, the reason or triggering fact, and the time-domain facts that Section 11 makes applicable to it.
+
+**WP2-LIFE-014.** A transition **MUST** be recorded only by an authority that the applicable model entry in Sections 8.5 and 8.6 names as permitted to record it.
+
+**WP2-LIFE-015.** The complete recorded transition history of every planned run and of every execution attempt **MUST** remain reconstructible from the record, in the order in which the transitions were recorded and with the authority and reason of each retained.
+
+**WP2-LIFE-016.** A conforming laboratory **MUST NOT** overwrite, delete, or change the meaning of an already-recorded transition or of an earlier recorded status value.
+
+**WP2-LIFE-017.** A correction to an already-recorded transition or status value **MUST** be recorded as a further transition or correction record that names the record it corrects together with the correcting authority and the reason for the correction.
+
+**Rationale.** A reconstructible history is what lets a later audit tell a cancelled attempt from a failed one, an attempt that was never released from one that started and crashed, and a correction from a rewrite. WP2-ID-023 already requires the lineage relationships of Section 6 to be readable from the record rather than reconstructed from ordering, paths, or names; WP2-LIFE-015 requires the same of status history. WP2-LIFE-016 and WP2-LIFE-017 apply to lifecycle records the same append-and-supersede discipline that WP2-ID-025 and WP2-ID-026 apply to identities, so that an error is corrected without an earlier recorded meaning changing under a reader who already relied on it. WP2-LIFE-013 names the time-domain facts as applicable rather than enumerating them, because which domains apply to which transition is stated, so far as it is stated, by the domain model in Section 11.3 and bound by WP2-TIME-001.
+
+### 8.10 Process restart, orchestrator restart, and laboratory-worker identity
+
+**WP2-LIFE-018.** A restart of the process or processes hosting any part of a conforming laboratory **MUST NOT** by itself change the recorded status of any planned run or execution attempt in any status dimension.
+
+**WP2-LIFE-019.** A conforming laboratory resuming operation after an orchestrator restart **MUST** reconstruct the recorded status of every affected planned run and execution attempt from durable, identity-matched records, rather than from process memory, storage or directory ordering, identifier shape, or wall-clock proximity.
+
+**WP2-LIFE-020.** An execution attempt interrupted by a process restart or an orchestrator restart **MUST NOT** be continued, revived, or reopened in place.
+
+**WP2-LIFE-021.** An execution attempt interrupted by a process restart or an orchestrator restart **MUST** receive a recorded terminal disposition that preserves its identity, its recorded transition history, and the evidence it produced.
+
+**WP2-LIFE-022.** Whether a restarted execution agent returns to service under its existing laboratory-worker identity or under a new laboratory-worker identity **MUST** be decided and recorded explicitly by the authority that admits laboratory workers into service, rather than inferred from the restart itself, from a process identifier, from a host identity, or from configuration equality.
+
+**WP2-LIFE-023.** A restarted execution agent **MUST NOT** treat its return to service under an existing laboratory-worker identity as, by itself, restoring an assignment-authority grant, an execution-attempt assignment, or an in-flight execution attempt that was current before the restart.
+
+**Rationale.** WP2-LIFE-022 and WP2-LIFE-023 answer the question the Section 6.5 laboratory-worker entry assigns here: whether a restarted execution agent retains its identity or receives a new one. Neither answer is imposed. A restart is a fact about a process, and Section 3.1 records that a process restart is not itself a resume, a retry, a new execution attempt, or a replacement; making it silently mint or silently preserve a laboratory-worker identity would let a process event decide an identity question that the Section 6.5 entry assigns to the authority that admits laboratory workers into service. What is fixed is that the decision is the admitting authority's, that it is recorded rather than inferred, and that identity continuity never carries authority continuity with it. The Section 6.5 rule that a laboratory-worker identity is never reassigned to a different execution agent continues to hold either way, and the currency of any assignment-authority grant after a restart is decided under Section 9 rather than by the restarted agent. WP2-LIFE-021 likewise requires that an interrupted attempt receive a recorded terminal disposition and names none: the typed disposition vocabulary is assigned to Section 14, and Section 5.9 records that the repository's current mechanism already converts an execution left in progress by a crash into a failed, sealed, preserved execution rather than continuing it in place. WP2-LIFE-019 states the recovery obligation in terms of durable identity-matched records because the alternatives it names are exactly the ones that silently misattribute work under concurrency: Section 5.3 records that the repository derives an execution identifier by counting the executions recorded in one state file, and Section 5.4 records that its only ownership record is a lock file whose liveness test is meaningful solely inside one host's process namespace. Neither observation is a requirement of this specification, and WP2-SCOPE-010 keeps it from being read as one.
+
+### 8.11 Resume and further execution attempts
+
+**WP2-LIFE-024.** A conforming laboratory **MUST** admit any further execution attempt of a resumed planned run only under the registered replacement or continuation authority applicable to that planned run, and only as a new execution-attempt identity with its own run evidence root.
+
+**WP2-LIFE-025.** A resume of a planned run **MUST NOT** by itself admit an execution attempt, change the recorded status of an existing execution attempt, or change the authoritative-outcome state of that planned run.
+
+**Rationale.** Section 3.1 defines a resume as re-entering an existing, identity-matched unit of work after an interruption, without continuing an interrupted execution attempt in place and without erasing what that attempt produced. WP2-LIFE-024 states what a resume may lead to and under whose authority, and WP2-LIFE-025 states what it does not do on its own, so that re-entering a planned run cannot become an unregistered route to an additional physical execution. WP2-ISO-005 already prohibits two execution attempts of one planned run from continuing one another in place, and charter Section 14.4 prohibits retrying an attempt merely to obtain a preferred trajectory. The rules that decide when a further attempt is permitted, and the sample-size treatment of one, are assigned to Section 14.
+
+### 8.12 Replacement within the lifecycle
+
+**WP2-LIFE-026.** The admission of a registered replacement **MUST NOT** rename, renumber, mutate, reopen, or change the recorded operational lifecycle state, terminal disposition, or evidence of the execution attempt it replaces.
+
+**Rationale.** WP2-ID-010 through WP2-ID-012 already require a registered replacement to be an additional execution attempt of the same planned run whose lineage record names the replaced attempt explicitly and is never established from a suffix, an ordering, a path, a timestamp, or proximity alone. WP2-LIFE-026 adds the lifecycle half of the same rule: the replaced attempt's own operational lifecycle state, terminal disposition, and evidence are left exactly as they stand, and the lineage relation is recorded on both participants rather than as a change to the replaced attempt's own progression. Charter Section 14.4 requires replacement rules to be preregistered and prohibits a replacement from erasing the original attempt.
+
+### 8.13 Cancellation scopes
+
+**WP2-LIFE-027.** Every cancellation **MUST** be recorded as an operation issued at exactly one of study scope, planned-run scope, or execution-attempt scope, identifying the scope at which it was issued, the authority that issued it, the identity and version of the registered cancellation policy under which it was issued, its reason, and each unit whose recorded status it changed.
+
+**WP2-LIFE-028.** A conforming laboratory **MUST NOT** record or report a cancellation issued at one scope as a cancellation issued at another, or treat a unit as cancelled because a unit that its explicitly recorded lineage does not place above it was cancelled.
+
+**Rationale.** Cancellation at three scopes is three different operations with three different consequences: cancelling a study reaches the planned runs and execution attempts its recorded lineage places below it, cancelling a planned run reaches that planned run's attempts, and cancelling an execution attempt reaches one attempt and leaves its planned run schedulable or closed according to the registered policy. WP2-ISO-023 already confines a cancellation or cleanup operation to its own lineage, and WP2-ISO-024 prohibits it from destroying a sibling's or an earlier attempt's evidence; WP2-LIFE-027 and WP2-LIFE-028 make the scope itself a recorded fact so that the confinement is checkable after the event. The typed dispositions a cancellation produces, and the containment of sibling units after a failure, are assigned to Section 14.
+
+### 8.14 Illegal and unprovable transitions
+
+**WP2-LIFE-029.** A conforming laboratory **MUST** refuse a transition that the applicable model in Sections 8.5 and 8.6 does not permit, that is attempted by an authority the model does not permit to record it, or whose minimum transition provenance cannot be demonstrated at the time it is attempted.
+
+**WP2-LIFE-030.** Every refusal that WP2-LIFE-029 requires **MUST** be recorded as a distinguishable refusal identifying the entity, the attempted transition, each condition of WP2-LIFE-029 the attempted transition met, and such provenance as the refused operation demonstrated.
+
+**WP2-LIFE-031.** A refusal that WP2-LIFE-029 requires **MUST NOT** delete, overwrite, truncate, or render unverifiable any recorded status, transition history, or evidence that existed before the refused transition was attempted or that the refused operation had already produced.
+
+**Rationale.** These three requirements apply to lifecycle transitions the same safe, typed, evidence-preserving refusal discipline that WP2-ISO-030 through WP2-ISO-032 apply to identity, namespace, ownership, authority, and attribution conditions, and they are stated separately because the conditions differ: a transition can be illegal because the model forbids it, because the wrong authority attempted it, or because the facts it would have to record are not available. Charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed, which a silently dropped or silently coerced transition would defeat. This section defines no failure-class taxonomy, disposition vocabulary, or error-code set; those are assigned to Section 14, and how a refusal is exercised in a conformance check is assigned to Section 17 and the conformance document.
+
+### 8.15 Options deliberately left unselected
+
+**Unselected option.** Status representation. The six status dimensions may be carried by separate fields on one record, by separate records, by an append-only transition log from which current values are derived, or by another arrangement. WP2-LIFE-003 and WP2-LIFE-004 state the properties any arrangement has to satisfy; no encoding, schema, or store is selected.
+
+**Unselected option.** Transition-record placement. The transition provenance WP2-LIFE-013 requires may be recorded inline on the entity's record, in a separate transition record, in an event stream, or in more than one of those. WP2-LIFE-015 requires only that the history remain reconstructible from the record.
+
+**Unselected option.** Recovery procedure after an orchestrator restart. The reconstruction WP2-LIFE-019 requires may be performed by re-reading durable records at startup, by a separate recovery pass, by an authority-issued reconciliation, or by another procedure. No procedure, ordering, or store is selected, and WP2-SCOPE-015 prohibits selecting one.
+
+**Unselected option.** Laboratory-worker identity continuity across a restart. The decision WP2-LIFE-022 assigns to the admitting authority may be realized by re-admission under a recorded identity, by an agent-held credential presented at re-admission, by an external service record, or by another mechanism. Neither continuity nor discontinuity is preferred here.
+
+**Unselected option.** Interruption detection. What tells a laboratory that an execution attempt was interrupted may be a liveness policy under Section 9, a durable marker, an authority-issued reconciliation, or another mechanism. WP2-LIFE-020 and WP2-LIFE-021 state what follows from the determination rather than how it is reached.
+
+**Unselected option.** Additional recorded states. A laboratory may record finer states inside any value of either model, provided every transition of the model itself remains recorded with the provenance WP2-LIFE-013 requires. No finer decomposition is required, prohibited, or preferred here.
+
+### 8.16 Boundaries assigned to later chunks
+
+This section states what values a planned run and an execution attempt may hold, how they move between them, who may record each move, and what each move has to record. It deliberately defines none of the following, each of which the staged instructions assign elsewhere: queueing, delivery, assignment, dispatch, lease and assignment-authority mechanics, liveness policy, and the mechanics of the acceptance operation, which belong to Section 9; the contents, fields, and comparison rules of a concurrency profile, which belong to Section 10; the time domains and the measurement rules the transition provenance of this section names as applicable, which belong to Section 11; the model-request lifecycle, its record placement, and budget accounting, which belong to Section 12; evidence formats, inventory contents, replay verification, the finalization evidence contract, packaging, and sealing, which belong to Section 13; the failure-class taxonomy, the typed disposition vocabulary, replacement eligibility, sample-size treatment, and the containment of sibling units after a failure, which belong to Section 14; the rules that make a study complete and the treatment of undispositioned scheduled units, which belong to Section 15; secret custody and the security boundary, which belong to Section 16; and the conformance checks, fault injections, and pass conditions for every requirement stated here, which belong to Section 17 and to the conformance document.
 
 ## 9. Scheduling, leasing, and authoritative commit
 
-Scope note: This section will define future scheduling, lease, and authoritative-commit behavior at an implementation-neutral level.
+### 9.1 What this section establishes
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 4 and is not authorized in Chunk 1.
+This section states the scheduling, assignment, authority, liveness, and authoritative-commit properties that a conforming laboratory has to satisfy while many independent runs and many independent studies execute at the same time. It answers the questions that Sections 6 and 7 expressly assign here: whether a laboratory issues leases at all and how a claim on a unit of work is acquired, renewed, revoked, and arbitrated; whether more than one lease over one planned run may be valid at one point; and how an authoritative commit is reached and competing claimants decided. It selects no queue, broker, scheduler, lock, database, lease algorithm, commit primitive, laboratory-worker count, lease duration, retry count, or timing value, and the selections WP2-SCOPE-015 enumerates remain prohibited throughout this document.
+
+Section 9.2 separates the events a scheduling path produces. Sections 9.3 through 9.5 state the queueing, assignment, and dispatch-wave requirements. Sections 9.6 through 9.8 state the assignment-authority, liveness, and stale-authority requirements. Sections 9.9 through 9.11 state the authoritative-commit, race-resolution, and cleanup requirements. Section 9.12 records options deliberately left unselected, and Section 9.13 records what is assigned to later chunks.
+
+Every substantive statement here is a Required future invariant carrying exactly one `WP2-SCHED-###` identifier, a Design rationale introduced by a **Rationale.** lead-in, or an Unselected option introduced by an **Unselected option.** lead-in, in the Section 4.3 sense, or else an entry of the event table in Section 9.2 or the definitional statements that open Sections 9.6 and 9.9, each of which states how a term is used in this section and carries no obligation of its own beyond the requirements that cite it, or a boundary statement in Section 9.13. The lifecycle values this section refers to are the ones the models in Sections 8.5 and 8.6 establish, and every defined term carries the meaning Section 3.1 assigns it, as WP2-SCOPE-005 requires.
+
+### 9.2 The distinct scheduling and authority events
+
+Eight events are kept apart. Each is a separate recorded fact with its own provenance, and none of them implies another.
+
+| Event | What it is | What it is not |
+| --- | --- | --- |
+| Queue presence | A unit of work is present in, or eligible under, the laboratory's own scheduling path. | Not an assignment, not authority, and not a commitment that the unit will execute. |
+| Delivery | A message or record conveying an assignment reaches a laboratory worker or an intermediate component. | Not authority to execute, and not proof that the assignment it conveys was created once. |
+| Assignment | An execution attempt is associated with the one laboratory worker that owns it. | Not the grant of authority, and not the start of execution activity. |
+| Grant of assignment authority | An explicit, revocable record entitles the owning laboratory worker to act for the assigned execution attempt. | Not a delivery, not a liveness observation, and not an authoritative acceptance. |
+| Execution admission | The execution-attempt identity and its run evidence root come into existence, and the attempt names its one owning laboratory worker, already admitted into service, as Section 8.6 states. | Not release, not start, and not acceptance, under WP2-LIFE-010. |
+| Release | The scheduling authority records that an admitted attempt may begin execution activity. | Not the start of execution activity, and not a guarantee that any will occur. |
+| Execution start | The owning laboratory worker begins execution activity under the attempt. | Not a claim that the attempt will finalize, and not an authoritative outcome. |
+| Authoritative acceptance | The planned run's authoritative-outcome state records exactly one accepted execution attempt. | Not a property of an attempt's own finalization, under WP2-LIFE-006. |
+
+**WP2-SCHED-001.** A conforming laboratory **MUST** record each of queue presence, delivery, assignment, the grant of assignment authority, execution admission, release, execution start, and authoritative acceptance that occurs as a distinct event, separately identified and separately attributable to the entities of the Section 6 register that it concerns.
+
+**WP2-SCHED-002.** A conforming laboratory **MUST NOT** treat the presence of a unit of work in a queue, the delivery of a message or record, or the dequeuing of one as, by itself, authority to execute an execution attempt or to record any transition of the models in Sections 8.5 and 8.6.
+
+**Rationale.** Collapsing these events is the ordinary way a distributed execution path loses attribution: a system that treats a delivered message as authority cannot distinguish a redelivery from a second grant, cannot say which of two laboratory workers holding the same message was entitled to act, and cannot preserve the losing side's output as evidence. Section 5.5 records that the repository has no queue, dispatch, lease, or arbitration mechanism at all today, and that its whole concurrency control is one per-root lock plus a serial loop; that is evidence about the current system rather than a requirement, and WP2-SCOPE-010 keeps it from being read as one. The eight events are recorded where each in fact occurs: a laboratory whose scheduling path is a direct call produces no queue-presence or delivery event and records none, and WP2-SCHED-001 requires the events that occur to be recorded as distinct rather than requiring all eight to occur.
+
+### 9.3 Queue presence, delivery, and assignment
+
+**WP2-SCHED-003.** Every admitted execution attempt **MUST** name exactly one owning laboratory-worker identity, from its admission and for the whole of its lifecycle, including after it reaches a terminal value in any status dimension.
+
+**WP2-SCHED-004.** A conforming laboratory **MUST NOT** reassign an execution-attempt identity to a laboratory worker other than the one named as its owner at admission.
+
+**WP2-SCHED-005.** Repeated delivery of the same assignment for the same admitted execution attempt **MUST** be resolved idempotently, creating no further execution-attempt identity, no further run evidence root, and no second assignment-authority grant.
+
+**WP2-SCHED-006.** A delivery, an assignment, or a dispatch-wave membership record that conflicts with the recorded assignment or the recorded dispatch-wave membership of an admitted execution attempt **MUST** be refused, recorded as a distinguishable refusal naming the conflicting facts, and neither merged with, reconciled against, nor applied in part to that attempt's record.
+
+**Rationale.** WP2-SCHED-003 and WP2-SCHED-004 carry forward the exactly-one-owning-laboratory-worker cardinality that the Section 6.4 register entry states and WP2-ID-027 makes binding, and they state it in scheduling terms so that no assignment, cancellation, or recovery path can change it as a side effect. An execution attempt cancelled or failed before start keeps its owning laboratory-worker identity, because WP2-LIFE-011 keeps that identity represented and this section reassigns nothing; a further physical execution after such a cancellation is a separately admitted attempt under WP2-SCHED-007, with its own owning laboratory worker, rather than a transfer of the cancelled attempt. WP2-SCHED-005 concerns the same assignment arriving more than once, which is a transport fact in the Section 3.1 sense of a transport or delivery retry; WP2-SCHED-006 concerns two assignments that cannot both be true, which is a conflict rather than a repeat. WP2-ISO-030 already requires a refusal where an operation cannot demonstrate its own owning lineage, and WP2-ISO-032 prohibits a refusal from destroying evidence.
+
+### 9.4 Further physical executions and simultaneous attempts
+
+**WP2-SCHED-007.** An additional physical execution of one planned run **MUST** be admitted as a new execution attempt carrying its own execution-attempt identity, its own run evidence root, its own owning laboratory-worker identity, and its own assignment-authority grant.
+
+**WP2-SCHED-008.** A conforming laboratory **MUST NOT** record or report an additional physical execution of one planned run as a transport or delivery retry, a process restart, a resume, or the continuation of an earlier execution attempt.
+
+**WP2-SCHED-009.** Whether a planned run may have more than one execution attempt in a nonterminal operational value at one point **MUST** be fixed by the registered, versioned scheduling policy that the planned run's records identify.
+
+**WP2-SCHED-010.** A conforming laboratory **MUST NOT** allow the number of simultaneous nonterminal execution attempts of one planned run to be determined by an unrecorded property of its infrastructure, its delivery path, or its recovery behavior.
+
+**Rationale.** These four requirements keep the difference between repeating a delivery and executing again from being decided by accident. Charter Section 14.2 prohibits an execution-architecture or concurrency-profile change within one registered study unless its preregistered design explicitly treats the change as a condition, and charter Section 10.3 treats a deliberately varied profile as a registered experimental parameter rather than hidden infrastructure; a laboratory in which a redelivery quietly produced a second running execution would be varying its own execution architecture without registering the variation. WP2-SCOPE-006 already prohibits recording a planned run, an execution attempt, a process restart, a resume, a transport or delivery retry, and a registered replacement as interchangeable events. What the registered scheduling policy decides, and what it may permit, is a study-design question that Section 14 and Section 15 rather than this section complete; WP2-SCHED-009 requires only that the decision be registered, versioned, and identified.
+
+### 9.5 Dispatch waves
+
+**WP2-SCHED-011.** Every dispatch-wave record **MUST** name every execution attempt admitted to that wave, including an attempt cancelled before release and an attempt that never begins execution activity.
+
+**WP2-SCHED-012.** An execution attempt admitted to a dispatch wave **MUST** name that dispatch-wave identity in its own record, recorded at the time the membership is established rather than derived afterwards from ordering, identifier shape, storage location, or timing.
+
+**Rationale.** WP2-SCHED-012 decides, explicitly and in the affirmative, the reverse-reference question left open to this chunk: an attempt records the wave it belongs to, and that reference is recorded rather than read back off the wave record. The Section 6.4 execution-attempt entry already lists the dispatch-wave identity among the references an attempt's identity record has to name where the attempt was in fact admitted or carried out under one, and WP2-ID-002 already makes that testable record by record; what WP2-SCHED-012 adds is that the scheduling path records the reference when it forms the membership, so that the two records can be compared afterwards instead of one being reconstructed from the other. A disagreement between them is a conflict in the WP2-SCHED-006 sense, refused and recorded rather than resolved by inference. Neither requirement changes the Section 6.5 rule that one execution attempt belongs to at most one dispatch wave, or the Section 6.5 identity scope that reaches every wave the laboratory forms whether or not any admitted member is ultimately released. Grouping dispatch into waves remains optional: an attempt admitted to no wave names none, and WP2-SCHED-011 binds only the waves a laboratory in fact forms.
+
+### 9.6 Assignment authority
+
+An assignment-authority grant is the explicit, revocable record by which a laboratory entitles one laboratory worker to act for one admitted execution attempt of one planned run. Its subject is the planned run over which the claim is made, which is how the Section 6.5 lease entry and its rationale identify the subject of a claim, and its relation to the admitted execution attempt it entitles is recorded in addition under WP2-SCHED-017. A time-bounded lease in the Section 3.1 sense is one permitted realization of the grant, and where a laboratory realizes the grant as a lease, the Section 6.5 lease register entry binds that record in addition, through WP2-ID-027.
+
+**WP2-SCHED-013.** Every execution-attempt admission **MUST** be backed, at admission, by exactly one recorded assignment-authority grant entitling that attempt's owning laboratory worker to act for it.
+
+**WP2-SCHED-014.** A conforming laboratory **MUST NOT** hold more than one assignment-authority grant current for one execution attempt at one logical authority point.
+
+**WP2-SCHED-015.** More than one assignment-authority grant over one planned run **MUST** be current at one logical authority point only where the registered scheduling policy identified under WP2-SCHED-009 permits more than one nonterminal execution attempt of that planned run at that point, and only where each such grant relates to a distinct admitted execution attempt of it.
+
+**WP2-SCHED-016.** Every grant, renewal, revocation, release, and supersession of assignment authority **MUST** be recorded as an individually attributable event carrying an identity that is never reused for another such event.
+
+**WP2-SCHED-017.** Every assignment-authority grant record **MUST** identify its subject, its holding laboratory worker, the authority that issued it, the facts that establish its validity and any supersession of it, the identity and version of the policy under which it was issued, and its relation to the admitted execution attempt it entitles.
+
+**Rationale.** WP2-SCHED-013 through WP2-SCHED-017 answer the questions the Section 6.5 lease entry and the Section 7.13 rationale assign here. Whether a laboratory issues leases at all is not fixed: what is required is an explicit, revocable, recorded authority grant, which a time-bounded lease, a fencing record, an ownership record, or another mechanism may realize, and Section 9.12 records that choice as unselected. Acquisition is the recorded issuance WP2-SCHED-013 requires; renewal, revocation, release, and supersession are the individually recorded events WP2-SCHED-016 requires; expiry is one of the validity facts WP2-SCHED-017 requires a grant to carry; and arbitration between competing claimants is decided by WP2-SCHED-014 and WP2-SCHED-015 together with the registered, versioned policy WP2-SCHED-017 requires every grant to identify, never by wall-clock arrival; WP2-SCHED-031 separately governs a race between cancellation and acceptance, and the registered, versioned authoritative-commit policy the Section 8.5 Authoritatively accepted entry names decides acceptance itself. WP2-SCHED-015 answers the cardinality question the Section 6.5 lease entry defers: more than one grant over one planned run may be current at once exactly where the registered scheduling policy permits more than one nonterminal attempt of it and each grant belongs to a different admitted attempt, and never otherwise. A *logical authority point* is a point at which the laboratory decides authority under its own recorded rules rather than an instant read from a wall clock; WP2-ISO-014 already prohibits wall-clock order from serving as an implicit ordering guarantee between isolation units, and WP2-SCHED-033 prohibits it as a commit rule. This specification selects no lease duration, renewal interval, or expiry rule, and WP2-SCOPE-015 prohibits selecting any of them.
+
+### 9.7 Liveness evidence
+
+**WP2-SCHED-018.** A conforming laboratory **MUST NOT** treat a heartbeat, a health report, or any other liveness evidence about a laboratory worker or an assignment-authority grant as, by itself, authority to execute an execution attempt or to record a transition.
+
+**WP2-SCHED-019.** A conforming laboratory **MUST NOT** treat the absence of liveness evidence as establishing that a laboratory worker has died, that an execution attempt has failed, or that reassignment of work is safe, except as the registered, versioned liveness policy it identifies provides.
+
+**WP2-SCHED-020.** Every determination a conforming laboratory makes under its registered liveness policy **MUST** be recorded with the identity and version of the policy applied, the evidence and the absence of evidence on which the determination rested, the determining authority, and each entity whose recorded status the determination changed.
+
+**Rationale.** Liveness evidence answers a different question from authority: a heartbeat says that something is running, and a grant says who is entitled to act. A laboratory that conflates them reassigns work whenever a network path is slow, and it cannot afterwards say whether the reassignment was justified. Section 5.5 records that the repository's nearest current mechanisms are a per-attempt stall watchdog inside one process and a host-level sleep inhibition, neither of which arbitrates between competing claimants; that is an observation about the current system, not a requirement. What follows from a liveness determination — whether the affected execution attempt receives a terminal disposition, and whether a further attempt may be admitted — is governed by WP2-LIFE-021, WP2-SCHED-007, and the registered policies those requirements name, and the disposition vocabulary is assigned to Section 14. No heartbeat interval, timeout, or grace value is selected here, and WP2-SCOPE-015 prohibits selecting one.
+
+### 9.8 Stale authority, crash, and preserved output
+
+**WP2-SCHED-021.** A laboratory worker whose assignment-authority grant has expired, been revoked, or been superseded **MUST NOT** mutate the authoritative-outcome state of any planned run, mutate the recorded status of any execution attempt in any status dimension, or cause its own output to become the authoritative outcome of a planned run.
+
+**WP2-SCHED-022.** Output produced under an expired, revoked, or superseded assignment-authority grant **MUST** remain attributable to the laboratory worker, the grant, and the execution attempt that produced it, and preserved for later disposition.
+
+**WP2-SCHED-023.** The crash, loss, or unexplained silence of a laboratory worker or of an orchestrator in the Section 8.3 sense **MUST NOT** by itself transfer an existing execution attempt, its run evidence root, or its assignment authority to another laboratory worker.
+
+**WP2-SCHED-024.** Any further physical execution of a planned run after a crash, loss, or unexplained silence of the kind WP2-SCHED-023 names **MUST** be admitted as a separate execution attempt under WP2-SCHED-007 rather than as a continuation of the interrupted attempt.
+
+**Rationale.** WP2-SCHED-021 states one prohibition on one subject with three named consequences that a stale holder cannot bring about; it is the scheduling counterpart of WP2-ISO-020, which states the same prohibition for a lease specifically, and it reaches an authority grant realized by any mechanism. WP2-SCHED-022 likewise generalizes WP2-ISO-021, and strengthens its preservable to preserved for output produced under a grant. Together they separate authority from evidence: losing a claim removes the power to make an outcome authoritative and licenses nothing about the artifacts already produced, which charter Section 14.4 requires to remain recorded evidence with typed dispositions and charter Section 14.9 requires not to be concealed. WP2-SCHED-023 and WP2-SCHED-024 keep a crash from becoming a silent transfer, which is the failure mode that lets two laboratory workers believe they own one unit of work; WP2-LIFE-020 separately prohibits reviving an interrupted attempt in place, and WP2-LIFE-021 requires the interrupted attempt to receive a recorded terminal disposition.
+
+### 9.9 Authoritative commit
+
+An authoritative commit is a transition of the planned run's authoritative-outcome state, not of any execution attempt's finalization state. It is reached at most once for a planned run, it may never be reached at all, and it is the only operation that records an authoritative accepted outcome.
+
+**WP2-SCHED-025.** A conforming laboratory **MUST NOT** consider an execution attempt for authoritative acceptance unless that attempt's recorded finalization state is Finalization succeeded and its recorded identity and lineage match the planned run whose authoritative-outcome state the acceptance operation would change.
+
+**WP2-SCHED-026.** An acceptance operation **MUST** verify, before it records an authoritative outcome, the identity of the planned run, the lineage of the execution attempt it would accept, the currency of the authority under which the operation is performed, the registered condition and treatment under which that attempt was executed, the cancellation state of the study, planned run, and attempt, and the absence of a prior authoritative outcome for that planned run.
+
+**WP2-SCHED-027.** The authoritative-outcome record of a planned run **MUST** name either no accepted execution attempt or exactly one.
+
+**WP2-SCHED-028.** Two acceptance operations for one planned run **MUST NOT** both record an authoritative outcome.
+
+**WP2-SCHED-029.** An execution attempt that loses an acceptance decision, or whose result arrives late, duplicated, stale, cancelled, or superseded, **MUST** be preserved with a recorded, distinguishable non-authoritative result rather than deleted, rewritten, merged into another attempt's record, or left undispositioned.
+
+**WP2-SCHED-030.** The authority boundary at which an authoritative outcome is recorded **MUST** be atomic, or safe against concurrent acceptance operations to an equivalent degree, so that no interleaving of acceptance operations can produce two authoritative outcomes for one planned run or a partially recorded one.
+
+**Rationale.** These six requirements answer the question the Section 6.10 rationale and the Section 7.12 rationale assign here: how an authoritative commit is reached. It is reached by an operation that verifies a stated set of facts and then transitions one planned run's authoritative-outcome state, under an authority whose currency is part of what it verifies. WP2-ID-009 already prohibits a planned run from acquiring more than one authoritative accepted outcome and WP2-ISO-019 already places the record of the outcome on the planned run by identifying the one accepted attempt, and WP2-LIFE-007 requires that named attempt's recorded finalization state to be Finalization succeeded; WP2-SCHED-027 and WP2-SCHED-028 state the corresponding scheduling obligations, on the record's form and on the operation's outcome, so that a conformance check can exercise two concurrent acceptances and observe that exactly one succeeded. WP2-SCHED-030 states the property the boundary has to have and selects no primitive, no transaction model, no store, and no algorithm to provide it; Section 9.12 records those as unselected, and WP2-SCOPE-015 prohibits selecting them. Section 5.7 records that the repository's current finalizer orders its writes against interruption rather than against a competing writer, and Section 5.4 records that its exclusion rests on a cooperative per-root lock evaluated inside one host's process namespace; both are observations about the current system, and neither is a requirement of this specification.
+
+### 9.10 Cancellation and acceptance races
+
+**WP2-SCHED-031.** A race between a cancellation and an authoritative acceptance affecting one planned run **MUST** be resolved by one registered, versioned authority policy that the planned run's records identify.
+
+**WP2-SCHED-032.** The resolution of a race that WP2-SCHED-031 governs **MUST** be recorded, identifying the winning transition, each competing operation that was rejected, the reason each was rejected, and the identity and version of the authority policy applied.
+
+**WP2-SCHED-033.** A conforming laboratory **MUST NOT** decide which of two competing operations affecting one planned run prevails by the wall-clock order in which they arrived, were observed, or were recorded.
+
+**Rationale.** A cancellation and an acceptance can each be legitimate and can each arrive while the other is in flight, so the contract fixes that one registered policy decides between them and that both the decision and the rejected operation are recorded. What it does not fix is which way the policy decides: whether a late cancellation defeats an already-verified acceptance, or the reverse, is a study-design question that a registered policy answers, and charter Section 14.3 requires the registration governing an evidence-generating study to precede execution and lists the execution and concurrency profile among what a registration identifies. WP2-SCHED-033 removes the tempting implicit rule; WP2-ISO-014 already prohibits wall-clock order as an implicit causal relation, ordering guarantee, or identity join between isolation units, and WP2-TIME-016 prohibits cross-host wall-clock ordering as an authoritative tie-break.
+
+### 9.11 Cleanup after scheduling, cancellation, failure, or commit
+
+**WP2-SCHED-034.** Cleanup performed after scheduling, cancellation, failure, or an authoritative commit **MUST NOT** delete, truncate, overwrite, or render unverifiable the recorded transition history, the assignment and authority records, or the produced evidence of any execution attempt.
+
+**Rationale.** Cleanup is where a scheduling path most easily destroys the record it was supposed to leave behind, because the work is finished and the artifacts look disposable. WP2-ISO-024 already prohibits a cancellation or cleanup operation from destroying a sibling's or an earlier attempt's evidence, and WP2-LIFE-012 prohibits erasing a terminal entity's history; WP2-SCHED-034 states the same prohibition for the scheduling and authority records specifically, because those are the records that establish who was entitled to act. Retention rules, evidence-size budgets, and what may be discarded after a defined retention period are assigned to Section 13.
+
+### 9.12 Options deliberately left unselected
+
+**Unselected option.** Queue and delivery mechanism. The queue presence and delivery events of Section 9.2 may be realized by a message broker, a polled table, a work-stealing pool, a filesystem or object-store convention, a direct call, or another mechanism. WP2-SCHED-001 through WP2-SCHED-006 state the properties any of them has to satisfy; no broker, queue, database, or transport is selected.
+
+**Unselected option.** Assignment-authority mechanism. The grant WP2-SCHED-013 requires may be realized by a time-bounded lease, a fencing token, an ownership record, a conditional write, or another explicit, revocable record. This section requires the properties, not the mechanism, and it selects no lease duration, renewal interval, expiry rule, or clock.
+
+**Unselected option.** Liveness mechanism. The liveness policy WP2-SCHED-019 and WP2-SCHED-020 refer to may rest on heartbeats, lease renewal, external health checks, an authority-issued probe, or another arrangement, at any granularity. No interval, threshold, or detector is selected.
+
+**Unselected option.** Dispatch and release policy. Whether a laboratory releases attempts individually or in dispatch waves, how it sizes or paces a wave, and how it orders releases are unselected. WP2-SCHED-011 and WP2-SCHED-012 bind only the waves a laboratory in fact forms, and WP2-SCOPE-015 prohibits selecting a numeric operating parameter such as a wave size or a laboratory-worker count.
+
+**Unselected option.** Simultaneity of attempts of one planned run. Whether a registered scheduling policy permits one nonterminal execution attempt of a planned run at a time or more than one is a decision this specification leaves to the registered design, under WP2-SCHED-009 and WP2-SCHED-015. Neither arrangement is preferred here.
+
+**Unselected option.** Authoritative-commit primitive. The atomic or equivalently safe authority boundary WP2-SCHED-030 requires may be realized by a database transaction, a conditional or compare-and-set write, a single-writer arrangement, a consensus protocol, an authority-issued token, or another mechanism. No primitive, store, or algorithm is selected.
+
+**Unselected option.** Race-resolution direction. Which of a cancellation and an authoritative acceptance prevails when the two race is fixed by the registered authority policy WP2-SCHED-031 requires, not by this specification. Neither direction is described as preferred or expected.
+
+### 9.13 Boundaries assigned to later chunks
+
+This section states which scheduling and authority events exist, what each of them entitles, what each of them records, and how competing claims are decided. It deliberately defines none of the following: the lifecycle values and transitions those events cause, which belong to Section 8; the contents, fields, and comparison rules of the concurrency profile whose policy identities this section requires to be identified, which belong to Section 10; the time domains in which queueing, dispatch, transport, runtime, and finalization intervals are measured, which belong to Section 11; provider retry semantics, model-request record placement, and budget accounting, which belong to Section 12; evidence formats, inventory contents, replay verification, packaging, sealing, and retention, which belong to Section 13; the failure-class taxonomy and the typed disposition vocabulary behind the refusals and non-authoritative results this section requires, including the disposition of superseded output, which belong to Section 14; the rules that make a study complete and the treatment of undispositioned scheduled units, which belong to Section 15; secret custody and the security boundary, which belong to Section 16; and the conformance checks, fault injections, and pass conditions for every requirement stated here, which belong to Section 17 and to the conformance document.
 
 ## 10. Concurrency-profile provenance
 
-Scope note: This section will define how future concurrency-profile provenance is represented and preserved.
+### 10.1 What this section establishes
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 4 and is not authorized in Chunk 1.
+This section realizes the concurrency profile Section 3.1 defines — the versioned record of the execution architecture and contention conditions under which evidence was produced — as two connected records: the registered concurrency profile a study adopts before execution, and the observed concurrency provenance recorded against it. This section always writes those qualified forms for the two parts, and neither displaces the Section 3.1 meaning, which the two parts together carry. A concurrency profile is not an assertion that concurrency made no difference: charter Section 8.5 states that throughput does not establish scientific validity and that parallel execution is not presumed behaviorally neutral, and charter Section 10.3 requires every future study to version and record a concurrency profile precisely because concurrency can change observed behavior. This section completes what the Section 6.8 register entry defers — the contents, fields, further cardinalities, and comparison rules of the profile, and how a profile references dispatch waves, laboratory workers, execution attempts, and contention conditions — and what the Section 6.5 laboratory-worker entry defers about recording execution-agent composition as versioned provenance. It selects no provider, vendor, stack, deployment topology, or numeric operating parameter; the selections WP2-SCOPE-015 enumerates remain prohibited throughout this document.
+
+Section 10.2 states the two records, their cardinalities, and how the tables of this section bind. Sections 10.3 and 10.4 state the requirements on each record. Section 10.5 holds the required category model. Sections 10.6 through 10.10 state divergence, distinctness, sufficiency, nonsecret-identity, and comparison requirements. Section 10.11 states what a profile may never be cited as establishing. Section 10.12 records options deliberately left unselected, and Section 10.13 records what is assigned to later chunks.
+
+Every substantive statement here is a Required future invariant carrying exactly one `WP2-SCHED-###` identifier, continuing the sequence Section 9 begins, a Design rationale, or an Unselected option, in the Section 4.3 sense, or else an entry of the record and cardinality tables in Section 10.2 or of the category table in Section 10.5, whose normative force flows through WP2-SCHED-035 rather than through an identifier of its own, or a boundary statement in Section 10.13.
+
+### 10.2 The two records, their cardinalities, and how the tables bind
+
+| Record | What it is | When it is established | What it is not |
+| --- | --- | --- | --- |
+| Registered concurrency profile | The versioned description a study adopts before execution of the execution architecture it intends and the contention conditions it expects, identified by a concurrency-profile identity and version as the Section 6.8 register entry states. | At registration, which charter Section 14.3 requires to precede execution and among whose identified items charter Section 14.3 lists the execution and concurrency profile. | Not a record of what happened, not a claim of behavioral neutrality, and not a substitute for the registered treatment or condition identity. |
+| Observed concurrency provenance | The record of the execution architecture and contention conditions that in fact obtained while a unit executed, attributed to the units whose execution it describes. | During and after execution, from the facts the laboratory in fact observed. | Not a registration, not an amendment to one, and not evidence of parity between execution architectures. |
+
+The cardinalities the Section 6.8 register entry assigns here are as follows.
+
+| Relationship | Cardinality |
+| --- | --- |
+| Study to registered concurrency profile | One study registers one or more registered concurrency profiles, at least one as the Section 6.8 entry states. A study registers more than one only where its preregistered design declares the difference as a registered condition or treatment difference, as WP2-SCHED-037 requires and as charter Section 14.2 requires for a change within one registered study. |
+| Planned run to registered concurrency profile | One planned run identifies exactly one applicable registered concurrency-profile identity and version. |
+| Execution attempt to registered concurrency profile | One execution attempt identifies exactly one applicable registered concurrency-profile identity and version, which is the one its planned run identifies. |
+| Execution attempt to observed concurrency provenance | One execution attempt carries exactly one observed concurrency-provenance record, which names the registered concurrency-profile identity and version it is provenance against. |
+| Registered concurrency profile to units | One registered concurrency profile applies to zero or more planned runs and zero or more execution attempts of the study whose registration adopts it, as the Section 6.8 entry's required reference states; a further study adopting the same architectural description registers its own concurrency-profile identity. |
+| Concurrency records to scheduling entities | A registered concurrency profile names the policy identities and versions of Section 10.5 by identity; an observed concurrency-provenance record names by identity every dispatch wave, laboratory worker, assignment-authority grant, execution attempt, shared resource, and contention observation of Section 10.5 that applies to the execution it describes, zero or more of each. |
+
+**WP2-SCHED-035.** Every study, every registered concurrency profile, and every observed concurrency-provenance record that a conforming laboratory creates, references, or relies upon **MUST** conform to every clause of the record and cardinality tables in Section 10.2 — what each record is, when it is established, what it is not, and every cardinality they state — and carry, for every category the table in Section 10.5 states, the registered or observed content and the identities that table assigns to it, or an explicit recorded statement that the category did not apply to the study or was not observable.
+
+**Rationale.** The tables supply the normative content model, and WP2-SCHED-035 is the single requirement that incorporates them and makes each record description, cardinality, and category binding, so that no individual table cell carries a requirement identifier of its own and no later implementation can omit a category silently. A category that genuinely does not apply is recorded as not applying rather than left absent, because an absent field and an inapplicable one are different facts and only the second is checkable. The Section 6.8 register entry already states that one study registers at least one concurrency profile and that the identity is versioned as charter Section 10.3 requires; the further cardinalities above are the ones that entry assigns here, and WP2-ID-027 continues to bind the entry's own non-deferred clauses.
+
+### 10.3 The registered concurrency profile
+
+**WP2-SCHED-036.** Every planned run and every execution attempt **MUST** identify the registered concurrency-profile identity and version applicable to it.
+
+**WP2-SCHED-037.** A deliberately varied concurrency profile **MUST** be represented as a registered condition or treatment difference of the study's preregistered design, identified as such in the registration.
+
+**WP2-SCHED-038.** A conforming laboratory **MUST NOT** alter, replace, amend, or reinterpret a registered concurrency profile on the basis of what execution was observed to do.
+
+**Rationale.** Charter Section 10.3 states that when profiles differ between conditions or are varied deliberately, the profile is a registered experimental parameter rather than hidden infrastructure, and charter Section 14.2 prohibits an execution-architecture or concurrency-profile change within one registered study unless its preregistered design explicitly treats the change as a condition. WP2-SCHED-037 states that obligation inside this contract so that a conformance check can be written against it, and WP2-ID-015 separately keeps a change of laboratory worker, lease, dispatch wave, or execution host from altering a planned run's identity or registered treatment by itself. WP2-SCHED-038 protects the direction of the relationship: a registration is a statement made before execution, and a laboratory that edited it to match what happened would destroy the only record against which a deviation could be detected. Charter Section 14.5 separately prohibits a registered study from silently changing its execution architecture midstream.
+
+### 10.4 Observed concurrency provenance
+
+**WP2-SCHED-039.** Every execution attempt **MUST** carry an observed concurrency-provenance record attributed to it, naming the registered concurrency-profile identity and version it is provenance against.
+
+**WP2-SCHED-040.** Every numeric fact that Section 10.5 requires to be observed — an observed laboratory-worker count, an observed queue duration, an observed rate-limit response count, and the rest — **MUST** be recorded as an observed value carrying the identity of the record or authority that observed it and, where the fact is a duration or other timing fact, the time domain in which it was measured, identified under WP2-TIME-001.
+
+**WP2-SCHED-041.** This specification **MUST NOT** be cited as selecting, endorsing, recommending, or bounding a value, threshold, limit, target, or scaling rule for any numeric fact it requires to be recorded.
+
+**Rationale.** An observed concurrency-provenance record is provenance recorded against the execution attempt it describes and the registered concurrency-profile identity and version it names; it introduces no entity beyond the ones Sections 6.3 through 6.8 register, and the identity requirements that reach it are the ones the register carries for the entities it names. The distinction WP2-SCHED-040 and WP2-SCHED-041 draw is the one the staged instructions and charter Section 10.3 both rest on: recording how many laboratory workers ran, how long a unit waited, and how often a rate limit was met is provenance, and choosing how many laboratory workers may run, how long a unit may wait, or what rate a study may consume would be an operating decision this specification is prohibited from making. WP2-SCOPE-015 already prohibits selecting a numeric operating parameter such as a laboratory-worker count, lease duration, retry count, quota, budget, or threshold; WP2-SCHED-041 makes the prohibition auditable against a later reading of this section, so that a recorded example or an observed value in a study's evidence is never mistaken for a parameter this document chose. WP2-SCHED-040 requires the observing record and, for a duration or other timing fact, the time domain, because an unattributed number cannot be compared across studies, and Section 11 states which domain each duration belongs to.
+
+### 10.5 Required profile and provenance categories
+
+Fourteen categories are required. For each, the registered concurrency profile states what the study intends and the observed concurrency provenance states what in fact obtained, and WP2-SCHED-035 makes both binding.
+
+| Category | Registered concurrency-profile content | Observed concurrency-provenance content | Identities the records name |
+| --- | --- | --- | --- |
+| Execution-architecture identity and version | The identity and version of the intended execution architecture, described as architectural facts rather than as a vendor, product, or stack. | The identity and version of the execution architecture that in fact carried the execution, and any respect in which it differed from the registered one. | Execution-architecture identity and version; the study, planned run, and execution attempt it applies to. |
+| Laboratory-worker population and identities | The intended laboratory-worker population and the intended composition of a laboratory worker, recorded as versioned provenance. | The laboratory workers that in fact carried out execution attempts, the observed population at the recorded points, and the recorded composition of each such laboratory worker and the version of that composition. | Laboratory-worker identities; the execution attempts each carried out. |
+| Dispatch-wave identity and start or release policy | The identity and version of the intended start or release policy, including whether dispatch is grouped into waves. | The dispatch waves in fact formed, their admitted members, and the release decisions in fact recorded. | Dispatch-wave identities; the admitted execution attempts each names under WP2-SCHED-011. |
+| Queue, assignment, lease, heartbeat, and liveness policy identity and version | The identities and versions of the intended queueing, assignment, assignment-authority, heartbeat, and liveness policies. | The policies in fact applied, each identified and versioned, together with the liveness determinations recorded under WP2-SCHED-020. | Policy identities and versions; the assignment-authority grants and liveness determinations recorded under them. |
+| Duplicate-delivery and restart policy identity and version | The identities and versions of the intended duplicate-delivery, restart, and recovery policies. | The duplicate deliveries resolved under WP2-SCHED-005, the restarts and recoveries in fact performed, and the policy identity and version applied to each. | Policy identities and versions; the execution attempts and laboratory workers affected. |
+| Authoritative-commit policy identity and version | The identity and version of the intended authoritative-commit and race-resolution policy. | The policy in fact applied to each acceptance operation, and each race resolution recorded under WP2-SCHED-032. | Policy identities and versions; the planned runs and execution attempts whose acceptance it decided. |
+| Host or runner class and execution-environment identity | The intended host or runner class and execution-environment identity, where either is relevant to the registered design, stated as class and version rather than as a vendor or instance. | The host or runner class and execution-environment identity that in fact carried each execution attempt, and the clock source and host association Section 11 requires where cross-host comparison matters. | Host or runner class identities; execution-environment identities and versions; the laboratory workers and execution attempts they carried. |
+| Process, browser or headless, gateway, and inference-path topology | The intended topology of processes, browser or headless surfaces, gateways, and inference paths, stated as non-vendor architectural facts, where relevant to the registered design. | The topology in fact used for each execution attempt, and any respect in which it differed from the registered one. | Topology element identities; the execution attempts and model requests they served. |
+| Provider, provider-project or nonsecret account scope, model, serving-provider, and route identity | The registered provider, the nonsecret identity of the provider-project or account scope, the model identity, the serving-provider identity, and the route identity, as far as the registered design fixes them. | The provider, nonsecret provider-project or account scope, model, serving provider, and route in fact used, recorded per model request or per the grouping the model-accounting contract defines. | Provider, project-scope alias or registered identity, model, serving-provider, and route identities; the model requests, execution attempts, and studies they served. |
+| Local queue conditions and dispatch pressure | The intended local queueing arrangement and the conditions under which dispatch pressure is expected. | The observed local queue conditions and dispatch pressure, including observed local queue durations recorded in the local-queue-time domain of Section 11. | The waiting units; the dispatch waves and laboratory workers involved; the time-domain records. |
+| Upstream latency, rate-limit, outage, and correlated-failure windows | The upstream conditions the registered design anticipates and any registered treatment of them. | The observed upstream latency, the rate-limit responses, outages, and correlated-failure windows in fact encountered, each attributed to the units affected and the window in which it occurred. | The affected model requests, execution attempts, studies, and route identities; the time-domain records. |
+| Timeout, fallback, rejection, supersession, and cancellation behavior | The registered timeout, fallback, rejection, supersession, and cancellation behavior of the intended architecture, identified and versioned. | The timeouts, fallbacks, rejections, supersessions, and cancellations that in fact occurred, each identifying the time domain of the timeout under WP2-TIME-005 and the authority that recorded it. | The affected model requests, execution attempts, and planned runs; the policy identities applied. |
+| Shared-resource identities, dependency policy, capacity constraints, and contention observations | The shared resources the registered design expects the study to use, the dependency policy governing them, and the capacity constraints the design assumes. | The shared resources in fact used, the contention in fact observed, and the units whose execution the contention affected. | Shared-resource identities; the isolation units and laboratory workers that used them; the contention observations and their time-domain records. |
+| Registered policy controlling simultaneous attempts of one planned run | The identity and version of the registered scheduling policy WP2-SCHED-009 requires, and what it permits. | The simultaneous nonterminal execution attempts of one planned run that in fact existed, and the policy identity and version under which each was admitted. | The planned runs and execution attempts concerned; the scheduling-policy identity and version. |
+
+**Rationale.** This table answers the Section 6.8 questions about what a profile contains and how it references dispatch waves, laboratory workers, execution attempts, and contention conditions, and the Section 6.5 laboratory-worker question about whether execution-agent composition is recorded as versioned provenance: it is, in the laboratory-worker category, as provenance recorded about the agent rather than as a version of the laboratory-worker identity, which the Section 6.5 entry states is not separately versioned. The shared-resource and contention category answers what the Section 7.2 rationale assigns here, namely the provenance of shared infrastructure and of contention: WP2-ISO-001 prohibits sharing from merging identities, treatments, state, evidence, or budget attribution, and this category is where the sharing and its observed effects are recorded so that a later analysis can see them. The categories are stated as architectural and policy facts rather than as vendor or product names, which is what lets a profile be reproduced or compared conceptually without this specification selecting a stack. Charter Section 10.3's own conceptual list — "execution architecture", "worker count", "start-wave or dispatch policy", "logical commit policy", "provider, project, and model identity", "local queue delay", "upstream latency", "rate-limit and failure windows", "fallback behavior", and "shared-world dependency policy, where applicable" — is covered by these fourteen categories, the charter's "worker count" being the laboratory-worker population this table's second category carries, and the shared-world dependency policy remaining out of scope for Work Package 2 under WP2-SCOPE-004.
+
+### 10.6 Divergence between registered and observed execution
+
+**WP2-SCHED-042.** A material divergence between a registered concurrency profile and the observed concurrency provenance of a unit executed under it **MUST** be recorded as a distinguishable deviation or violation, attributed to the units affected and retained for later disposition.
+
+**WP2-SCHED-043.** A recorded divergence **MUST NOT** by itself change the registered condition, the registered treatment, the registered concurrency profile, or any other part of the registered design of the study in which it occurred.
+
+**Rationale.** Together these keep a deviation visible and inert: it is written down, attributed, and left for a disposition that Section 14 defines, and it does not quietly become the study's new design. Charter Section 14.2 requires an execution-architecture or concurrency-profile change within one registered study to have been declared as a condition of the preregistered design, and charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed; a laboratory that reconciled a divergence by adjusting the registration would silently alter a registered record, which charter Section 14.2 prohibits. What counts as material, and what disposition a deviation or violation receives, are assigned to Section 14; what a deviation does to a study's completeness and to its reported result is assigned to Section 15.
+
+### 10.7 Distinctness and explicit joining
+
+**WP2-SCHED-044.** The registered concurrency-profile identity, the observed concurrency-provenance record, and the registered treatment identity **MUST** be recorded as three distinct identities or records, none of them standing in for another.
+
+**WP2-SCHED-045.** The join among a registered concurrency profile, the observed concurrency provenance recorded against it, and the registered treatment of the unit that executed **MUST** be recorded explicitly at the time it is established, rather than reconstructed from naming, ordering, storage location, or timing.
+
+**Rationale.** These three answer three different questions — what the study registered about its execution architecture, what execution in fact did, and what the study was testing — and a laboratory that merged any two of them would lose the ability to say whether an observed difference was registered, incidental, or a treatment effect. WP2-ID-023 already requires the lineage relationships of Section 6 to be recorded explicitly and read from the record; WP2-SCHED-045 states the same discipline for this join, which spans a registration, an execution record, and a design identity.
+
+### 10.8 Sufficiency without vendor or stack selection
+
+**WP2-SCHED-046.** A registered concurrency profile together with the observed concurrency provenance recorded against it **MUST** be sufficient to reconstruct and compare the execution architecture and contention conditions of an execution at the conceptual level of the categories in Section 10.5, without depending on a vendor, product, or stack identity beyond the provider, model, serving-provider, and route identities the ninth category of Section 10.5 itself requires.
+
+**Rationale.** This states the sufficiency property the profile has to have while keeping the prohibition on stack selection intact. Sufficiency here is conceptual: the record has to let a later reader say what kind of architecture ran, under which policies, with what population, and against what contention, not to let that reader rebuild a deployment. A laboratory that in fact runs on a named product is not prohibited from recording that fact if its own registered design calls for it; what WP2-SCHED-046 requires is that the categories be reconstructible without any vendor dependence beyond the identities the ninth category itself records, so that a comparison across studies does not rest on a shared vendor.
+
+### 10.9 Nonsecret identity where a secret would otherwise be exposed
+
+**WP2-SCHED-047.** Where a provider-project identifier, an account identifier, or any other identifier required by Section 10.5 would expose secret material, the record **MUST** carry instead a nonsecret alias, digest, or registered identity that remains stable across the records that have to be joined by it.
+
+**Rationale.** The category model needs the provider-project or account scope in order to attribute contention, rate limiting, and correlated failure correctly, and that scope is sometimes carried by a value that is itself sensitive. A stable nonsecret alias, digest, or registered identity preserves the join without carrying the secret. This requirement designs no secret boundary and selects no custody, injection, rotation, or redaction mechanism: WP2-ISO-025 already prohibits secret material made available to one isolation unit from becoming available to another as a consequence of shared infrastructure, and the security and secret boundary in general is assigned to Section 16.
+
+### 10.10 Comparison of profiles
+
+**WP2-SCHED-048.** Where a conforming laboratory compares two registered concurrency profiles, or a registered profile and an observed provenance record, the comparison **MUST** be made category by category over the content Section 10.5 requires, under a comparison rule that the comparison record identifies by identity and version.
+
+**WP2-SCHED-049.** A conforming laboratory **MUST NOT** treat two executions as having occurred under the same execution architecture and contention conditions on the basis of profile identity, profile name, or policy name alone.
+
+**Rationale.** These two answer the comparison-rule question the Section 6.8 register entry assigns here. Comparison is stated as an operation over recorded category content under a versioned rule, because a profile identity records what a study adopted rather than what two studies share, and because a later parity or replication analysis has to be able to say which categories agreed and which did not. What the comparison is used for is bounded by WP2-SCHED-050 and by Work Package 3's separate authorization; the statistical treatment of any such comparison is not specified here, and charter Section 10.4 records that no parity threshold or test is predeclared.
+
+### 10.11 What a concurrency profile may never be cited as establishing
+
+**WP2-SCHED-050.** A concurrency profile, an observed concurrency-provenance record, a comparison of either, or any throughput result **MUST NOT** be reported or cited as evidence of serial-versus-parallel behavioral parity, neutrality, or interchangeability.
+
+**Rationale.** Charter Section 8.5 states that throughput does not establish scientific validity and that parallel execution is not presumed behaviorally neutral, and charter Section 10.4 requires parallel execution to earn behavioral use through a preregistered serial-versus-parallel parity study, which remains Work Package 3 and remains unauthorized. WP2-SCOPE-011 already prohibits reporting a conformance result under this specification as parity evidence; WP2-SCHED-050 extends the same prohibition to the profile and provenance records themselves and to any throughput figure derived from them, because those are the artifacts a reader would most naturally mistake for parity evidence.
+
+### 10.12 Options deliberately left unselected
+
+**Unselected option.** Profile record placement and encoding. The registered concurrency profile and the observed concurrency provenance may be carried in the study registration and evidence records, in separate documents, in an index, or in more than one of those. WP2-SCHED-035 and WP2-SCHED-039 state what has to be recorded and against which units; no schema, field structure, serialization, or store is selected, and Section 13 rather than this section decides where evidence is written.
+
+**Unselected option.** Granularity of observed provenance. A laboratory may record observed provenance per execution attempt, per dispatch wave, per interval, or at a finer granularity, provided the per-attempt record WP2-SCHED-039 requires exists, each observation carries the attribution WP2-SCHED-040 requires, and a finer-grained observation is a record the per-attempt record references rather than a further observed concurrency-provenance record of the attempt. No granularity is preferred here.
+
+**Unselected option.** Nonsecret-identity scheme. The alias, digest, or registered identity WP2-SCHED-047 requires may be realized by a registered mapping, a keyed digest, an authority-issued alias, or another scheme. No scheme is selected, and the secret boundary itself is assigned to Section 16.
+
+**Unselected option.** Comparison rule. The versioned comparison rule WP2-SCHED-048 requires may weigh categories equally, may treat some categories as decisive, or may be specific to a registered design. No rule, weighting, tolerance, or equivalence class is selected, and no numeric tolerance is stated.
+
+**Unselected option.** Architectural vocabulary. The non-vendor architectural facts of Section 10.5 may be described by a registered taxonomy, by structured attributes, or by another vocabulary. WP2-SCHED-046 states the sufficiency property; no vocabulary is selected.
+
+### 10.13 Boundaries assigned to later chunks
+
+This section states what a concurrency profile is, what it and the observed provenance have to contain, how they are joined, how they are compared, and what they may never be cited as establishing. It deliberately defines none of the following: the lifecycle values whose transitions the provenance records, which belong to Section 8; the scheduling, assignment, liveness, and commit mechanics whose policy identities the categories require, which belong to Section 9; the definitions and measurement rules of the time domains in which observed durations are recorded, which belong to Section 11; the model-request record, its accounting, and provider retry semantics, which belong to Section 12; evidence formats, inventory contents, packaging, sealing, and retention for these records, which belong to Section 13; what counts as a material divergence and what disposition a deviation or violation receives, which belong to Section 14; the effect of a deviation on study completeness and reporting, which belongs to Section 15; the secret boundary within which a nonsecret alias is issued and held, which belongs to Section 16; the conformance checks and fault injections for every requirement stated here, which belong to Section 17 and to the conformance document; and the design of any serial-versus-parallel parity comparison, which belongs to the separately authorized Work Package 3.
 
 ## 11. Time domains and logical-time integrity
 
-Scope note: This section will distinguish future time domains and define logical-time integrity boundaries.
+### 11.1 What this section establishes
 
-> **Future-chunk marker:** Substantive content for this section is assigned to Chunk 4 and is not authorized in Chunk 1.
+This section defines seven time domains, keeps them distinct, and states the integrity requirements that keep non-logical delay out of simulated causation while many independent runs and many independent studies execute at the same time. Charter Section 10.5 requires future evidence to distinguish logical simulation time, provider wall-clock time, and local queue time, and states that provider latency must not silently change simulated psychology or causality unless latency is explicitly part of the registered treatment; charter Section 14.5 requires the three to remain distinct. This section states those obligations as testable requirements and adds the four further domains that a concurrent laboratory has to keep apart from them. It completes what the Section 7.8 rationale assigns here — the time-domain rules beyond the isolation boundary WP2-ISO-013 and WP2-ISO-014 state — and it selects no clock, timing library, timestamp format, timeout value, or tolerance.
+
+Section 11.2 states how the domain model is read and carries the requirement that makes it binding. Section 11.3 holds the seven domains. Sections 11.4 through 11.11 hold the remaining requirements. Section 11.12 records options deliberately left unselected, and Section 11.13 records what is assigned to later chunks.
+
+Every substantive statement here is a Required future invariant carrying exactly one `WP2-TIME-###` identifier, a Design rationale, or an Unselected option, in the Section 4.3 sense, or else an entry of the domain model in Section 11.3, whose normative force flows through WP2-TIME-001 rather than through an identifier of its own, or a boundary statement in Section 11.13. This section names model-request stages only so far as is needed to keep the domains distinct; the complete model-request lifecycle and accounting contract are assigned to Section 12.
+
+### 11.2 How the time-domain model is read
+
+Each entry of the model states the same seven facts in the same order.
+
+| Fact | What the entry states |
+| --- | --- |
+| Owning entity or record | The entity whose time the domain measures, and the record that carries the measurement. |
+| Start boundary | The recorded event at which the measured interval begins. |
+| End boundary | The recorded event at which the measured interval ends. |
+| Clock or logical source | What the measurement is taken from, and whose it is. |
+| May it affect simulation state | Whether the domain is permitted to influence the simulated world, its psychology, its causation, or decision eligibility. |
+| Required lineage | The identities the measurement has to be attributable to. |
+| Missing or unobservable treatment | What is recorded where a boundary or an interval is not observable. |
+
+**WP2-TIME-001.** Every timing fact a conforming laboratory records **MUST** identify the time domain to which it belongs — one of the seven domains of Section 11.3, or a further domain or named stage the laboratory itself identifies and never merges into one of the seven — and, where it belongs to a domain of Section 11.3, conform to every clause of that domain's entry — its owning entity or record, start boundary, end boundary, clock or logical source, permitted effect on simulation state, required lineage, and missing or unobservable treatment — except only the specific question or clause that the entry expressly assigns to a later section, an exemption that reaches no other clause of that fact or entry.
+
+**Rationale.** The domain model is stated as a register in the manner of Section 6, and WP2-TIME-001 is the single requirement that incorporates it and makes each clause binding, so that no individual table cell carries a requirement identifier of its own. Requiring every timing fact to identify its domain is what makes the rest of this section checkable: a duration with no domain cannot be tested against a start boundary, a clock source, or a rule about what it may influence. The seven domains are not exhaustive of everything a laboratory may measure: WP2-TIME-001 therefore requires a further measurement to identify the further domain or stage it belongs to rather than merging it into one of the seven, and the requirements of Sections 11.4 through 11.11 reach such a measurement so far as their terms apply to it.
+
+### 11.3 The seven time domains
+
+**Logical simulation time.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The deterministic engine of one independent simulated world, recorded in that world's authoritative event stream and canonical state under one execution attempt. |
+| Start boundary | The first authoritative simulation event of that world under that execution attempt. |
+| End boundary | The last authoritative simulation event of that world under that execution attempt. |
+| Clock or logical source | Engine-owned logical time, advanced only by that world's authoritative simulation rules; charter Section 14.8 makes the engine final authority over objective world state, legal affordances, and committed consequences. No wall clock is a source of it. |
+| May it affect simulation state | Yes, as the simulated world's own time; every other domain may affect simulation state only as WP2-TIME-004 permits. |
+| Required lineage | The execution attempt; the planned run and study above it; the world or scenario identity and version; and the registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | Logical time is engine-owned and is not an unobservable external stage. A gap or contradiction in the recorded event stream is an evidence-integrity problem recorded under WP2-TIME-019 and dispositioned under Sections 13 and 14, and it is never filled by inference from a wall-clock record. |
+
+**Local queue time.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The unit that waited under the laboratory's own scheduling or local inference path, recorded against that unit — an admitted execution attempt awaiting release, or a model request awaiting local dispatch. |
+| Start boundary | The recorded event at which the unit became ready to proceed and began waiting: the recorded transition into Admitted for an execution attempt, and origination for a model request. |
+| End boundary | The recorded event at which the wait ended: release, start, or the recorded transition into a terminal operational value where that precedes release, for an execution attempt, and local dispatch, refusal, or cancellation for a model request. |
+| Clock or logical source | A monotonic or equivalently safe duration basis under WP2-TIME-013, taken on the host that observed the wait, with that host and clock source recorded under WP2-TIME-015 where cross-host comparison matters. |
+| May it affect simulation state | No, except as a preregistered treatment or condition difference under WP2-TIME-004. |
+| Required lineage | The waiting unit; its execution attempt, planned run, and study; the owning laboratory worker where one is assigned; the dispatch wave where one applies; and the applicable registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | Recorded as unobserved or unavailable under WP2-TIME-010, never derived from provider latency, from a total interval, or from a neighboring timestamp. |
+
+**Dispatch and transport time.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The model request, recorded against it. |
+| Start boundary | The local dispatch event, for the outbound interval; the provider-completed event, for the inbound interval. |
+| End boundary | The provider-accepted event, for the outbound interval; the local-response-received event, for the inbound interval. Each interval is recorded separately and only where its boundaries are observed. |
+| Clock or logical source | A monotonic or equivalently safe duration basis on the dispatching host for the local boundaries; the provider's own reporting for a provider-side boundary, recorded as the provider's under WP2-TIME-015. |
+| May it affect simulation state | No, except as a preregistered treatment or condition difference under WP2-TIME-004. |
+| Required lineage | The model request; the execution attempt, planned run, and study; the owning laboratory worker; the route identity; and the applicable registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | Where a provider-accepted or provider-completed boundary is not observable, the affected interval is recorded as unobserved or unavailable under WP2-TIME-010 and is never obtained by subtracting provider latency from a locally measured total or by inference from a neighboring timestamp. |
+
+**Provider wall-clock latency.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The model request, recorded against it. |
+| Start boundary | The provider-accepted event. |
+| End boundary | The provider-completed event. |
+| Clock or logical source | The provider's own reported timing, recorded as the provider's. A local timestamp is never substituted for a provider boundary. A provider-reported duration rests on the provider's clock and is recorded with its provenance under WP2-TIME-015 rather than measured under WP2-TIME-013. |
+| May it affect simulation state | No, except as a preregistered treatment or condition difference under WP2-TIME-004, which is the exception charter Section 10.5 itself preserves for provider latency. |
+| Required lineage | The model request; the execution attempt, planned run, and study; the deciding episode or decision the request serves; the provider identity; the serving-provider and route identities, which WP2-SCOPE-009 keeps distinct from the decision authority; and the applicable registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | Where the provider reports neither boundary, provider latency is recorded as unobserved or unavailable under WP2-TIME-010 rather than derived from local dispatch and receipt timestamps. |
+
+**Laboratory-worker wall-clock runtime.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The execution attempt, recorded against it and attributed to its owning laboratory worker. |
+| Start boundary | The recorded transition of the execution attempt into Starting, under the model in Section 8.6. |
+| End boundary | The recorded transition of that attempt into Completed, Failed, or Cancelled, recorded by the owning laboratory worker or on an observation of it; a transition recorded after the owning laboratory worker was lost is treated under this entry's missing-or-unobservable clause. |
+| Clock or logical source | A monotonic or equivalently safe duration basis on the host of the owning laboratory worker, with that host or runner identity and clock source recorded under WP2-TIME-015. Where the end boundary is recorded by another authority on another host, the interval is a cross-host measurement whose clock sources, hosts, and synchronization uncertainty are recorded under WP2-TIME-015. |
+| May it affect simulation state | No, except as a preregistered treatment or condition difference under WP2-TIME-004. |
+| Required lineage | The execution attempt; the owning laboratory worker; the planned run and study; the host or runner identity; and the applicable registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | Where the owning laboratory worker was lost before an end boundary was recorded, the runtime is recorded with an unobserved end boundary under WP2-TIME-010, and the record names the loss as the reason; the attempt's recorded terminal disposition is the one the applicable requirements of Sections 8 and 9 require, and where the loss followed a process or orchestrator restart, WP2-LIFE-021 separately requires one. A later observation by another authority is recorded as its own fact rather than as the attempt's end boundary. |
+
+**Finalization time.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The execution attempt's finalization record. |
+| Start boundary | The recorded transition of the execution attempt into Finalizing, under the model in Section 8.6. |
+| End boundary | The recording of Finalization succeeded or Finalization failed for that attempt. |
+| Clock or logical source | A monotonic or equivalently safe duration basis on the host of the finalizing authority, with that host and clock source recorded under WP2-TIME-015. |
+| May it affect simulation state | No. Finalization follows the end of execution activity, and no finalization delay is a permitted influence on the simulated world. |
+| Required lineage | The execution attempt; its run evidence root; the planned run and study; the finalizing authority; the host or runner identity; and the applicable registered concurrency-profile identity and version. |
+| Missing or unobservable treatment | An interrupted finalization is recorded with an unobserved end boundary under WP2-TIME-010, and the interruption is preserved rather than closed by a later inferred timestamp. |
+
+**Study-level elapsed time.**
+
+| Fact | Statement |
+| --- | --- |
+| Owning entity or record | The study, recorded against its own record. |
+| Start boundary | The exact study-level start event that the study's registration identifies, named by event identity under WP2-TIME-012. |
+| End boundary | The exact study-level end event that the study's registration or its completion record identifies, named by event identity under WP2-TIME-012. What makes a study complete is assigned to Section 15. |
+| Clock or logical source | A monotonic or equivalently safe duration basis where a duration is reported, together with separately recorded wall-clock instants where human-readable instants are needed, each with its clock source and host recorded under WP2-TIME-015. |
+| May it affect simulation state | No. |
+| Required lineage | The study identity and version; the registration identity; the planned runs and execution attempts falling within the interval; and every registered concurrency-profile identity and version under which the study executed. |
+| Missing or unobservable treatment | Where a boundary event is not recorded, the elapsed time is recorded as unavailable under WP2-TIME-010 rather than derived from the earliest or latest timestamp found anywhere in the study's evidence. |
+
+### 11.4 Engine-owned logical time
+
+**WP2-TIME-002.** Logical simulation time **MUST** be owned by the deterministic engine of the independent simulated world it belongs to and advance only through that world's authoritative simulation rules.
+
+**WP2-TIME-003.** A delay in queueing, dispatch, transport, provider processing, laboratory-worker execution, or finalization **MUST NOT** advance logical simulation time, alter simulated psychology, create a causal event, change decision eligibility, or change expiry or supersession behavior in a simulated world, otherwise than as WP2-TIME-004 permits.
+
+**WP2-TIME-004.** Any intended effect of a non-logical delay on simulated state **MUST** be a preregistered treatment or condition difference of the study's registered design whose causation is engine-owned and explicitly recorded.
+
+**Rationale.** Charter Section 10.5 states that provider latency must not silently change simulated psychology or causality unless latency is explicitly part of the registered treatment, and charter Section 14.8 makes the deterministic engine final authority over objective world state, legal affordances, and committed consequences. WP2-TIME-003 states the prohibition over every non-logical domain rather than provider latency alone, because a concurrent laboratory introduces queueing, dispatch, transport, and finalization delays that a serial one largely does not, and any of them could reach the simulation through the same route. WP2-TIME-004 states the exception charter Section 10.5 preserves and bounds it: an intended latency effect is registered before execution and is caused by the engine under its own rules, so that it is a treatment rather than an artifact. WP2-ISO-013 separately keeps the logical clock and authoritative event stream of one independent simulated world isolated from every other one's.
+
+### 11.5 Timeouts, expiry, freshness, and stop conditions
+
+**WP2-TIME-005.** Every timeout, expiry, freshness test, and stop condition a conforming laboratory applies **MUST** identify the time domain in which it is evaluated.
+
+**WP2-TIME-006.** A conforming laboratory **MUST NOT** infer the expiry of a logical-tick deadline from a wall-clock duration in any domain.
+
+**WP2-TIME-007.** A conforming laboratory **MUST NOT** record or report a wall-clock timeout as a logical expiry or as a logical supersession.
+
+**Rationale.** A deadline is meaningless without its domain: "expired" can mean that a simulated world advanced past a logical tick, that a request waited longer than a wall-clock bound, or that a laboratory worker stopped reporting, and the three have entirely different consequences for the evidence. Section 5.6 records that the repository's engine already emits an expiry tick on its decision requests and records accepted, expired, and superseded resolutions, while Section 5.5 records that its attempt-level watchdogs convert an exceeded wall clock and an unchanging simulation tick into two separately typed failure classes; those are observations about the current system rather than requirements, and WP2-SCOPE-010 keeps them from being read as requirements. What WP2-TIME-006 and WP2-TIME-007 prohibit is the substitution of one domain's verdict for the other's, in either direction.
+
+### 11.6 Keeping the domains and the model-request stages distinct
+
+**WP2-TIME-008.** A conforming laboratory **MUST NOT** record or report the interval of one time domain of Section 11.3 as, or as part of, the interval of another, or present a derived interval without recording that it was derived and the recorded intervals or recorded instants, with the clock or logical source of each, from which it was derived.
+
+**WP2-TIME-009.** Where a conforming laboratory records the timing of a model request, the provider-accepted, provider-completed, local-response-received, response-validated, and simulation-accepted stages **MUST** be recorded as separately identified stage facts rather than represented by one timestamp or one interval.
+
+**Rationale.** Local queue time measures waiting under the laboratory's own scheduling and local inference path, dispatch and transport time measures the intervals on either side of the provider's processing, and provider wall-clock latency measures the provider's processing itself; a laboratory that reports one number for all three cannot tell a slow provider from a saturated local queue, and charter Section 14.5 requires the provider queueing, rate-limit, correlated-failure, local-queueing, fallback, timeout, rejection, supersession, scheduling, and commit behavior to be observable where relevant. WP2-TIME-008 permits a derived interval and requires the derivation to be visible, so that a subtraction is never mistaken for an observation. WP2-TIME-009 names the five model-request stages solely to keep the domains apart at their boundaries; the complete request lifecycle, the placement of these records, their accounting, and provider retry semantics are assigned to Section 12, and Section 5.6 records that the gateway record separates no provider-accepted stage from a provider-completed one.
+
+### 11.7 Unobservable and missing stages
+
+**WP2-TIME-010.** Where a stage boundary or an interval that Section 11.3 requires is not observable, the record **MUST** state that it is unobserved or unavailable, together with the reason where one is known.
+
+**WP2-TIME-011.** A conforming laboratory **MUST NOT** infer an unobservable stage boundary or interval from a neighboring recorded timestamp, from a locally measured total, or from a value observed for another unit.
+
+**Rationale.** An unobservable provider stage is a fact about what the evidence can support, and recording it as such keeps a later analysis from treating an inferred boundary as a measured one. The alternative is quietly corrosive: filling a missing provider-accepted timestamp with the local dispatch timestamp makes transport time appear to be zero and provider latency appear to include the network, and nothing in the record afterwards says so. Charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed, and charter Section 12.10 lists provider and local latency, queue delay, and evidence completeness among the operational diagnostics that support interpretation and reproducibility rather than defining believable behavior, and records that operational differences may confound a comparison if they change fallback, timing, or evidence coverage; a diagnostic that conceals the limits of its own coverage cannot do either.
+
+### 11.8 Measuring durations and recording instants
+
+**WP2-TIME-012.** The laboratory-worker wall-clock runtime, the finalization time, and the study-level elapsed time of any unit **MUST** each name the exact start and end event identities between which they were measured.
+
+**WP2-TIME-013.** Every duration a conforming laboratory measures on its own hosts **MUST** be measured on a monotonic basis, or on a basis that is safe against clock adjustment to an equivalent degree, that the record itself identifies.
+
+**WP2-TIME-014.** A human-readable wall-clock instant **MUST** be recorded separately from the duration measurement of the same interval, rather than substituted for it or derived from it.
+
+**Rationale.** Naming the exact events is what makes two recorded runtimes comparable: an interval whose boundaries are described only as "when the attempt started" cannot be checked against the transition record that WP2-LIFE-013 requires. WP2-TIME-013 states a property rather than a mechanism, because a monotonic source is one way to be safe against a clock adjustment and not the only one; the requirement asks of one locally measured duration both that it rest on such a basis and that the record name which basis that was, and no timing library, resolution, or unit is selected. A provider-reported duration is not measured by the laboratory and is recorded with its clock provenance under WP2-TIME-015, and an interval whose two boundaries rest on different clocks is recorded as derived under WP2-TIME-008. Wall-clock instants remain necessary for human reading and for correlation with external records, and keeping them separate from the measured duration is what keeps a clock adjustment from silently changing a duration after the fact.
+
+### 11.9 Clock provenance and cross-host comparison
+
+**WP2-TIME-015.** Where timing records from more than one host are compared, joined, or reported together, the clock source, the host or runner association, and any material synchronization uncertainty of each such record **MUST** be recorded and attributable to it.
+
+**WP2-TIME-016.** Wall-clock ordering across hosts **MUST NOT** be used as a causal relation, an identity join, or an authoritative tie-break.
+
+**Rationale.** Two hosts' clocks agree only to within their synchronization, and a concurrent laboratory that compares their timestamps without recording that uncertainty produces orderings it cannot defend. WP2-ISO-014 already prohibits wall-clock order from serving as an implicit causal relation, ordering guarantee, or identity join between isolation units; WP2-TIME-016 prohibits cross-host wall-clock ordering as a causal relation or identity join whether the use is implicit or explicit, and adds the authoritative tie-break, which WP2-SCHED-033 separately prohibits for competing operations on one planned run. What WP2-TIME-015 requires is not a synchronization mechanism but the provenance that makes a comparison defensible, and Section 11.12 records the mechanism as unselected.
+
+### 11.10 Impossible timing records
+
+**WP2-TIME-017.** A negative, discontinuous, contradictory, or otherwise impossible timing record **MUST** be preserved exactly as recorded.
+
+**WP2-TIME-018.** A conforming laboratory **MUST NOT** silently normalize, clamp, correct, reorder, or discard a timing record that WP2-TIME-017 requires to be preserved.
+
+**WP2-TIME-019.** A timing record that WP2-TIME-017 requires to be preserved **MUST** be surfaced as a distinguishable typed integrity problem attributed to the units and the time domains it concerns, and retained for later disposition.
+
+**Rationale.** An impossible timing record is evidence that something in the measurement path is wrong, and a laboratory that clamps a negative duration to zero destroys exactly the signal that would have shown it. Charter Section 14.9 requires evidence loss, mutation, collision, adoption, or incomplete finalization to be treated as an explicit failure rather than concealed, and charter Section 12.10 records that operational differences can confound a comparison if they change timing or evidence coverage. The vocabulary of integrity problems and their dispositions is assigned to Section 14, and how such a record is preserved within an evidence root is assigned to Section 13; WP2-TIME-019 requires only that the problem be distinguishable, attributed, and retained.
+
+### 11.11 Attribution of timing evidence
+
+**WP2-TIME-020.** Every timing record a conforming laboratory retains **MUST** be attributable to the study, the planned run, the execution attempt, the laboratory worker, the model request or the deciding episode or decision it serves, and the registered concurrency profile to which it applies, naming each of those that applies and stating the absence of any that does not.
+
+**Rationale.** Timing evidence that cannot be joined to the unit it describes is unusable for the comparative, long-horizon research the charter describes, and under concurrency it is actively misleading, because a duration observed while other units contended for the same resources means nothing without knowing which units those were. WP2-ISO-017 already requires every retained log or diagnostic record to carry explicit attribution to each entity of the Section 6 register whose activity it describes; WP2-TIME-020 states the corresponding obligation for timing records and adds the concurrency profile, so that a later analysis can relate an observed duration to the execution architecture and contention conditions under which it was observed. Stating the absence of an inapplicable identity, rather than omitting it, keeps an unattributed record distinguishable from one whose attribution does not apply — a timing record about a laboratory worker with no execution attempt assigned to it, for instance.
+
+### 11.12 Options deliberately left unselected
+
+**Unselected option.** Duration basis. The monotonic or equivalently safe basis WP2-TIME-013 requires may be a platform monotonic counter, a steady clock, a sequence of authority-issued marks, or another arrangement. No library, counter, resolution, or unit is selected.
+
+**Unselected option.** Timestamp and instant representation. The wall-clock instants WP2-TIME-014 requires to be recorded separately may be represented in any calendar, precision, or encoding the evidence contract later adopts. No format, epoch, precision, or time zone is selected, and Section 13 rather than this section decides how evidence is written.
+
+**Unselected option.** Clock synchronization. The synchronization uncertainty WP2-TIME-015 requires to be recorded may be established by a network time protocol, an authority-issued reference, a measured offset, or another arrangement. No protocol, service, or tolerance is selected, and WP2-SCOPE-015 prohibits selecting a numeric operating parameter.
+
+**Unselected option.** Timing-record placement. The timing facts this section requires may be carried on the record of the unit measured, in a separate timing record, in an event stream, or in more than one of those. WP2-TIME-020 states the attribution property; no placement or join key is selected, and the placement of model-request records is assigned to Section 12.
+
+**Unselected option.** Timeout values and stop conditions. Which timeouts, expiries, freshness tests, and stop conditions a laboratory applies, and at what values, are unselected. WP2-TIME-005 requires only that each identify its domain, and WP2-SCOPE-015 prohibits this specification from selecting a duration, threshold, or bound.
+
+### 11.13 Boundaries assigned to later chunks
+
+This section states which time domains exist, what each measures, what may and may not influence simulated causation, and how timing evidence is measured, attributed, and preserved. It deliberately defines none of the following: the lifecycle transitions whose events serve as domain boundaries, which belong to Section 8; the scheduling, assignment, and commit mechanics whose intervals these domains measure, which belong to Section 9; the concurrency-profile categories under which observed durations are recorded, which belong to Section 10; the complete model-request lifecycle, the placement of request records, provider retry semantics, budget reservation, and token or monetary accounting, which belong to Section 12; the evidence format, inventory, replay, and retention of timing records, which belongs to Section 13; the typed vocabulary of the timing-integrity problems WP2-TIME-019 requires to be surfaced, which belongs to Section 14; the study-completion rules that fix a study's end boundary, which belong to Section 15; and the conformance checks, fault injections, and pass conditions for every requirement stated here, which belong to Section 17 and to the conformance document.
 
 ## 12. Model-request accounting, budgets, and provider behavior
 
