@@ -2,11 +2,11 @@
 
 ## Status
 
-**WORKING SPECIFICATION PACKAGE — CHUNK 6 COMPLETED, AWAITING ADVISOR REVIEW**
+**WORKING SPECIFICATION PACKAGE — CHUNK 7 COMPLETED, AWAITING ADVISOR REVIEW**
 
-Chunk 6 is completed and awaiting Advisor review. Chunk 7 is not authorized.
+Chunk 7 is completed and awaiting Advisor review. Chunk 8 is not authorized.
 
-This package is incomplete. At this head, it contains the document structure and normative-writing framework from Chunk 1, the Chunk 2 status, purpose, scope, terminology, non-goals, and current-system baseline, the Chunk 3 entity, identity, and lineage model and isolation invariants, the Chunk 4 run and attempt lifecycle, scheduling, leasing, authoritative commit, concurrency-profile provenance, and time-domain contract, the Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary contract, and the Chunk 6 evidence, finalization, failure-disposition, replacement, aggregation, and study-completion contract — Sections 1 through 16 of the main specification. Sections 17 through 21 of the main specification and the conformance document remain shells. Requirements remain incomplete until their assigned later chunks receive explicit Advisor approval.
+This package is substantively complete and not yet integrated. At this head, it contains the document structure and normative-writing framework from Chunk 1, the Chunk 2 status, purpose, scope, terminology, non-goals, and current-system baseline, the Chunk 3 entity, identity, and lineage model and isolation invariants, the Chunk 4 run and attempt lifecycle, scheduling, leasing, authoritative commit, concurrency-profile provenance, and time-domain contract, the Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary contract, the Chunk 6 evidence, finalization, failure-disposition, replacement, aggregation, and study-completion contract, and the Chunk 7 conformance model, implementation-decision register, Work Package 3 dependency boundary, acceptance criteria, and open-questions register — Sections 1 through 21 of the main specification — together with the completed conformance document: the requirement-to-check matrix over every normative requirement, the conceptual check catalogue, the fault-injection catalogue, the keyless implementation-acceptance suite, the conformance-evidence contract, and the conformance acceptance criteria. Final integration, stale-language repair, navigation updates, and the assignment of an established specification version remain reserved to Chunk 8, and requirements remain incomplete until their assigned chunks receive explicit Advisor approval.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This package develops a versioned, implementation-neutral technical and evidence
 
 ## Current authorization
 
-Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work, Chunk 2 scope, terminology, non-goal, and baseline drafting, Chunk 3 identity, lineage, and isolation drafting, Chunk 4 lifecycle, scheduling, concurrency-provenance, and time drafting, Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary drafting, and Chunk 6 evidence, finalization, failure-disposition, replacement, aggregation, and study-completion drafting only. Chunk 7 is not authorized, and all later drafting remains unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
+Work Package 2 is specification-only. The current authorization covers Chunk 1 document-shell and normative-framework work, Chunk 2 scope, terminology, non-goal, and baseline drafting, Chunk 3 identity, lineage, and isolation drafting, Chunk 4 lifecycle, scheduling, concurrency-provenance, and time drafting, Chunk 5 model-request accounting, budget, provider-behavior, and secret-boundary drafting, Chunk 6 evidence, finalization, failure-disposition, replacement, aggregation, and study-completion drafting, and Chunk 7 conformance-requirements and implementation-handoff drafting only. Chunk 8 is not authorized, and all later work remains unauthorized unless explicitly approved by the Advisor and relayed by the Operator.
 
 No implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. Work Packages 3–8 remain unauthorized.
 
@@ -23,7 +23,7 @@ No implementation, experiment, model call, evidence generation, or Work Package 
 - [Milestone 3 Research Charter](../../MILESTONE_003_RESEARCH_CHARTER.md) — research direction, claim boundaries, sequencing, and governance.
 - [Staged Specification Instructions](./WORK_PACKAGE_002_STAGED_SPECIFICATION_INSTRUCTIONS.md) — staged drafting authority, file scope, chunk boundaries, and review process.
 - [Minimum Parallel-Run Laboratory Specification](./WORK_PACKAGE_002_MINIMUM_PARALLEL_RUN_LABORATORY_SPECIFICATION.md) — working normative technical and evidence contract.
-- [Conformance Requirements](./WORK_PACKAGE_002_CONFORMANCE_REQUIREMENTS.md) — working conformance structure for later approved normative requirements.
+- [Conformance Requirements](./WORK_PACKAGE_002_CONFORMANCE_REQUIREMENTS.md) — completed requirement-to-check matrix, conceptual check catalogue, fault-injection catalogue, keyless implementation-acceptance suite, conformance-evidence contract, and conformance acceptance criteria for the completed specification, awaiting Advisor review.
 
 Later explicit Advisor rulings on draft PR #19 govern the authorized progression of this working package.
 
