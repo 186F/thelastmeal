@@ -14,6 +14,9 @@ historical.
 | [Technical reference](reference/TECHNICAL_REFERENCE.md)                                                     | ACTIVE        | The living engineering contract: determinism rules, decision lifecycle, evidence |
 | [Milestone 3 index](milestones/003-parallel-causal-life-laboratory/README.md)                              | ACTIVE        | Current Milestone 3 status, authorization boundary, and reading order             |
 | [Milestone 3 research charter](milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md) | AUTHORITATIVE | Current research direction, claim boundaries, sequencing, and governance only    |
+| [Milestone 3 Work Package 2 index](milestones/003-parallel-causal-life-laboratory/work-packages/002-minimum-parallel-run-laboratory/README.md) | ACTIVE | Status, boundary, and reading order for the distinct main specification and conformance document, each at version `1.0.0` |
+| [Work Package 2 main specification](milestones/003-parallel-causal-life-laboratory/work-packages/002-minimum-parallel-run-laboratory/WORK_PACKAGE_002_MINIMUM_PARALLEL_RUN_LABORATORY_SPECIFICATION.md) | ESTABLISHED | Main-specification identity, version `1.0.0`; normative technical, evidence, acceptance, and handoff contract |
+| [Work Package 2 conformance document](milestones/003-parallel-causal-life-laboratory/work-packages/002-minimum-parallel-run-laboratory/WORK_PACKAGE_002_CONFORMANCE_REQUIREMENTS.md) | ESTABLISHED | Conformance-document identity, version `1.0.0`; mapping, suite, evidence, and acceptance contract |
 | [Milestone 2 implementation brief](milestones/002-sparse-cognition/MILESTONE_002_SPARSE_COGNITION_AUTOMATION_IMPLEMENTATION_BRIEF.md) | HISTORICAL | The specification that governed Milestone 2 (closed; preserved unchanged)        |
 | [Milestone 2 scope ruling](milestones/002-sparse-cognition/MILESTONE_002_SCOPE_RULING_AND_AMENDMENTS.md)    | HISTORICAL    | Amendments and rulings that governed on any ambiguity with the brief (preserved) |
 | [Milestone 2 closeout report](milestones/002-sparse-cognition/MILESTONE_002_CLOSEOUT_REPORT.md)             | COMPLETED     | The final Milestone 2 record: disposition, findings, and claim boundary          |
@@ -27,11 +30,10 @@ historical.
 | Package version          | 1.9.0                                                                                                                                                        |
 | Frozen scenario data     | `vs001-1.0.0` (never changes)                                                                                                                                |
 | Current milestone        | Milestone 3 — Parallel Causal Life Laboratory                                                                                                               |
-| Last completed phase     | Milestone 3 Item 2 — research charter and claim boundaries established                                                                                       |
-| Current phase            | **CHARTER ESTABLISHED.** No Milestone 3 implementation, experiment, model call, evidence generation, or Work Package 2 activity is authorized or underway.       |
-| Next authorized work     | None — Work Packages 2–8 are provisional and each requires separate Operator authorization and applicable Advisor review                                 |
+| Established documentation | The Work Package 2 main specification and distinct conformance document each carry version `1.0.0`, conditioned on the unchanged exact head passing full CI and receiving final Advisor clearance. This establishes documentation only; no implementation, experiment, model call, evidence generation, or Work Package 3 activity is authorized. |
+| Documentation gate       | Full CI on the exact documentation head precedes final Advisor review for that same head; neither step authorizes implementation or any later work package |
 | Live model calls to date | Milestone 1 acceptance; Milestone 2 Stage A (47 calls, 2026-08-01) and the ten-run calibration (473 emitted / 472 accepted, 2026-08-02), all registered, sealed, and analyzed — no other live calls                                                                       |
-| Controlling documents    | The Milestone 3 charter controls current research direction and claim boundaries; the Vertical Slice 001 coding brief and technical reference continue to govern the current system                         |
+| Controlling documents    | The Milestone 3 charter controls research direction and claim boundaries; the distinct Work Package 2 main specification and conformance document each carry version `1.0.0` under their exact-head acceptance condition; the Vertical Slice 001 coding brief and technical reference continue to govern the current implementation |
 
 ## 3. Document-status legend
 
@@ -39,6 +41,7 @@ historical.
 | ------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `AUTHORITATIVE`                       | Governs current work; conflicts resolve in its favor                                     |
 | `ACTIVE`                              | Maintained to describe the present; updated as the project moves                         |
+| `ESTABLISHED`                         | Versioned specification content, valid only under any exact-head acceptance condition it states |
 | `COMPLETED`                           | Final record of finished work; accurate for its scope, no longer updated                 |
 | `HISTORICAL`                          | Record of an earlier era of the project, preserved unchanged                             |
 | `SUPERSEDED — RETAINED FOR PROVENANCE` | A later document replaced it (e.g. a re-audit); kept because the progression is evidence |
@@ -68,8 +71,12 @@ historical.
    [research charter](milestones/003-parallel-causal-life-laboratory/MILESTONE_003_RESEARCH_CHARTER.md),
    including the research objective, candidate allocation space, causal method,
    measurement taxonomy, work-package sequence, claim boundaries, and
-   governance. **CHARTER ESTABLISHED**; no implementation, experiment, model
-   call, evidence generation, or Work Package 2 activity is authorized.
+   governance. Work Package 2 then established the distinct
+   [main-specification and conformance contracts](milestones/003-parallel-causal-life-laboratory/work-packages/002-minimum-parallel-run-laboratory/README.md),
+   each carrying version `1.0.0`,
+   valid only for the unchanged exact head after full CI and final Advisor
+   clearance. No implementation, experiment, model call, evidence generation,
+   or Work Package 3 activity is authorized.
 
 ## 5. Audit reading order
 
