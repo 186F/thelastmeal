@@ -12,7 +12,7 @@ This section states the principles that govern every other section of this docum
 
 **Exact-version binding.** Conformance is a relation among three exact identities: one exact main-specification identity and version, one exact conformance-document identity and version, and one exact implementation build and version. Every check result, every requirement basis, and every whole-implementation verdict names all three, holds only for the exact triple it names, and is never inherited by a different specification version, conformance-document version, or implementation build. Section 1.4 of the main specification records that no established specification version exists at this head and assigns the first to the final integration chunk; until one exists, no conformance assessment can bind to one, and none is authorized, performed, or claimed.
 
-**Evidence discipline.** Every recorded outcome rests on identified, preserved evidence, and an outcome without evidence is no outcome: a check result identifies the exact requirement and check it evaluates, the fixtures and injected fault where any, the implementation build, the specification and conformance-document versions, the environment, the outcome and its reason, and its source evidence, and Section 5 states the complete evidence contract. Every normative requirement is independently accountable: a requirement's basis is evaluable on its own even where several requirements share one check, one requirement maps to several checks where its clauses can fail independently, one check covers several requirements only where every requirement-to-check relation is explicit, and the Section 2 matrix states every such relation row by row. The seven check classes of the Section 17 model — static document audit, deterministic keyless execution, concurrency and race testing, restart and recovery testing, fake-provider testing, evidence-integrity testing, and later registered-study evidence — remain distinct, and every check names its class.
+**Evidence discipline.** Every recorded outcome rests on identified, preserved evidence, and an outcome without evidence is no outcome: a check result identifies the exact requirement and check it evaluates, the fixtures and injected fault where any, the implementation build, the specification and conformance-document versions, the environment, the outcome and its reason, and its source evidence, and Section 5 states the complete evidence contract. Every normative requirement is independently accountable: a requirement's basis is evaluable on its own even where several requirements share one check, one requirement maps to several checks where its clauses can fail independently, and one check covers several requirements only where every direct relation is explicit. The requirement-to-check, requirement-to-fault, and check-to-fault relations are each recorded on two surfaces, parsed independently, and required to agree in both directions; a range, summary subset, partial qualifier, same-as-above reference, delegated coverage statement, or relationship inferred from prose records no admissible mapping. The seven check classes of the Section 17 model — static document audit, deterministic keyless execution, concurrency and race testing, restart and recovery testing, fake-provider testing, evidence-integrity testing, and later registered-study evidence — remain distinct, and every check names its class.
 
 **Keyless boundary.** Implementation acceptance is assessable in full without a live provider credential, a repository game-model call, a browser experiment, or any Work Package 3 study. Every implementation-acceptance requirement has, in the Section 2 matrix, a keyless static or dynamic check capable of supporting its acceptance without a live provider. Later registered-study evidence may supplement such a check; it never substitutes for one, a supplement is identified as such wherever it appears, and no Work Package 3 parity check is a Work Package 2 implementation-acceptance pass condition.
 
@@ -50,9 +50,11 @@ The identifiers this document defines — `CHK-###` for conceptual checks, `FLT-
 
 Throughout the matrix, a Required fixture(s) cell cites the `FIX` identities of the Section 4.2 fixture register, with or without the register's short titles, and reads "None" where a check needs no fixture.
 
-**Check reuse.** One conceptual check may serve several rows, and one row may cite several checks. Every such relationship is explicit: the row names each check it relies on, the check's own mapped-requirement field in Section 2.2 names the requirements the check principally tests and never lists as tested one no row maps to it, a field that expressly delegates a clause to another check naming that other check's relation rather than its own, and the complete authoritative relation for any check is the set of Section 2.3 rows citing it, which the field never contradicts. Reuse is never implicit — no row inherits a check from an adjacent row, a shared table, or a namespace default, and no check covers a requirement that no row maps to it.
+**Check reuse.** One conceptual check may serve several rows, and one row may cite several checks. Reuse creates no implicit coverage: no row inherits a check from an adjacent row, a shared table, a namespace default, or another check's operation. If a requirement depends on two checks, its matrix row names both checks directly and both check entries name that requirement directly. A check may reuse another check's operation, but neither that reuse nor prose describing it records a requirement-to-check relation.
 
 **Set equality.** The requirement-ID set of Section 2.3 is exactly the requirement-ID set of the completed main specification. The eleven namespaces of specification Sections 3 through 16 contribute four hundred twenty-three requirements — sixteen `WP2-SCOPE`, twenty-seven `WP2-ID`, thirty-three `WP2-ISO`, thirty-five `WP2-LIFE`, fifty-three `WP2-SCHED`, twenty-three `WP2-TIME`, fifty-five `WP2-MODEL`, seventy-three `WP2-EVID`, forty-five `WP2-FAIL`, forty-four `WP2-AGG`, and nineteen `WP2-SEC` — and the `WP2-HAND` namespace of specification Sections 17 through 21 contributes forty-three, for four hundred sixty-six requirement identifiers in total. No ID is missing, no ID is duplicated, no ID appears that the specification does not define, no range stands in for enumerated requirements, and no independently falsifiable clause of a compound requirement is left without a check named in that requirement's row.
+
+**Mapping-relation equality.** The conformance contract records three relations twice, and the independently parsed recordings are required to agree exactly. `M` is every ordered pair (Requirement ID, Conceptual check ID) explicitly recorded in the Section 2.3 matrix; `C` is every ordered pair (Mapped requirement ID, Check ID) explicitly recorded in Section 2.2. `R` is every ordered pair (Requirement ID, Fault ID) explicitly recorded in the matrix; `F` is every ordered pair (Mapped requirement ID, Fault ID) explicitly recorded in Section 3. `Q` is every ordered pair (Check ID, Fault ID) explicitly recorded in Section 2.2; `G` is every ordered pair (Mapped check ID, Fault ID) explicitly recorded in Section 3. The required equalities are `M = C`, `R = F`, and `Q = G`: `M \ C`, `C \ M`, `R \ F`, `F \ R`, `Q \ G`, and `G \ Q` are each empty. The audit records the cardinality of every set and every directional difference; matching cardinalities alone establish nothing. It first rejects duplicate ordered-pair occurrences, then constructs the sets, so a duplicate cannot conceal a missing unique relation. Every mapping field enumerates individual IDs; a range, summary or principal subset, partial qualifier, same-as-above reference, delegated relation, or relationship inferred from prose fails the audit.
 
 **Boundary discipline.** Every row's Boundary column reads exactly one of two renderings, "Implementation acceptance" or "Implementation acceptance (parity claim boundary)": the annotated rendering marks a requirement whose subject is the parity claim boundary itself — the non-inference of serial-versus-parallel behavioral parity, neutrality, or interchangeability, and the separateness of the Work Package 3 study — whose documentation half is checked as implementation acceptance, and whose later-registered-study check, where its row cites one, is a supplement, so that no row's acceptance ever rests on a Work Package 3 parity result. Even an annotated row cites a static implementation-acceptance check of its documentation half, so that no row is testable only through a study that Work Package 2 cannot run. Wherever classification is arguable, the row's Boundary is the unannotated rendering.
 
@@ -64,11 +66,11 @@ This catalogue defines every conceptual check the matrix cites: one hundred thir
 
 Each entry consists of a bold lead-in naming the check and a table of the same eleven fields in the same order: purpose; mapped requirement IDs; fixtures and setup; controlled operation or observation; injected fault or clean path; expected evidence; pass condition; fail and blocked conditions; principal false-pass risk; cleanup or preservation; and venue. Five conventions keep the entries compact and are read into every entry.
 
-First, the mapped-requirement field names the principal requirement IDs the check tests. The complete requirement-to-check relation is the matrix's: every Section 2.3 row citing a check states its own relation, every ID a check lists appears in a row that cites that check, and the field never stands in for the rows.
+First, every check's mapped-requirement field enumerates, by individual ID, the exact complete set of Section 2.3 matrix requirements that cite that check. These independently recorded fields form `C`, the exact reverse view of `M`; neither surface is a principal subset, summary, range, partial view, or delegated substitute for the other.
 
 Second, fixture references name fixture families; the Section 4 fixture register assigns each family its `FIX` identity, and the Section 4 suite cases bind them. The families are: the *synthetic registered-study fixture*, one complete synthetic registered study — registration, planned runs, conditions, treatments, and every registered policy the specification names, scheduling, liveness, cancellation, authoritative-commit, retry and fallback, presentation-disposition, validation, budget, replacement, materiality, evidence-contract, retention, secret-handling, and aggregation policies among them — entirely synthetic and provider-free; the *two-study fixture*, two such studies arranged to share every shareable infrastructure element; the *deterministic engine fixture*, a deterministic simulated-world engine consuming registered stochastic inputs and able to carry an execution attempt end to end without any provider; the *scripted fake-provider fixture*, a deterministic stand-in on the provider path whose responses, failures, delays, rate-limit responses, substitutions, and late completions are scripted by the check; the *synthetic credential fixture*, synthetic never-live credential material and nonsecret credential references, described rather than exemplified, carrying a detector-recognizable synthetic marker where a check exercises secret detection; the *controlled-interleaving harness*, a conceptual driver that forces or enumerates the material interleavings of named operations at a named authority boundary; the *crash-and-restart harness*, a conceptual driver that terminates and restarts a process, a laboratory-worker execution agent, or the orchestrator at declared points; the *prepared evidence corpus*, closed run-evidence roots, inventories, seals, packages, and verification records prepared to a known composition, deliberately defective variants among them; and the *record-audit corpus*, the candidate implementation's documentation, record and policy definitions, and reporting surfaces, assembled for static audit together with the exact main-specification and conformance-document versions bound.
 
-Third, fault references name entries of the Section 3 fault-injection catalogue by `FLT` identity; every fault of that catalogue is referenced by at least one check of this catalogue, and a check that depends on no catalogued fault states its clean path, or the controlled adversarial operation it drives, explicitly. A forced interleaving of otherwise well-formed operations is a controlled interleaving, not a fault, and is stated as such.
+Third, fault references name entries of the Section 3 fault-injection catalogue by `FLT` identity. Every fault-dependent check names every fault it depends on directly in its injected-fault field, and every check that depends on no catalogued fault begins that field with explicit `None`; no dependency is inherited through another check or inferred from prose. Those independently recorded check fields form `Q`, while the fault catalogue's mapped-check fields form the exact reverse view `G`. A forced interleaving of otherwise well-formed operations is a controlled interleaving, not a fault, and is stated as such.
 
 Fourth, one blocked rule holds for every check: where a fixture or prerequisite cannot be established, the controlled operation cannot be driven, or the subject artifact does not exist, the outcome is blocked or not run — recorded as such and never as a pass. No check passes merely because its trigger did not occur, and every check covering race safety forces or systematically enumerates its material interleavings conceptually rather than relying on ordinary timing luck. Entries state only check-specific fail conditions and any blocked circumstance beyond this general rule.
 
@@ -98,15 +100,15 @@ The checks of this class audit artifacts without executing anything: the two gov
 
 | Field | Statement |
 | --- | --- |
-| Purpose | Verify mechanically that the Section 2.3 requirement-ID set equals the completed main specification's requirement-ID set in both directions, that every row cites at least one defined check, and that every independently falsifiable clause of every compound requirement has a check named in its row. |
+| Purpose | Verify mechanically that the Section 2.3 requirement-ID set equals the completed main specification's requirement-ID set in both directions; that the independently parsed requirement-to-check, requirement-to-fault, and check-to-fault recordings are equal in both directions; that every mapping is explicit and unique; that every check and fault cited by a row is defined; and that every independently falsifiable clause of every compound requirement has a check named in its row. |
 | Mapped requirement IDs | WP2-HAND-002, WP2-HAND-003, WP2-HAND-004, WP2-HAND-005, WP2-HAND-006, WP2-HAND-019, WP2-HAND-033. |
 | Fixtures and setup | Record-audit corpus, holding the exact bound versions of both governing documents. |
-| Controlled operation or observation | Extract both requirement-ID sets; compute set differences; resolve every check reference of every row against Section 2.2; audit compound rows against their clause lists. |
+| Controlled operation or observation | Independently extract the main-specification and matrix requirement-ID occurrences; collect ordered-pair occurrences from each recording surface; reject duplicate occurrences before constructing `M`, `C`, `R`, `F`, `Q`, and `G`; record all six set cardinalities; compute `M \ C`, `C \ M`, `R \ F`, `F \ R`, `Q \ G`, and `G \ Q`; scan every mapping field for ranges, summary or principal subsets, partial qualifiers, same-as-above references, delegated coverage, or inferential prose; resolve every check and fault reference; and audit compound rows against their clause lists. |
 | Injected fault or clean path | None — clean-path document audit. |
-| Expected evidence | The two extracted ID sets, both set differences, and a per-row check-resolution report. |
-| Pass condition | Both set differences are empty, every ID appears exactly once, every cited check is defined, and no compound clause is uncovered. |
-| Fail and blocked conditions | Fail: any missing, duplicate, extra, or range-collapsed ID, any dangling check reference, or any uncovered clause. Blocked: either bound document version is unavailable. |
-| Principal false-pass risk | Comparing row counts instead of ID sets, which a simultaneous omission and duplication leaves equal. |
+| Expected evidence | The two extracted requirement-ID sets and both directional differences; the independently extracted `M`, `C`, `R`, `F`, `Q`, and `G` sets with all six cardinalities and all six directional difference lists; duplicate-occurrence reports produced before set construction; an explicit-mapping-form scan; and a per-row check/fault-resolution and compound-clause-coverage report. |
+| Pass condition | The specification and matrix requirement-ID differences are empty and every matrix ID appears exactly once; `M = C`, `R = F`, and `Q = G`, with all six directional differences empty; every ordered-pair occurrence is unique; every mapping field enumerates direct individual IDs or explicit fault `None` without an implicit mapping form; every cited check and fault is defined; and no compound clause is uncovered. |
+| Fail and blocked conditions | Fail: any missing, duplicate, extra, or range-collapsed requirement ID; any nonempty relation-set difference; any duplicate ordered-pair occurrence; any range, summary subset, partial qualifier, same-as-above reference, delegated coverage, or inferential mapping; any dangling check or fault reference; or any uncovered clause. Blocked: either bound document version is unavailable. |
+| Principal false-pass risk | Comparing only row or relation counts, or regenerating one recording surface from the other instead of parsing both independently, can make a simultaneous omission and duplication or a tautological reverse view appear equal. |
 | Cleanup or preservation | General preservation rule. |
 | Venue | Static document audit; static. |
 
@@ -163,7 +165,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that no reporting or documentation surface presents a current repository mechanism as a requirement, guarantee, or approved design of the future laboratory, cites the specification as selecting a technology or stack, or cites it as selecting, endorsing, or bounding any numeric value, threshold, limit, target, or scaling rule. |
-| Mapped requirement IDs | WP2-SCOPE-010, WP2-SCOPE-015, WP2-SCHED-041. |
+| Mapped requirement IDs | WP2-SCOPE-010, WP2-SCOPE-015, WP2-SCHED-041, WP2-HAND-029. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit implementation documentation and reporting surfaces for mechanism-as-requirement statements, claimed specification selections, and claimed numeric endorsements. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -195,7 +197,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's identity record model states, for every entity of the specification Sections 6.3 through 6.8 register, every register-entry clause — identity scope, issuing or governing authority, required parent and source references, cardinality, version requirement, point of existence, existence without physical execution, and reuse and supersession rules — deferring only what an entry expressly assigns to a later section. |
-| Mapped requirement IDs | WP2-ID-027; the documentation half of WP2-ID-001 through WP2-ID-005. |
+| Mapped requirement IDs | WP2-ID-001, WP2-ID-002, WP2-ID-003, WP2-ID-004, WP2-ID-005, WP2-ID-027. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the identity model entity by entity against every clause of the applicable register entry. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -211,7 +213,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's status model represents both lifecycle models of specification Sections 8.5 and 8.6 clause by clause — every value, every governed status dimension, entry conditions, permitted predecessor and successor classes, terminality, permitted recording authorities, effect on the authoritative outcome, minimum transition provenance, and the lineage-relation collection block with its two record types and append-only rules. |
-| Mapped requirement IDs | WP2-LIFE-001 and WP2-LIFE-032, documentation half. |
+| Mapped requirement IDs | WP2-LIFE-001, WP2-LIFE-032. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the status model value by value and clause by clause against both model tables and the collection block. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -227,7 +229,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's grant and authority-event records state every clause of the specification Section 9.6 assignment-authority record model, the grant-record identification of WP2-SCHED-017 among them. |
-| Mapped requirement IDs | WP2-SCHED-051 and WP2-SCHED-017, documentation half. |
+| Mapped requirement IDs | WP2-SCHED-017, WP2-SCHED-051. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the grant and authority-event record definitions clause by clause against the record model. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -243,7 +245,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's model-request records state every clause of the specification Section 12.3 register for every record type, and that the three request layers of WP2-MODEL-053 — the request-specification binding, the semantic content identity or digest, and the per-attempt provider-facing rendering identity or digest — are three distinct recorded layers. |
-| Mapped requirement IDs | WP2-MODEL-001 and WP2-MODEL-053, documentation half. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-053. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the request-record definitions clause by clause against the register and the three-layer model. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -259,7 +261,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's evidence records state every clause of the specification Section 13.3 register for every one of its record types — identity scope, recording authority, required parent and source references, cardinality, point of existence, correction or supersession rule, and the rule on existence without execution evidence. |
-| Mapped requirement IDs | WP2-EVID-001, documentation half. |
+| Mapped requirement IDs | WP2-EVID-001. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the evidence-record definitions clause by clause against the register's introducing statements and entries. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -275,7 +277,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's disposition records state every clause of the specification Section 14.2 register for its eight record types, and that its failure classification carries the complete Section 14.4 taxonomy with no two classes merged and no class treated as implying another. |
-| Mapped requirement IDs | WP2-FAIL-001 and WP2-FAIL-005, documentation half. |
+| Mapped requirement IDs | WP2-FAIL-001, WP2-FAIL-005. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the disposition-record definitions and the classification vocabulary clause by clause against the register and the taxonomy table. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -291,7 +293,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's study-level records state every clause of the specification Section 15.2 completion-dimension model and the Section 15.3 study-record register — the seven dimensions with their recording authorities and unresolved-result meanings, and the ledger and aggregation record types with their cardinalities, points of existence, and correction rules. |
-| Mapped requirement IDs | WP2-AGG-001 and WP2-AGG-007, documentation half. |
+| Mapped requirement IDs | WP2-AGG-001, WP2-AGG-007. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the study-record definitions clause by clause against the dimension model and the register. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -307,7 +309,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's registered concurrency-profile and observed concurrency-provenance records state every clause of the specification Section 10.2 record and cardinality tables and carry every Section 10.5 category, with explicit not-applicable and not-observable representations, and that profile plus provenance suffice to reconstruct execution architecture and contention conditions at the categories' conceptual level without vendor or stack identity beyond what the ninth category itself requires. |
-| Mapped requirement IDs | WP2-SCHED-035 and WP2-SCHED-046, documentation half. |
+| Mapped requirement IDs | WP2-SCHED-035, WP2-SCHED-046. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the two record definitions clause by clause and category by category. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -323,7 +325,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's timing records identify, for every timing fact, the time domain it belongs to — one of the seven specification Section 11.3 domains or a further named domain or stage never merged into one of the seven — and state every clause of the applicable domain entry. |
-| Mapped requirement IDs | WP2-TIME-001, documentation half. |
+| Mapped requirement IDs | WP2-TIME-001. |
 | Fixtures and setup | Record-audit corpus. |
 | Controlled operation or observation | Audit the timing-record definitions domain by domain and clause by clause against the domain table. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -339,7 +341,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the implementation's credential-lifecycle records state every clause of the specification Section 16.6 credential-authority event model — event identity, operation identity and membership, credential concerned, lifecycle operation, predecessor and corrected-record references, governing policy, recording authority and reason, authority point, validity or usability fact, and correction rule. |
-| Mapped requirement IDs | WP2-SEC-017, documentation half. |
+| Mapped requirement IDs | WP2-SEC-017. |
 | Fixtures and setup | Record-audit corpus; synthetic credential fixture for the reference forms audited. |
 | Controlled operation or observation | Audit the credential-event record definitions clause by clause against the event model. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -355,7 +357,7 @@ The checks of this class audit artifacts without executing anything: the two gov
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every registered, versioned policy or design object the specification requires records to identify — scheduling, liveness, authority, authoritative-commit, retry and fallback, presentation-disposition, validation, budget, cancellation, replacement, materiality, evidence-contract, retention, secret-handling, and aggregation rules among them — is representable and identified by identity and version wherever a governed record names it, with explicit absence stated where none applies. |
-| Mapped requirement IDs | WP2-SCHED-009, WP2-SCHED-031, WP2-MODEL-055, WP2-FAIL-009, WP2-FAIL-010, WP2-EVID-059, WP2-SEC-010, WP2-AGG-022 — each for its policy-identification clause. |
+| Mapped requirement IDs | WP2-SCHED-009, WP2-SCHED-031, WP2-MODEL-055, WP2-EVID-059, WP2-FAIL-009, WP2-FAIL-010, WP2-AGG-022, WP2-SEC-010. |
 | Fixtures and setup | Record-audit corpus; synthetic registered-study fixture for the policy inventory. |
 | Controlled operation or observation | Audit every governed record definition for its policy identity-and-version fields and its explicit-absence representation. |
 | Injected fault or clean path | None — clean-path document audit. |
@@ -423,7 +425,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that planned-run identity exists and is recorded before, and independently of, any physical execution, that every execution attempt names exactly one planned-run parent, and that a planned run cancelled before any attempt admission remains a completely represented planned run of its study. |
-| Mapped requirement IDs | WP2-ID-006, WP2-ID-007, WP2-ID-008, WP2-LIFE-005, WP2-LIFE-008, WP2-EVID-009. |
+| Mapped requirement IDs | WP2-ID-006, WP2-ID-007, WP2-ID-008, WP2-ID-027, WP2-LIFE-005, WP2-LIFE-008, WP2-EVID-009. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Register planned runs; admit and execute an attempt for one; cancel another before any admission; read the identity and lifecycle records of both. |
 | Injected fault or clean path | None — clean path with a controlled pre-admission cancellation. |
@@ -439,7 +441,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every assigned identity distinguishes its instance throughout its register-stated scope across concurrent studies and attempts, that no identity or identity-and-version pair carries two meanings, that terminal or superseded instances never free their identities for reuse, and that a duplicate identity is refused with the typed, evidence-preserving refusal record. |
-| Mapped requirement IDs | WP2-ID-001, WP2-ID-003, WP2-ID-005, WP2-ID-024, WP2-ISO-030, WP2-ISO-031, WP2-ISO-032. |
+| Mapped requirement IDs | WP2-ID-001, WP2-ID-003, WP2-ID-005, WP2-ID-024, WP2-ID-027, WP2-ISO-030, WP2-ISO-031, WP2-ISO-032. |
 | Fixtures and setup | Synthetic registered-study fixture; two-study fixture for cross-study scope. |
 | Controlled operation or observation | Create entity instances across both studies; complete and cancel some; then present operations that reuse a completed instance's identity and operations that assign one identity two meanings. |
 | Injected fault or clean path | FLT-001 — duplicate run identity. |
@@ -455,7 +457,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every required parent or source reference is recorded with the identity record it belongs to, that version-required references carry version with identity, that locally scoped identifiers appear only within disambiguating persisted namespaces, and that every required lineage relationship and join is recorded explicitly at establishment, readable from the record rather than reconstructed from ordering, paths, names, or timing. |
-| Mapped requirement IDs | WP2-ID-002, WP2-ID-004, WP2-ID-022, WP2-ID-023, WP2-MODEL-023, WP2-SCHED-045. |
+| Mapped requirement IDs | WP2-ID-002, WP2-ID-004, WP2-ID-022, WP2-ID-023, WP2-ID-027, WP2-SCHED-045, WP2-MODEL-023. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Execute attempts end to end; read every created identity record and join record; then rename storage locations and permute record orderings in a copy and re-read the lineage. |
 | Injected fault or clean path | None — clean path with a controlled relocation and reordering probe. |
@@ -519,7 +521,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a location the laboratory did not itself create or reserve under the exact expected evidence-root identity, empty or non-empty, is treated as an existing-root collision, never adopted or written into; that same-transaction creation is not treated as a collision; and that resume and recovery verify exact identity and provenance before acting on an existing location. |
-| Mapped requirement IDs | WP2-ISO-026, WP2-ISO-027, WP2-ISO-028, WP2-ISO-029, WP2-EVID-011. |
+| Mapped requirement IDs | WP2-ISO-004, WP2-ISO-026, WP2-ISO-027, WP2-ISO-028, WP2-ISO-029, WP2-EVID-011. |
 | Fixtures and setup | Synthetic registered-study fixture; prepared evidence corpus supplying pre-existing empty and non-empty locations. |
 | Controlled operation or observation | Present admissions whose expected root location already exists in each provenance state; drive a legitimate same-transaction creation; drive resume operations against verified and unverifiable locations. |
 | Injected fault or clean path | FLT-002 — output-root collision. |
@@ -535,7 +537,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that each of the seven WP2-ISO-030 conditions, presented separately, is refused rather than proceeded on; that every refusal is recorded as a distinguishable refusal identifying each condition met and such owning lineage as was demonstrated, stating that none was demonstrated where none was; and that no refusal deletes, overwrites, truncates, or renders unverifiable pre-existing or already-produced evidence. |
-| Mapped requirement IDs | WP2-ISO-030, WP2-ISO-031, WP2-ISO-032. |
+| Mapped requirement IDs | WP2-ISO-030, WP2-ISO-031, WP2-ISO-032, WP2-FAIL-001. |
 | Fixtures and setup | Synthetic registered-study fixture; prepared evidence corpus for the collision and ownership-conflict conditions. |
 | Controlled operation or observation | Present seven controlled operations, one per condition — duplicate identity, namespace collision, existing-root adoption, root-ownership conflict, stale-lease authority exercise, cross-lineage attribution, and lineage-less mutation — plus one operation meeting two conditions at once. |
 | Injected fault or clean path | FLT-002 — output-root collision, for the existing-root condition; the remaining conditions are controlled adversarial operations. |
@@ -551,7 +553,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every treatment-contributing configuration value resolves from the unit's own registered configuration and is recorded with its evidence, that no ambient value determines a treatment-bearing property unrecorded, and that an asset contributing to treatment, configuration, world state, stochastic inputs, or evidence is shared only content-addressed or version-pinned, read-only for the duration, and recorded in each sharing unit's evidence by exact identity or digest. |
-| Mapped requirement IDs | WP2-ISO-008, WP2-ISO-009, WP2-ISO-010. |
+| Mapped requirement IDs | WP2-ISO-004, WP2-ISO-008, WP2-ISO-009, WP2-ISO-010. |
 | Fixtures and setup | Two-study fixture; deterministic engine fixture; a version-pinned shared asset staged for both studies. |
 | Controlled operation or observation | Run units with differing registered configurations under identical ambient environments, and identical registered configurations under differing ambient environments; share the pinned asset; read each unit's evidence. |
 | Injected fault or clean path | None — clean path with controlled ambient variation. |
@@ -615,7 +617,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the five scalar status dimensions are separately recorded and the lineage-relation collection separately kept append-only, none combined or inferred from another; that every transition names its full WP2-LIFE-013 content including predecessor linkage; and that complete transition history is reconstructible from the records with predecessor linkage read, not inferred from order, and nothing overwritten or re-meant. |
-| Mapped requirement IDs | WP2-LIFE-003, WP2-LIFE-004, WP2-LIFE-013, WP2-LIFE-015, WP2-LIFE-016. |
+| Mapped requirement IDs | WP2-LIFE-003, WP2-LIFE-004, WP2-LIFE-013, WP2-LIFE-015, WP2-LIFE-016, WP2-LIFE-032. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Drive attempts through rich lifecycles; read every dimension separately; reconstruct history from records alone; permute record retrieval order and reconstruct again. |
 | Injected fault or clean path | None — clean path with a retrieval-order permutation probe. |
@@ -631,7 +633,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every recorded planned-run and execution-attempt value and transition conforms to the applicable specification Section 8.5 or 8.6 model entry in every governed status dimension — entry condition, permitted predecessors and successors, terminality, permitted recording authority, outcome effect, and minimum provenance — and that recorded values use the models' state and disposition names. |
-| Mapped requirement IDs | WP2-LIFE-001, WP2-LIFE-014; the dynamic half of WP2-LIFE-002. |
+| Mapped requirement IDs | WP2-LIFE-001, WP2-LIFE-002, WP2-LIFE-014. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Drive attempts and planned runs through every reachable model value in the fixture; read each transition against the applicable model entry clause by clause. |
 | Injected fault or clean path | None — clean path; illegal stimuli belong to CHK-036. |
@@ -647,7 +649,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a transition the model does not permit, a transition by an unpermitted authority, a transition that cannot demonstrate its predecessor revision or initial-recording status, and a transition without demonstrable minimum provenance are each refused; that each refusal is recorded distinguishably with the conditions met and demonstrated provenance; and that refusals preserve all prior records and evidence. |
-| Mapped requirement IDs | WP2-LIFE-029, WP2-LIFE-030, WP2-LIFE-031. |
+| Mapped requirement IDs | WP2-LIFE-014, WP2-LIFE-029, WP2-LIFE-030, WP2-LIFE-031. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Present each refusal condition separately as a controlled operation, plus one operation meeting two conditions. |
 | Injected fault or clean path | None — controlled illegal-transition operations; no environmental fault is injected. |
@@ -679,7 +681,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that successful finalization never by itself becomes authoritative acceptance; that an Authoritatively-accepted planned run names exactly one attempt whose finalization state is Finalization succeeded; that per-attempt finalization state is kept separate rather than shared; that the outcome record names either no attempt or exactly one; and that a never-accepted planned run remains fully represented with all attempts and dispositions. |
-| Mapped requirement IDs | WP2-LIFE-006, WP2-LIFE-007, WP2-LIFE-008, WP2-ID-009, WP2-ISO-019, WP2-SCHED-027. |
+| Mapped requirement IDs | WP2-ID-009, WP2-ISO-019, WP2-LIFE-006, WP2-LIFE-007, WP2-LIFE-008, WP2-SCHED-027. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Finalize attempts successfully without acceptance; accept one planned run's attempt through the authoritative-commit path; leave another run finalized but never accepted; read outcome and finalization records of all. |
 | Injected fault or clean path | None — clean path. |
@@ -695,7 +697,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a resume by itself admits nothing and changes no status or outcome; that any further attempt of a resumed or crashed planned run arrives only under the applicable registered replacement or continuation authority as a new attempt identity with its own root; that further physical executions are never recorded as retries, restarts, resumes, or continuations; that admission decisions record reason, policy identity and version, and authority; and that further attempts change no earlier attempt's records and never count as new sample units. |
-| Mapped requirement IDs | WP2-LIFE-024, WP2-LIFE-025, WP2-SCHED-007, WP2-SCHED-008, WP2-FAIL-028, WP2-FAIL-029, WP2-FAIL-030, WP2-FAIL-031. |
+| Mapped requirement IDs | WP2-LIFE-024, WP2-LIFE-025, WP2-SCHED-007, WP2-SCHED-008, WP2-SCHED-024, WP2-FAIL-001, WP2-FAIL-028, WP2-FAIL-029, WP2-FAIL-030, WP2-FAIL-031. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Resume planned runs with and without registered continuation authority; admit further attempts; read admission records, earlier-attempt records, and denominator surfaces. |
 | Injected fault or clean path | None — clean path with a controlled unauthorized-further-attempt operation. |
@@ -711,7 +713,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a registered replacement is admitted only under a preregistered replacement policy with typed reason and eligibility; that authorization and admission are distinct one-directional records, the authorization creating no attempt identity, root, or lineage record; that the replacement is an additional attempt of the same planned run whose lineage names the exact replaced attempt from the record, not from ordering or naming; that the replaced attempt and its evidence survive unchanged; and that eligibility, authorization, admission, execution, and acceptance remain five distinct decisions. |
-| Mapped requirement IDs | WP2-ID-010, WP2-ID-011, WP2-ID-012, WP2-LIFE-026, WP2-FAIL-032, WP2-FAIL-033, WP2-FAIL-034, WP2-FAIL-036, WP2-FAIL-045. |
+| Mapped requirement IDs | WP2-ID-010, WP2-ID-011, WP2-ID-012, WP2-LIFE-026, WP2-LIFE-032, WP2-FAIL-001, WP2-FAIL-032, WP2-FAIL-033, WP2-FAIL-034, WP2-FAIL-036, WP2-FAIL-045. |
 | Fixtures and setup | Synthetic registered-study fixture with a preregistered replacement policy; deterministic engine fixture. |
 | Controlled operation or observation | Drive the full replacement chain for a failed attempt; drive a second replacement replacing a replacement; inject a replacement path that erases or renames its predecessor and verify detection. |
 | Injected fault or clean path | FLT-020 — replacement that erases the original attempt. |
@@ -727,7 +729,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every cancellation is recorded at exactly one scope with authority, policy identity and version, reason, and affected units; that no cancellation is recorded at another scope or propagated to units its lineage does not place below it; that cancellation and cleanup act only within the owning unit and its recorded descendants; and that cancellation, cleanup, and post-commit cleanup never delete, truncate, overwrite, or render unverifiable sibling evidence, earlier attempts, terminal units, transition histories, authority records, accounting records, or exposure representations. |
-| Mapped requirement IDs | WP2-LIFE-027, WP2-LIFE-028, WP2-ISO-023, WP2-ISO-024, WP2-SCHED-034, WP2-FAIL-012, WP2-FAIL-022, WP2-FAIL-023, WP2-FAIL-025. |
+| Mapped requirement IDs | WP2-ISO-023, WP2-ISO-024, WP2-LIFE-027, WP2-LIFE-028, WP2-SCHED-034, WP2-FAIL-001, WP2-FAIL-012, WP2-FAIL-022, WP2-FAIL-023, WP2-FAIL-025. |
 | Fixtures and setup | Two-study fixture; deterministic engine fixture with sibling runs and attempts in mixed states. |
 | Controlled operation or observation | Issue cancellations at study, planned-run, and attempt scope; run cleanup after cancellation, failure, and commit; read affected-unit records and byte-compare sibling and terminal evidence before and after. |
 | Injected fault or clean path | None — clean path across all three scopes with sibling exposure. |
@@ -743,7 +745,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a behaviorally unfavorable, repetitive, incoherent, or otherwise poor outcome is recorded as an observed research outcome, attributed and preserved like any other; that it is never treated by itself as operational failure, artifact invalidity, replacement eligibility, or rerun authorization; and that no recorded class by itself derives membership in another class or any lifecycle, evidence, acceptance, or reporting consequence. |
-| Mapped requirement IDs | WP2-FAIL-006, WP2-FAIL-007, WP2-FAIL-008, WP2-FAIL-035. |
+| Mapped requirement IDs | WP2-FAIL-001, WP2-FAIL-006, WP2-FAIL-007, WP2-FAIL-008, WP2-FAIL-035. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture scripted to produce a behaviorally poor trajectory. |
 | Controlled operation or observation | Produce the poor trajectory; then present replacement-eligibility, rerun, and invalidity operations grounded only on that outcome and verify their refusal. |
 | Injected fault or clean path | FLT-044 — behaviorally unfavorable output misclassified as retry or replacement eligibility. |
@@ -759,7 +761,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that cause, observed class, lifecycle consequence, evidence consequence, and research disposition are five separately recorded facts, never collapsed; that multi-record events name their shared triggering identity; that every drawn consequence flows through an explicit disposition record naming its policy or stating absence; and that materiality classifications name a registered materiality policy identity and version never adopted or applied retroactively after observing favorability. |
-| Mapped requirement IDs | WP2-FAIL-002, WP2-FAIL-003, WP2-FAIL-004, WP2-FAIL-009, WP2-FAIL-010, WP2-FAIL-011. |
+| Mapped requirement IDs | WP2-FAIL-001, WP2-FAIL-002, WP2-FAIL-003, WP2-FAIL-004, WP2-FAIL-005, WP2-FAIL-009, WP2-FAIL-010, WP2-FAIL-011. |
 | Fixtures and setup | Synthetic registered-study fixture with a registered materiality policy; deterministic engine fixture producing classified incidents. |
 | Controlled operation or observation | Produce incidents spanning several register types; read the five facts, trigger linkage, and disposition records; present a materiality reclassification grounded on observed favorability and verify refusal. |
 | Injected fault or clean path | None — controlled incident production and a controlled retroactive-materiality operation. |
@@ -775,7 +777,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the seven operations of specification Section 14.6 — transport or delivery retry, further provider attempt under registered policy, process restart, recovery over already-produced evidence, resume under verified identity, admission of a new attempt, and registered replacement — are recorded, reported, counted, and dispositioned as seven distinct operations, none interchangeable, extending WP2-SCOPE-006's recording distinctions. |
-| Mapped requirement IDs | WP2-SCOPE-006, WP2-FAIL-016, WP2-FAIL-017, WP2-FAIL-018, WP2-FAIL-019, WP2-FAIL-020, WP2-FAIL-021. |
+| Mapped requirement IDs | WP2-SCOPE-006, WP2-SCHED-008, WP2-FAIL-001, WP2-FAIL-016, WP2-FAIL-017, WP2-FAIL-018, WP2-FAIL-019, WP2-FAIL-020, WP2-FAIL-021. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; scripted fake-provider fixture for the two retry kinds; crash-and-restart harness for the restart member. |
 | Controlled operation or observation | Drive each of the seven operations at least once in one study; read every record, report, and count that touches them; verify no interrupted execution was continued in place. |
 | Injected fault or clean path | None — clean path across all seven operations. |
@@ -791,7 +793,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the failure of one execution attempt is never recorded, propagated, or reported as, by itself, the failure or invalidity of its planned run, its study, or any sibling unit; that the failure of one planned run never by itself establishes study invalidity; and that failure handling erases no sibling evidence, terminates no unrelated isolation unit, merges no budget or evidence lineage, and causes no unit's result to be adopted by another. |
-| Mapped requirement IDs | WP2-FAIL-015, WP2-FAIL-037, WP2-FAIL-038. |
+| Mapped requirement IDs | WP2-FAIL-001, WP2-FAIL-012, WP2-FAIL-015, WP2-FAIL-037, WP2-FAIL-038. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture with sibling runs and attempts. |
 | Controlled operation or observation | Fail one attempt and, separately, exhaust one planned run's attempts in failure; run the failure-handling paths; read every status, disposition, and reporting surface of the parents and siblings and byte-compare sibling evidence and lineage across the handling. |
 | Injected fault or clean path | None — controlled deterministic failures. |
@@ -807,7 +809,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that study invalidity is recorded only as the explicit, versioned, evidence-linked decision of the specification Section 14.2 register, decided by the registered authority; that the decision record identifies its evidence, rule identity and version, claim boundary, and diagnostic-continuation ruling; that an invalid study remains represented and auditable; that no invalidity decision authorizes evidence deletion, history erasure, or favorable-result reruns; and that operational closure and invalidity remain co-representable, neither overriding the other. |
-| Mapped requirement IDs | WP2-FAIL-039, WP2-FAIL-042, WP2-FAIL-043, WP2-FAIL-044, WP2-AGG-042, WP2-AGG-043. |
+| Mapped requirement IDs | WP2-FAIL-001, WP2-FAIL-039, WP2-FAIL-042, WP2-FAIL-043, WP2-FAIL-044, WP2-AGG-042, WP2-AGG-043. |
 | Fixtures and setup | Synthetic registered-study fixture with registered validity rules; deterministic engine fixture. |
 | Controlled operation or observation | Drive a study to operational closure; record an invalidity decision; then present evidence-deletion and further-admission operations grounded on the invalidity, and an operational-success operation purporting to override it. |
 | Injected fault or clean path | None — controlled invalidity decision and controlled adversarial follow-on operations. |
@@ -887,7 +889,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every grant, renewal, revocation, release, supersession, and correction is an individually attributable event with a never-reused identity naming its grant and predecessor event — an issuance naming its created grant and predecessor absence, a correction naming both its current predecessor and, distinctly, the corrected record; that every grant record carries the full WP2-SCHED-017 identification; that at most one grant is current per attempt at one logical authority point, currentness read from recorded authority facts rather than delivery, possession, or arrival; and that grant records conform to every record-model clause in operation. |
-| Mapped requirement IDs | WP2-SCHED-014, WP2-SCHED-016, WP2-SCHED-017; the dynamic half of WP2-SCHED-051. |
+| Mapped requirement IDs | WP2-SCHED-014, WP2-SCHED-016, WP2-SCHED-017, WP2-SCHED-051. |
 | Fixtures and setup | Synthetic registered-study fixture. |
 | Controlled operation or observation | Drive full grant lifecycles including renewal, revocation, release, supersession, and correction; read every event's linkage; probe currentness reads against reordered record retrieval. |
 | Injected fault or clean path | None — clean path across all authority-event kinds. |
@@ -903,7 +905,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that no attempt is considered for authoritative acceptance without recorded Completed operational state, Finalization-succeeded finalization state, and matching identity and lineage; that the acceptance operation verifies everything WP2-SCHED-026 enumerates before recording; that every acceptance record names both the current authoritative-commit authority and the accepted attempt's complete relevant assignment-authority history establishing unbroken succession from Starting to Finalization succeeded, ownership never conferring commit authority; and that losing, late, duplicate, stale, cancelled, and superseded results are preserved with distinguishable non-authoritative dispositions. |
-| Mapped requirement IDs | WP2-SCHED-025, WP2-SCHED-026, WP2-SCHED-029, WP2-SCHED-053. |
+| Mapped requirement IDs | WP2-SCHED-025, WP2-SCHED-026, WP2-SCHED-029, WP2-SCHED-053, WP2-FAIL-012. |
 | Fixtures and setup | Synthetic registered-study fixture with registered authoritative-commit policy; deterministic engine fixture. |
 | Controlled operation or observation | Drive clean acceptances; present acceptance operations for non-Completed, non-finalized, mismatched-lineage, cancelled, and already-accepted subjects; deliver late and duplicate results; read acceptance and disposition records. |
 | Injected fault or clean path | None — controlled ineligible-acceptance operations; racing variants belong to CHK-073. |
@@ -1031,7 +1033,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that credential material and raw provider-session state held for one study, planned run, attempt, laboratory worker, or provider session never becomes available to another through shared infrastructure; that secret material available to one isolation unit never reaches another through shared process, store, or connection; and that any one-credential-many-units use is confined to a versioned, identified provider-dispatch secret boundary that withholds the credential and raw session state from every served unit while preserving complete per-unit attribution. |
-| Mapped requirement IDs | WP2-SEC-005, WP2-SEC-006, WP2-ISO-025. |
+| Mapped requirement IDs | WP2-ISO-025, WP2-SEC-005, WP2-SEC-006. |
 | Fixtures and setup | Two-study fixture; synthetic credential fixture; scripted fake-provider fixture behind a fixture provider-dispatch secret boundary. |
 | Controlled operation or observation | Serve both studies through the shared boundary; sweep every unit-accessible surface for the synthetic material; read per-unit request, usage, project-scope, and treatment attribution. |
 | Injected fault or clean path | None — clean path with shared-boundary service. |
@@ -1047,7 +1049,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every nonsecret credential reference stays stable across every record the Sections 10 and 12 contracts join through it; that no reference reveals, contains, or permits reconstruction of the secret it names; and that issuance of a secret-derived reference and every mapping of a reference to secret material remain within the provider-dispatch secret boundary, the reference itself remaining usable outside. |
-| Mapped requirement IDs | WP2-SEC-007, WP2-SEC-008, WP2-SEC-009. |
+| Mapped requirement IDs | WP2-SCHED-047, WP2-SEC-007, WP2-SEC-008, WP2-SEC-009. |
 | Fixtures and setup | Synthetic credential fixture; scripted fake-provider fixture; record-audit corpus for reference-form audit. |
 | Controlled operation or observation | Execute joined request, usage, and provenance records through one reference; audit the reference's form against the synthetic material; drive a reference-resolution operation and locate where it executes. |
 | Injected fault or clean path | None — clean path. |
@@ -1095,7 +1097,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every study-membership-and-completion ledger derives from the admitted registration and recorded identities, lineage, and dispositions — never from discovered files, layout, ordering, or successful outcomes; that it includes every registered planned run including zero-attempt runs, every admitted attempt of every kind, exact attempt-to-run and replacement relations, every interpretation-required disposition, and every expected study-level record and root; that per-run it records zero-or-more attempts and at most one accepted outcome; that missingness reasons are exact without denominator removal; and that no undispositioned unit disappears from any surface for lack of evidence or success. |
-| Mapped requirement IDs | WP2-AGG-008, WP2-AGG-009, WP2-AGG-013, WP2-AGG-014, WP2-AGG-017. |
+| Mapped requirement IDs | WP2-AGG-001, WP2-AGG-007, WP2-AGG-008, WP2-AGG-009, WP2-AGG-013, WP2-AGG-014, WP2-AGG-017. |
 | Fixtures and setup | Synthetic registered-study fixture populated with zero-attempt runs, replaced attempts, failures, cancellations, and one undispositioned unit; deterministic engine fixture. |
 | Controlled operation or observation | Derive the ledger; delete a discovered-file decoy and permute storage in a copy; re-derive and compare; read membership, relations, missingness reasons, and the undispositioned unit's presence. |
 | Injected fault or clean path | None — clean path with a storage-permutation probe. |
@@ -1111,7 +1113,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the registered sample denominator is reported as the ledger's count of registered planned runs and nothing else, that execution attempts are reported in a separate operational denominator never merged with or substituted for it, and that a registered replacement never increases the registered denominator. |
-| Mapped requirement IDs | WP2-AGG-010, WP2-AGG-011, WP2-AGG-012. |
+| Mapped requirement IDs | WP2-FAIL-031, WP2-AGG-001, WP2-AGG-010, WP2-AGG-011, WP2-AGG-012. |
 | Fixtures and setup | Synthetic registered-study fixture with replacements and further attempts present. |
 | Controlled operation or observation | Read every denominator-bearing report before and after admitting replacements and further attempts. |
 | Injected fault or clean path | None — clean path. |
@@ -1127,7 +1129,7 @@ The checks of this class drive a candidate implementation through controlled, re
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the seven completion dimensions are separately recorded with explicit initial unresolved results recorded at ledger derivation as initializations; that no dimension is combined with, inferred from, or standing for another or for whole-study completion; that tension states — operationally closed yet unresolved elsewhere, fully dispositioned yet invalid — remain representable with every result current; that aggregation production resolves no other dimension; and that no dimension is declared reached merely because desired success counts exist. |
-| Mapped requirement IDs | WP2-AGG-002, WP2-AGG-003, WP2-AGG-005, WP2-AGG-006, WP2-AGG-015; racing recordings belong to CHK-082. |
+| Mapped requirement IDs | WP2-AGG-001, WP2-AGG-002, WP2-AGG-003, WP2-AGG-005, WP2-AGG-006, WP2-AGG-015. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture driving studies into both tension states. |
 | Controlled operation or observation | Derive ledgers and read initial results; drive the tension states; produce an aggregate; present a success-count-based reached declaration and verify refusal. |
 | Injected fault or clean path | None — clean path with a controlled count-based declaration. |
@@ -1163,7 +1165,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the admission boundary that two competing admissions, or two competing initial grant issuances, for one proposed attempt never produce a partially admitted attempt or an orphan current grant, the winner's attempt identity, root identity, owner relation, initial status recordings, initial collection state, and exactly one backing grant becoming authoritative together or not at all, with every losing, stale, conflicting, or incomplete admission preserved as a refusal or rejection carrying its proposed identities while creating nothing. |
-| Mapped requirement IDs | WP2-SCHED-013; the admission-boundary clauses of WP2-LIFE-009 and WP2-EVID-007. |
+| Mapped requirement IDs | WP2-LIFE-009, WP2-SCHED-013, WP2-EVID-007, WP2-FAIL-045. |
 | Fixtures and setup | Synthetic registered-study fixture; controlled-interleaving harness at the admission boundary. |
 | Controlled operation or observation | Enumerate the material interleavings of two admissions for one proposed attempt and of two initial issuances, including interruption between constituent records. |
 | Injected fault or clean path | FLT-003 — two laboratory workers claiming one unit; FLT-025 — partial attempt admission. |
@@ -1195,7 +1197,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the coherence decision that entry into Finalizing and entry into Finalization in progress become current together or not at all sharing one triggering identity; that resolution out of Finalizing accepts exactly one coherent compound outcome — Completed with its named Finalization-succeeded result, or Failed or Cancelled with the generic failed result; that no accepted success coexists with Failed or Cancelled; and that every unaccepted competing pair member is preserved supplying a current value in neither dimension. |
-| Mapped requirement IDs | WP2-LIFE-033; the co-acceptance clauses of WP2-EVID-014 and WP2-EVID-037. |
+| Mapped requirement IDs | WP2-LIFE-033, WP2-EVID-014, WP2-EVID-037. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; controlled-interleaving harness at the coherence boundary. |
 | Controlled operation or observation | Enumerate races between a completion pair and a failure or cancellation pair, interruptions between the two entry transitions, and success recordings racing failure operations. |
 | Injected fault or clean path | FLT-026 — partial finalization or mismatched operational/finalization results. |
@@ -1211,7 +1213,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the grant authority boundary that two operations succeeding one current authority event, two issuances for one proposed or admitted attempt, and two corrections of one grant record or event never both become current; that a correction prevails only while its named current predecessor remains current, the corrected record never standing in for it; and that every losing or stale grant operation is preserved as the fully named rejection WP2-SCHED-052 states, destroying no grant, event, status, or evidence. |
-| Mapped requirement IDs | WP2-SCHED-052, WP2-SCHED-014, WP2-SCHED-016. |
+| Mapped requirement IDs | WP2-SCHED-014, WP2-SCHED-016, WP2-SCHED-052. |
 | Fixtures and setup | Synthetic registered-study fixture; controlled-interleaving harness at the grant boundary. |
 | Controlled operation or observation | Enumerate renewal-versus-revocation races from one event, dual issuance races, dual correction races, and a correction racing the advancement of its predecessor. |
 | Injected fault or clean path | FLT-023 — competing initial authority or credential issuance. |
@@ -1227,7 +1229,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a laboratory worker whose grant or lease has expired, been revoked, or been superseded cannot, by operations in exercise of it, mutate authoritative-outcome state, mutate any status dimension, append lineage-relation records, or make its output authoritative, and that output actually produced under the stale authority remains attributable to laboratory worker, grant or lease, and attempt, preserved for later disposition. |
-| Mapped requirement IDs | WP2-SCHED-021, WP2-SCHED-022, WP2-ISO-020, WP2-ISO-021. |
+| Mapped requirement IDs | WP2-ISO-020, WP2-ISO-021, WP2-SCHED-021, WP2-SCHED-022. |
 | Fixtures and setup | Synthetic registered-study fixture; controlled-interleaving harness expiring, revoking, and superseding grants mid-operation. |
 | Controlled operation or observation | Let a laboratory worker produce output, then expire, revoke, or supersede its authority and drive its late mutation and commit operations at each staleness kind. |
 | Injected fault or clean path | FLT-004 — stale or expired lease. |
@@ -1243,7 +1245,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the authoritative-commit boundary that no interleaving of two acceptance operations for one planned run records two authoritative outcomes or one partially recorded outcome, and that the boundary is atomic or equivalently safe with the loser preserved. |
-| Mapped requirement IDs | WP2-SCHED-028, WP2-SCHED-030; the acceptance-uniqueness clause of WP2-ID-009. |
+| Mapped requirement IDs | WP2-ID-009, WP2-SCHED-028, WP2-SCHED-030. |
 | Fixtures and setup | Synthetic registered-study fixture with two eligible attempts of one planned run under a plural-attempt policy; controlled-interleaving harness at the commit boundary. |
 | Controlled operation or observation | Enumerate interleavings of two acceptance operations, including interruption between the outcome record's constituents, and a stale-commit-authority variant. |
 | Injected fault or clean path | FLT-024 — stale authority during a state transition, for the stale-commit variant; the dual-acceptance interleaving itself is forced with both operations well-formed. |
@@ -1307,7 +1309,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the authorization boundary that no interleaving of concurrent authorization operations oversubscribes any applicable scope's cap or authorizes a dispatch against some applicable scopes and not others, arrival order deciding nothing, with every losing or stale authorization preserved as the fully named rejection WP2-MODEL-036 states, destroying no authorization, usage, settlement, or exposure record. |
-| Mapped requirement IDs | WP2-MODEL-036 — its multi-scope race clauses; single-operation budget conduct belongs to CHK-103. |
+| Mapped requirement IDs | WP2-MODEL-036. |
 | Fixtures and setup | Synthetic registered-study fixture with overlapping multi-scope budgets near cap; controlled-interleaving harness. |
 | Controlled operation or observation | Enumerate concurrent authorizations whose combined demand exceeds one shared scope's cap, spanning distinct scope subsets, in both orders. |
 | Injected fault or clean path | FLT-032 — budget authorization race or unresolved exposure. |
@@ -1339,7 +1341,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the intake-closure boundary that at most one ordinary evidence-intake closure becomes current per attempt, and that a write racing the boundary is exactly one of: included in the closed snapshot, refused through a distinguishable preserved refusal naming the write and the boundary, or preserved outside the boundary as a post-intake fact — never ambiguously omitted — with every losing or superseded closure operation preserved. |
-| Mapped requirement IDs | WP2-EVID-071; the ordering clause of WP2-EVID-030. |
+| Mapped requirement IDs | WP2-EVID-030, WP2-EVID-071. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; controlled-interleaving harness at the closure boundary. |
 | Controlled operation or observation | Enumerate writes landing before, astride, and after the closure acceptance, and two competing closure operations for one attempt. |
 | Injected fault or clean path | FLT-027 — evidence write racing ordinary intake closure. |
@@ -1355,7 +1357,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify under interleaved competing finalization operations that at most one current successful finalization result exists per attempt; that every interleaved validation, derived artifact, finalization record, and candidate completion record in the still-open root remains attributable to its producing operation's never-reused identity; that the winner's validated snapshot and output membership are coherent and fully committed before its success is current, the completion record written last; and that losing, stale, interrupted, and rejected operations' outputs stay preserved and distinguishable without joining the winner's required outputs or changing its validated snapshot. |
-| Mapped requirement IDs | WP2-EVID-036, WP2-EVID-072; the interleaving-facing clauses of WP2-EVID-034 and WP2-EVID-035. |
+| Mapped requirement IDs | WP2-EVID-034, WP2-EVID-035, WP2-EVID-036, WP2-EVID-072. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; controlled-interleaving harness driving two finalization operations over one attempt. |
 | Controlled operation or observation | Enumerate interleavings of two finalizers' validations, artifact writes, and completion attempts, including a stale-intake-closure finalizer. |
 | Injected fault or clean path | FLT-028 — interleaved outputs from competing finalizers. |
@@ -1387,7 +1389,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify at the completion-dimension boundary that at most one initial result per dimension per study and at most one successor per current result become current under competing recordings, currentness read through supersession and correction linkage rather than arrival, with every losing or stale recording preserved as the named rejection WP2-AGG-004 states. |
-| Mapped requirement IDs | WP2-AGG-004; the race-facing clauses of WP2-AGG-002. |
+| Mapped requirement IDs | WP2-AGG-001, WP2-AGG-002, WP2-AGG-004. |
 | Fixtures and setup | Synthetic registered-study fixture; controlled-interleaving harness at the dimension-recording boundary. |
 | Controlled operation or observation | Enumerate dual initial recordings, dual successors of one current result, and dual corrections of one record, in both orders. |
 | Injected fault or clean path | None — forced interleavings of well-formed recordings; no catalogued environmental fault applies. |
@@ -1403,7 +1405,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify under genuinely concurrent independent runs that each retains its own identity, configuration, mutable state, stochastic state, budgets, timing, and replay lineage with per-attempt failure history and roots; that shared infrastructure merges nothing; that shared-service records partition to exactly one owning unit; that no run or attempt reads, overwrites, finalizes, cancels, cleans up, or adopts another's mutable state or evidence; that no two attempts of one planned run continue one another; that no mutable in-memory state crosses units; and that every unit writes only its own bound namespace. |
-| Mapped requirement IDs | WP2-SCOPE-001, WP2-ISO-001, WP2-ISO-002, WP2-ISO-003, WP2-ISO-004, WP2-ISO-005, WP2-ISO-006, WP2-ISO-007. |
+| Mapped requirement IDs | WP2-SCOPE-001, WP2-SCOPE-003, WP2-ISO-001, WP2-ISO-002, WP2-ISO-003, WP2-ISO-004, WP2-ISO-005, WP2-ISO-006, WP2-ISO-007. |
 | Fixtures and setup | Synthetic registered-study fixture with several concurrent independent runs; deterministic engine fixture; controlled-interleaving harness injecting cross-unit access operations. |
 | Controlled operation or observation | Run concurrent units to completion; inject cross-unit read, write, adopt, finalize, and cleanup operations at enumerated points; compare every unit's records and state against its isolated-execution baseline. |
 | Injected fault or clean path | FLT-021 — cross-run mutable-state contamination. |
@@ -1435,7 +1437,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that resource sharing and throughput measures relax, suspend, defer, or make conditional no Section 7 isolation requirement, and that isolation, attribution, preservation of failed or interrupted attempts, logical-time integrity, replay verification, and evidence completeness are not traded for execution throughput. |
-| Mapped requirement IDs | WP2-ISO-033, WP2-SCOPE-013. |
+| Mapped requirement IDs | WP2-SCOPE-013, WP2-ISO-033. |
 | Fixtures and setup | Synthetic registered-study fixture under a registered high-contention concurrency profile; deterministic engine fixture; controlled-interleaving harness. |
 | Controlled operation or observation | Re-drive the contamination, refusal, and preservation probes of CHK-083 and CHK-029 under the high-contention profile and compare enforcement outcomes against low-contention runs. |
 | Injected fault or clean path | FLT-021 — cross-run mutable-state contamination, re-injected under contention. |
@@ -1451,7 +1453,7 @@ The checks of this class force or systematically enumerate the material interlea
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify across authority boundaries that reversing the wall-clock presentation order of competing operations never changes which prevails or how records join — no wall-clock tie-break between competing operations, no wall-clock causal relation or identity join between isolation units or across hosts, no temporal-proximity membership in a correlated-failure set, and no time-derived aggregation-source membership. |
-| Mapped requirement IDs | WP2-SCHED-033, WP2-ISO-014, WP2-TIME-016, WP2-FAIL-041, WP2-AGG-023. |
+| Mapped requirement IDs | WP2-ISO-014, WP2-SCHED-033, WP2-TIME-016, WP2-FAIL-041, WP2-AGG-023. |
 | Fixtures and setup | Synthetic registered-study fixture; controlled-interleaving harness replaying identical competing scenarios in mirrored presentation orders across the commit, transition, resolution, and recording boundaries. |
 | Controlled operation or observation | Run each mirrored pair; compare prevailing operations, joins, affected-set memberships, and source-set memberships between the mirror runs. |
 | Injected fault or clean path | None — mirrored forced interleavings of well-formed operations. |
@@ -1487,7 +1489,7 @@ The checks of this class terminate and restart processes, laboratory-worker exec
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that an attempt interrupted mid-execution is never continued, revived, or reopened in place; that it receives a terminal disposition preserving identity, history, and produced evidence; that the crash by itself transfers no attempt, root, or authority to another laboratory worker; and that any further physical execution arrives as a separately admitted attempt. |
-| Mapped requirement IDs | WP2-LIFE-020, WP2-LIFE-021, WP2-SCHED-023, WP2-SCHED-024, WP2-FAIL-021, WP2-ISO-005. |
+| Mapped requirement IDs | WP2-ISO-005, WP2-LIFE-020, WP2-LIFE-021, WP2-SCHED-023, WP2-SCHED-024, WP2-FAIL-021. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; crash-and-restart harness killing the laboratory worker mid-execution. |
 | Controlled operation or observation | Crash mid-execution; restart the agent; drive the further-execution path; read the interrupted attempt, transfer surfaces, and the new admission. |
 | Injected fault or clean path | FLT-006 — laboratory-worker crash during execution. |
@@ -1503,7 +1505,7 @@ The checks of this class terminate and restart processes, laboratory-worker exec
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a finalization operation interrupted by a crash is preserved with a recorded, distinguishable disposition, its recorded output membership being the membership observed at disposition and stated as such; that no current successful finalization result exists from partially committed artifacts; and that a later finalization operation is a distinct operation identity whose outputs never absorb the interrupted one's. |
-| Mapped requirement IDs | WP2-EVID-036, WP2-EVID-072; the compound-outcome clause of WP2-LIFE-033. |
+| Mapped requirement IDs | WP2-LIFE-033, WP2-EVID-036, WP2-EVID-072. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; crash-and-restart harness killing the finalizer between artifact writes and completion. |
 | Controlled operation or observation | Crash inside finalization at enumerated points; restart; drive the subsequent finalization; read operation identities, dispositions, memberships, and current results. |
 | Injected fault or clean path | FLT-007 — laboratory-worker crash during finalization. |
@@ -1519,7 +1521,7 @@ The checks of this class terminate and restart processes, laboratory-worker exec
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that an orchestrator restart by itself changes no recorded status in any dimension; that resumption reconstructs every affected unit's status from durable, identity-matched records rather than process memory, ordering, identifier shape, or wall-clock proximity; and that the crash or silence of the orchestrator transfers nothing by itself. |
-| Mapped requirement IDs | WP2-LIFE-018, WP2-LIFE-019, WP2-SCHED-023. |
+| Mapped requirement IDs | WP2-LIFE-018, WP2-LIFE-019, WP2-SCHED-023, WP2-FAIL-017. |
 | Fixtures and setup | Synthetic registered-study fixture with units in every fixture-reachable state; crash-and-restart harness restarting the orchestrator; a storage-permutation probe. |
 | Controlled operation or observation | Snapshot all statuses; restart the orchestrator with permuted record retrieval; compare reconstructed statuses to the snapshot. |
 | Injected fault or clean path | FLT-008 — orchestrator crash and restart. |
@@ -1567,7 +1569,7 @@ The checks of this class terminate and restart processes, laboratory-worker exec
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that recovery and completion operations over already-produced evidence — finalization, inventory, sealing, verification, packaging — proceed only under exact verified identity and provenance of the evidence and unit concerned and only under authority still valid for the operation, and that re-entry into a study or planned-run workflow verifies identity and provenance before acting. |
-| Mapped requirement IDs | WP2-ISO-029, WP2-FAIL-020, WP2-LIFE-019. |
+| Mapped requirement IDs | WP2-ISO-029, WP2-LIFE-019, WP2-FAIL-020. |
 | Fixtures and setup | Prepared evidence corpus including a mismatched-identity decoy root; crash-and-restart harness; synthetic registered-study fixture. |
 | Controlled operation or observation | Crash mid-packaging; drive recovery against the correct root and against the decoy; drive recovery under expired authority. |
 | Injected fault or clean path | FLT-006 — laboratory-worker crash during execution, as the interruption source; FLT-002 — output-root collision, for the decoy variant. |
@@ -1587,7 +1589,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that each occurring stage event of the fourteen is recorded as a distinct, separately attributable event; that provider completion, local receipt, validation, and simulation acceptance are never collapsed and the three lifecycle layers never merged into one progression; that a provider attempt's terminal outcome never stands as the logical request's resolution by itself; that a rejected response resolves the request only as the registered retry or fallback policy provides; and that a no-call resolution records reason and deciding authority over a request with zero dispatches and zero provider attempts. |
-| Mapped requirement IDs | WP2-MODEL-002, WP2-MODEL-003, WP2-MODEL-004, WP2-MODEL-005, WP2-MODEL-016. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-002, WP2-MODEL-003, WP2-MODEL-004, WP2-MODEL-005, WP2-MODEL-016. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; scripted fake-provider fixture producing every scriptable stage event. |
 | Controlled operation or observation | Drive requests through success, rejection, timeout, supersession, fallback, retry, cancellation, and no-call paths; read every stage event, layer state, and resolution record. |
 | Injected fault or clean path | None — scripted clean and rejection paths; racing variants belong to CHK-075 and CHK-076. |
@@ -1603,7 +1605,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every logical request exists as a recorded, identified request before any dispatch or provider attempt; that request and content identities are never reused for different content, identical semantic content remaining distinct bindings; that the three layers of WP2-MODEL-053 — binding record, content identity or digest, and per-attempt provider-facing rendering identity — are distinct, the rendering identity immutable for its exact rendered content and shared only by exactly identical renderings; and that every dispatch and provider attempt names its one logical request and every response or failure names exactly one producing attempt. |
-| Mapped requirement IDs | WP2-MODEL-006, WP2-MODEL-007, WP2-MODEL-008, WP2-MODEL-009, WP2-MODEL-053. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-006, WP2-MODEL-007, WP2-MODEL-008, WP2-MODEL-009, WP2-MODEL-053. |
 | Fixtures and setup | Synthetic registered-study fixture; scripted fake-provider fixture; two requests with identical semantic content and one fallback that changes rendering. |
 | Controlled operation or observation | Drive requests including the identical-content pair and the rendering-changing fallback; read the three-layer records, reuse behavior, and naming chains. |
 | Injected fault or clean path | None — clean path with controlled identical-content and changed-rendering variants. |
@@ -1619,7 +1621,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every response validation names its exact response, producing attempt, rendering identity, request specification, policy identity and version, verdict, and validating authority; that every simulation acceptance names its validated response, deciding episode, and complete validation basis with resolved policy-level verdict; that no response is accepted on an empty, missing, unsuccessful, unresolved, contradictory, misattributed, or wrong-policy basis; and that acceptance is an engine-owned resolution never inferred from provider success, receipt, validation, or their combination. |
-| Mapped requirement IDs | WP2-MODEL-010, WP2-MODEL-011, WP2-MODEL-013, WP2-MODEL-054. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-010, WP2-MODEL-011, WP2-MODEL-013, WP2-MODEL-054. |
 | Fixtures and setup | Synthetic registered-study fixture with a registered validation policy; deterministic engine fixture; scripted fake-provider fixture. |
 | Controlled operation or observation | Drive validated acceptances; then present acceptance operations carrying each defective basis kind — empty, missing, failed, unresolved, contradictory, misattributed, and wrong-policy — and verify refusal. |
 | Injected fault or clean path | None — controlled defective-basis acceptance operations. |
@@ -1635,7 +1637,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every request-path record is attributable through explicitly recorded lineage to every applicable WP2-MODEL-019 element — study through budget scopes — naming each that applies and stating absences; that requested, configured provider, configured serving-provider, route, observed upstream, and returned-model identities stay six separately recorded identities, none conflated with decision authority; and that a misattributed record is detected and refused rather than absorbed. |
-| Mapped requirement IDs | WP2-MODEL-019, WP2-MODEL-020, WP2-ID-016, WP2-SCOPE-009. |
+| Mapped requirement IDs | WP2-SCOPE-009, WP2-ID-016, WP2-MODEL-001, WP2-MODEL-019, WP2-MODEL-020. |
 | Fixtures and setup | Two-study fixture; scripted fake-provider fixture; controlled misattribution operations. |
 | Controlled operation or observation | Drive attributed traffic for both studies; walk complete lineage chains from every record kind; present records carrying another unit's lineage and verify refusal. |
 | Injected fault or clean path | FLT-011 — request misattribution. |
@@ -1651,7 +1653,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a response arriving after timeout, supersession, cancellation, or another authoritative resolution remains preserved and attributable to its attempt and request — through the typed nonsecret incident path where Section 16 refuses it persistence — and that such a response never silently alters simulation state, becomes accepted, or changes any recorded resolution, every non-authoritative response and resolution operation keeping a distinguishable disposition. |
-| Mapped requirement IDs | WP2-MODEL-014, WP2-MODEL-015, WP2-MODEL-032. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-014, WP2-MODEL-015, WP2-MODEL-032. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; scripted fake-provider fixture delivering responses after each terminal condition. |
 | Controlled operation or observation | Script late arrivals after timeout, supersession, cancellation, and resolution; compare simulation state and resolutions before and after each arrival; read dispositions. |
 | Injected fault or clean path | FLT-010 — late response after timeout or cancellation. |
@@ -1667,7 +1669,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a duplicate delivery of one request creates no second request, specification, or identity; that every further presentation receives exactly one current typed disposition of the WP2-MODEL-055 kinds under the named policy; and that an idempotent replay of a resolved request with matching content is answered from the recorded accepted result with no further attempt, charge, or resolution. |
-| Mapped requirement IDs | WP2-MODEL-024, WP2-MODEL-025, WP2-MODEL-055. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-024, WP2-MODEL-025, WP2-MODEL-055. |
 | Fixtures and setup | Synthetic registered-study fixture with a registered presentation-disposition policy; scripted fake-provider fixture. |
 | Controlled operation or observation | Present duplicates before and after resolution; drive each policy-authorized disposition kind; count attempts, charges, and resolutions per request. |
 | Injected fault or clean path | FLT-030 — matching duplicate presentation while unresolved; racing variants belong to CHK-076. |
@@ -1683,7 +1685,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a presentation of an already-known request identity with conflicting content is refused as a typed identity/content conflict preserving both content identities — recorded and conflicting — never answered, merged, or dispatched. |
-| Mapped requirement IDs | WP2-MODEL-026. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-026. |
 | Fixtures and setup | Synthetic registered-study fixture; scripted fake-provider fixture. |
 | Controlled operation or observation | Present conflicting-content duplicates against unresolved and resolved requests; read refusal records and dispatch counts. |
 | Injected fault or clean path | FLT-029 — conflicting duplicate request identity/content. |
@@ -1699,7 +1701,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a transport or delivery retry retains request identity and specification, arises for an unresolved matching presentation only as the policy-authorized disposition, and receives its own dispatch record when dispatched; that a further provider call is a distinct provider attempt under a named registered retry or fallback policy, recorded distinguishably from transport retries; that a new decision or materially changed request receives a new request identity; and that neither retry kind is dispositioned as the other or as a new cognitive decision. |
-| Mapped requirement IDs | WP2-MODEL-027, WP2-MODEL-028, WP2-MODEL-029, WP2-FAIL-018, WP2-FAIL-019. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-027, WP2-MODEL-028, WP2-MODEL-029, WP2-FAIL-018, WP2-FAIL-019. |
 | Fixtures and setup | Synthetic registered-study fixture with registered retry and fallback policies; scripted fake-provider fixture failing transport and provider layers separately. |
 | Controlled operation or observation | Script transport failures, provider failures, and a materially changed re-request; read retry lineage, attempt identities, and dispositions for each. |
 | Injected fault or clean path | FLT-031 — transport retry versus provider retry confusion. |
@@ -1715,7 +1717,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a fallback preserves the originating request only while serving the same registered cognitive operation, its lineage naming every changed model, provider, serving-provider, route, prompt, context, and policy identity and any changed rendering identity; that fallbacks and retries conceal no unregistered treatment change; and that a fallback proceeds only where the registered policy and every applicable budget scope's remaining authorized capacity authorize it. |
-| Mapped requirement IDs | WP2-MODEL-030, WP2-MODEL-031, WP2-MODEL-047. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-030, WP2-MODEL-031, WP2-MODEL-047. |
 | Fixtures and setup | Synthetic registered-study fixture with fallback policy and constrained budget scopes; scripted fake-provider fixture forcing fallback. |
 | Controlled operation or observation | Force fallbacks with changed identities; force one fallback against an exhausted scope; audit lineage completeness and treatment records. |
 | Injected fault or clean path | None — scripted fallback conditions; exhaustion refusal belongs to CHK-104. |
@@ -1731,7 +1733,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every provider dispatch — first or further — is authorized against every applicable registered budget scope by an authorization or reservation recorded before the attempt; that the ten value kinds stay separately recorded with derivations named; that every provider attempt is separately accounted in every applicable kind; that calls, tokens, costs, failures, retries, and fallbacks stay attributable to the WP2-MODEL-019 entities before aggregation; that provider-reported, locally derived, and billed values stay distinguishable with provenance; and that inter-scope transfers occur only under a registered, versioned policy with explicit source-and-destination lineage and no attribution merge. |
-| Mapped requirement IDs | WP2-MODEL-034, WP2-MODEL-035, WP2-MODEL-037, WP2-MODEL-039, WP2-MODEL-040, WP2-MODEL-048. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-034, WP2-MODEL-035, WP2-MODEL-037, WP2-MODEL-039, WP2-MODEL-040, WP2-MODEL-048. |
 | Fixtures and setup | Synthetic registered-study fixture with multi-scope budgets and a registered transfer policy; scripted fake-provider fixture reporting usage. |
 | Controlled operation or observation | Drive first attempts, retries, and fallbacks; read authorization-before-attempt ordering, all ten kinds, per-attempt accounting, and a policy-governed transfer. |
 | Injected fault or clean path | None — clean path; races belong to CHK-077, exhaustion to CHK-104. |
@@ -1747,7 +1749,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that exhaustion of any applicable registered scope produces a distinguishable, preserved, typed refusal naming the exhausted scope and the budget policy identity and version, attributed to study, planned run, and attempt, in place of the refused dispatch, no dispatch charged to the scope proceeding except as its registered policies authorize. |
-| Mapped requirement IDs | WP2-MODEL-043. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-043. |
 | Fixtures and setup | Synthetic registered-study fixture with a near-exhausted scope; scripted fake-provider fixture. |
 | Controlled operation or observation | Exhaust the scope; present further dispatches, one policy-authorized exception among them; read refusals and dispatch counts. |
 | Injected fault or clean path | FLT-012 — budget exhaustion. |
@@ -1763,7 +1765,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a dispatch whose provider acceptance or charging is unknown is represented as unresolved or disputed exposure — never as zero, one settled value, or any definite value; that no unknown count or cost is represented definitely anywhere; and that unresolved exposure remains represented until a recorded settlement or reconciliation event dispositions it. |
-| Mapped requirement IDs | WP2-MODEL-038, WP2-MODEL-041, WP2-MODEL-046. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-038, WP2-MODEL-041, WP2-MODEL-046, WP2-AGG-019. |
 | Fixtures and setup | Synthetic registered-study fixture; scripted fake-provider fixture producing acceptance-unknown outcomes. |
 | Controlled operation or observation | Script dispatches whose outcomes stay unknown; read exposure representations across all accounting and reporting surfaces; then record a settlement and re-read. |
 | Injected fault or clean path | FLT-032 — budget authorization race or unresolved exposure, its unresolved-exposure half; the race half belongs to CHK-077. |
@@ -1779,7 +1781,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a cancellation at any WP2-LIFE-027 scope prevents further provider dispatches under the cancelled authority from the point it becomes current, while in-flight exposure and every incurred usage stay represented, and that in-flight exposure, late results, and losing operations affected by the cancellation receive typed, preserved dispositions in the stated preservation discipline. |
-| Mapped requirement IDs | WP2-MODEL-044, WP2-FAIL-024; the provider-dispatch clause of WP2-FAIL-022. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-044, WP2-FAIL-022, WP2-FAIL-024. |
 | Fixtures and setup | Synthetic registered-study fixture; scripted fake-provider fixture with dispatches in flight at cancellation. |
 | Controlled operation or observation | Cancel at each scope with traffic in flight; present post-cancellation dispatches; read exposure, usage, and disposition records. |
 | Injected fault or clean path | None — controlled cancellation over scripted in-flight traffic; the cancellation-versus-acceptance race belongs to CHK-074. |
@@ -1795,7 +1797,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that idempotency state, request and response records, and budget state in any component serving several isolation units are keyed so that requests from different attempts remain distinct records even under equal locally scoped identifiers, and that shared-component restart or session loss resets none of it. |
-| Mapped requirement IDs | WP2-ISO-015; the shared-component clause of WP2-MODEL-033. |
+| Mapped requirement IDs | WP2-ID-022, WP2-ISO-015, WP2-MODEL-001, WP2-MODEL-033. |
 | Fixtures and setup | Two-study fixture; scripted fake-provider fixture behind one shared serving component; crash-and-restart harness for the component. |
 | Controlled operation or observation | Issue requests from different attempts carrying identical local identifiers; read record distinctness; restart the shared component and replay. |
 | Injected fault or clean path | None — controlled identifier collision; restart persistence is co-verified with CHK-092. |
@@ -1811,7 +1813,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that each occurring, observable phenomenon of the eleven — queueing and latency, rate limits, outages, correlated failure windows, rejection, timeout, substitution, fallback exposure, retry exposure, late completion, and returned-model mismatch — produces a separately identified provider-behavior observation carrying the full WP2-MODEL-050 identification with explicit absences, and that no record joins by wall-clock proximity except as a recorded observation under its identified policy states which requests a window in fact reached. |
-| Mapped requirement IDs | WP2-MODEL-018, WP2-MODEL-049, WP2-MODEL-050. |
+| Mapped requirement IDs | WP2-MODEL-001, WP2-MODEL-018, WP2-MODEL-049, WP2-MODEL-050. |
 | Fixtures and setup | Synthetic registered-study fixture; scripted fake-provider fixture producing each phenomenon deterministically. |
 | Controlled operation or observation | Script each phenomenon; read the observation records, their identifications, and every window-membership statement's policy basis. |
 | Injected fault or clean path | FLT-013 — provider rate limiting. |
@@ -1827,7 +1829,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that identity mismatches and substitutions among requested, configured, observed, and returned identities are recorded as typed deviations under named policies or as unregistered divergences naming the absence; that no mismatch or observed divergence rewrites the registered treatment, condition, profile, or registration; that registered-versus-observed material divergences are recorded, attributed, and retained without altering the registered design; and that a correlated failure is contained to the units it in fact affected, with shared windows and causes recorded and membership never inferred from proximity or shared infrastructure alone. |
-| Mapped requirement IDs | WP2-MODEL-021, WP2-MODEL-022, WP2-MODEL-052, WP2-SCHED-042, WP2-SCHED-043, WP2-FAIL-040. |
+| Mapped requirement IDs | WP2-SCHED-042, WP2-SCHED-043, WP2-MODEL-001, WP2-MODEL-021, WP2-MODEL-022, WP2-MODEL-052, WP2-FAIL-040, WP2-FAIL-041. |
 | Fixtures and setup | Two-study fixture; scripted fake-provider fixture producing substitutions and a correlated failure window spanning some units of each study. |
 | Controlled operation or observation | Script substitutions and the correlated window; read deviation typing, registration surfaces before and after, and the affected-set derivation of the correlated failure. |
 | Injected fault or clean path | FLT-014 — correlated provider failure. |
@@ -1843,7 +1845,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that secret and provider-authentication material leaves the provider-dispatch secret boundary only through the minimum authorized egress for one identified provider attempt, to the configured endpoint and route recorded for that attempt, their nonsecret identities recorded with it; that the egress reaches no other component, unit, record, log, diagnostic, error text, redirect target, or destination; that every egress record carries only nonsecret identities; and that every provider attempt and recorded secret access names the exact nonsecret credential reference and version and its establishing usability fact, no dispatch proceeding on a revoked version. |
-| Mapped requirement IDs | WP2-SEC-003, WP2-SEC-019, WP2-SEC-018. |
+| Mapped requirement IDs | WP2-SEC-003, WP2-SEC-018, WP2-SEC-019. |
 | Fixtures and setup | Synthetic credential fixture; scripted fake-provider fixture acting as the configured endpoint and recording exactly what reaches it; a decoy endpoint and redirect target. |
 | Controlled operation or observation | Dispatch attempts through the boundary; sweep every non-endpoint surface for the synthetic marker; script a redirect toward the decoy; present a dispatch naming a revoked version. |
 | Injected fault or clean path | None — clean-path egress with controlled decoy and revoked-version operations; rotation races belong to CHK-078. |
@@ -1859,7 +1861,7 @@ The checks of this class exercise the model-request, budget, provider-behavior, 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify in operation that studies, registered concurrency profiles, and observed concurrency-provenance records conform to the Section 10.2 tables and carry every Section 10.5 category or its explicit absence; that every planned run and attempt identifies its profile identity and version; that varied profiles are registered condition or treatment differences; that no profile is amended from observation; that every attempt carries an observed provenance record naming its profile; that observed numeric facts carry observer identity and time domain; that profile, provenance, and treatment stay three distinct explicitly joined records; that comparisons run category by category under an identified versioned rule; and that name equality never establishes same-architecture claims. |
-| Mapped requirement IDs | WP2-SCHED-035, WP2-SCHED-036, WP2-SCHED-037, WP2-SCHED-038, WP2-SCHED-039, WP2-SCHED-040, WP2-SCHED-044, WP2-SCHED-045, WP2-SCHED-048, WP2-SCHED-049; the dynamic half of WP2-SCHED-046 and WP2-SCHED-047. |
+| Mapped requirement IDs | WP2-SCHED-035, WP2-SCHED-036, WP2-SCHED-037, WP2-SCHED-038, WP2-SCHED-039, WP2-SCHED-040, WP2-SCHED-044, WP2-SCHED-045, WP2-SCHED-046, WP2-SCHED-047, WP2-SCHED-048, WP2-SCHED-049, WP2-HAND-028, WP2-HAND-030. |
 | Fixtures and setup | Two-study fixture under two registered profiles; scripted fake-provider fixture generating rate-limit and queueing facts; parallel execution. |
 | Controlled operation or observation | Execute under both profiles; read profiles, provenance records, categories, joins, and identifications; run comparisons under a named rule; present an observation-based profile amendment and a name-equality architecture claim and verify refusal. |
 | Injected fault or clean path | FLT-013 — provider rate limiting, as the scripted divergence between the registered profile and the observed provenance; the observation-based profile amendment and the name-equality architecture claim are controlled adversarial operations. |
@@ -1879,7 +1881,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that canonical engine events and state stand authoritative for their own world's truth and committed consequences; that a provider response evidences only what was received from its producing attempt; that request, provider, timing, budget, concurrency, diagnostic, and authority records establish only their own recorded facts, none becoming or supplying a canonical world event; that every derived artifact identifies its exact sources and derivation identity and version; and that no prose, log, report, aggregate, or later narrative retroactively establishes an unrecorded simulated event. |
-| Mapped requirement IDs | WP2-EVID-002, WP2-EVID-003, WP2-EVID-004, WP2-EVID-005, WP2-EVID-006. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-002, WP2-EVID-003, WP2-EVID-004, WP2-EVID-005, WP2-EVID-006. |
 | Fixtures and setup | Deterministic engine fixture; scripted fake-provider fixture whose response prose narrates events the engine never recorded; synthetic registered-study fixture. |
 | Controlled operation or observation | Execute attempts whose model prose asserts unrecorded events; walk every derived artifact's source lineage; present an operation promoting a narrated event into canonical state and verify refusal. |
 | Injected fault or clean path | None — controlled narrated-event promotion operation. |
@@ -1895,7 +1897,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every attempt's root identity is created or reserved within admission, before execution activity; that a pre-execution-cancelled attempt retains its root and a never-admitted planned run never acquires one; that root identity and storage location stay two recorded facts with every boundary rule attached to identity; that every pre-closure write is attributable from its own record to its authority; and that pre-closure corrections are additional identified records naming their targets, never mutations. |
-| Mapped requirement IDs | WP2-EVID-007, WP2-EVID-008, WP2-EVID-009, WP2-EVID-010, WP2-EVID-012, WP2-EVID-013; collision and recovery conduct belongs to CHK-028 under WP2-EVID-011. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-007, WP2-EVID-008, WP2-EVID-009, WP2-EVID-010, WP2-EVID-012, WP2-EVID-013. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; a storage-relocation probe. |
 | Controlled operation or observation | Admit, execute, cancel pre-execution, and leave unadmitted; read root existence per case, write attributions, and correction records; relocate a copy and re-resolve boundaries by identity. |
 | Injected fault or clean path | None — clean path with relocation probe. |
@@ -1911,7 +1913,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that the attempt evidence-closure record is admitted as the last record of the boundary it closes, co-accepted with the terminal value so no interval exists in which the root is terminal and open; that later facts — late results, acceptances, replacement decisions, exclusions, seal verifications, study-level records — live outside the closed boundary referencing it explicitly, the root never reopened or rewritten; and that every terminal attempt receives an explicit closure result enumerating produced evidence and absent, unavailable, inapplicable, or refused classes, an empty produced set stated explicitly. |
-| Mapped requirement IDs | WP2-EVID-014, WP2-EVID-015, WP2-EVID-016, WP2-EVID-017; the racing write belongs to CHK-079, the co-acceptance race to CHK-070. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-014, WP2-EVID-015, WP2-EVID-016, WP2-EVID-017. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; prepared evidence corpus for post-closure delivery. |
 | Controlled operation or observation | Close boundaries across terminal kinds including an empty-subset attempt; deliver late results and record later study-level facts; byte-compare the closed root before and after each. |
 | Injected fault or clean path | FLT-042 — losing or late result after run-root closure. |
@@ -1927,7 +1929,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every attempt's evidence accounts explicitly, under its registered evidence contract, for every applicable WP2-EVID-018 class; that each class record distinguishes present, inapplicable, unavailable or unobservable, refused, expected but missing, and not yet resolved wherever they apply; and that the absence of a class record is never read as inapplicability or success. |
-| Mapped requirement IDs | WP2-EVID-018, WP2-EVID-019, WP2-EVID-020. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-018, WP2-EVID-019, WP2-EVID-020. |
 | Fixtures and setup | Synthetic registered-study fixture whose registered evidence contract spans the class list; deterministic engine fixture producing attempts with deliberately absent and refused classes. |
 | Controlled operation or observation | Execute attempts with controlled class absences; read the accounting record for every class; delete one class record in a copy and verify the reading surfaces treat it as unaccounted rather than inapplicable. |
 | Injected fault or clean path | None — controlled class absences and a deletion probe. |
@@ -1943,7 +1945,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that reducer/ledger replay reconstructs canonical state from exactly the registered initial state, authoritative ledger or event set, and named engine, reducer, and version inputs and nothing else; that replay-verification records carry inputs, digests, implementation identity and version, produced comparisons, verdict, authority, and domain-identified time facts; that replay needs no provider call, regenerated prose, or renewed decision; that UI replay, where a surface exists, is a separately identified verification never substituted for reducer/ledger replay, its absence never a nonconformity or missing class; that unavailable replay boundaries are recorded as such, never as passes; and that replay is read-only. |
-| Mapped requirement IDs | WP2-EVID-021, WP2-EVID-022, WP2-EVID-023, WP2-EVID-024, WP2-EVID-025, WP2-EVID-026, WP2-EVID-028, WP2-SCOPE-007. |
+| Mapped requirement IDs | WP2-SCOPE-007, WP2-EVID-001, WP2-EVID-021, WP2-EVID-022, WP2-EVID-023, WP2-EVID-024, WP2-EVID-025, WP2-EVID-026, WP2-EVID-028. |
 | Fixtures and setup | Deterministic engine fixture; prepared evidence corpus of completed attempts; an input-starved variant lacking one named replay input. |
 | Controlled operation or observation | Replay attempts with provider paths disabled; byte-compare inspected evidence before and after; replay the input-starved variant; where the fixture offers a UI surface, run both verifications; read all verification records. |
 | Injected fault or clean path | None — clean path with an input-starved variant; the mismatch fault belongs to CHK-117. |
@@ -1959,7 +1961,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that a replay mismatch, impossible reconstruction, missing input, or contradictory result is preserved as a typed failure in the Section 14 vocabulary and prevents successful finalization of the attempt wherever the registered evidence contract requires that replay, a contradiction among present sources being a failed finalization rather than a qualified success. |
-| Mapped requirement IDs | WP2-EVID-027; the replay-failure clause of WP2-EVID-032. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-027, WP2-EVID-032. |
 | Fixtures and setup | Prepared evidence corpus with a ledger perturbed to guarantee mismatch; deterministic engine fixture; a registered evidence contract requiring replay. |
 | Controlled operation or observation | Replay the perturbed attempt; drive its finalization; read the typed failure and the finalization outcome. |
 | Injected fault or clean path | FLT-016 — replay mismatch. |
@@ -1975,7 +1977,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every finalization identifies its exact attempt, root identity, registered evidence contract identity and version, finalization policy identity and version, finalizing authority, and the assignment-authority history under which the evidence was produced and it finalizes; and that ordinary evidence intake closes through the identified closure record — naming closing authority, contract, exact closed membership or snapshot, and acceptance point — as a distinct act before strict validation and earlier than terminal closure, later non-finalization facts preserved outside with references. |
-| Mapped requirement IDs | WP2-EVID-029, WP2-EVID-030; the clean-path record half of WP2-EVID-071, whose race half belongs to CHK-079. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-029, WP2-EVID-030, WP2-EVID-071. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Drive complete finalizations; read identification and closure records; deliver a post-intake fact before terminal closure and read its placement. |
 | Injected fault or clean path | None — clean path with a post-intake delivery. |
@@ -1991,7 +1993,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that finalization strictly validates every applicable evidence source, reconciling only where several exist; that a contradiction among present sources, a missing required source, or an unresolved required validation is a failed finalization, never a degraded, partial, or qualified success; and that a failed or cancelled attempt never receives a fictitious successful finalization for sealability, its closure and any seal covering exactly what exists and stating the failure honestly. |
-| Mapped requirement IDs | WP2-EVID-031, WP2-EVID-032, WP2-EVID-039. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-031, WP2-EVID-032, WP2-EVID-039. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; prepared evidence corpus variants carrying a source contradiction, a missing required source, and an unresolved validation. |
 | Controlled operation or observation | Finalize a clean attempt and each defective variant; seal a failed attempt's root; read every finalization outcome and the failed attempt's closure and seal content. |
 | Injected fault or clean path | None — prepared defective-source variants; the replay-driven failure belongs to CHK-117. |
@@ -2007,7 +2009,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify on the clean path that every finalization undertaking carries a never-reused operation identity named by all its validations, artifacts, records, and candidate completion record; that it produces every contract-required artifact with source and derivation lineage; that the completion record is written last within its operation and exists before the compound outcome becomes current; that no successful result is current while artifacts, validations, or completion are partially committed, completeness assessed against the operation's validated snapshot and recorded output membership; and that finalization never records or alters any planned run's authoritative-outcome state. |
-| Mapped requirement IDs | WP2-EVID-033, WP2-EVID-034, WP2-EVID-035, WP2-EVID-037, WP2-EVID-038; the clean-path half of WP2-EVID-072, whose interleaving and interruption halves belong to CHK-080 and CHK-089. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-033, WP2-EVID-034, WP2-EVID-035, WP2-EVID-037, WP2-EVID-038, WP2-EVID-072. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture. |
 | Controlled operation or observation | Drive complete finalizations; read operation identities across every produced record; verify write order of the completion record and its precedence over the compound outcome; inspect authoritative-outcome state before and after. |
 | Injected fault or clean path | None — clean path; partial commitment arises under CHK-080 and CHK-089. |
@@ -2023,7 +2025,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every inventory identifies its exact boundary, own identity, versioned rules, and every member by stable identity and content digest with metadata sufficient to detect omission, duplication, substitution, and mutation — a full-root inventory enumerating every member of the closed boundary including the closure record and non-execution records, a subset inventory naming its narrower boundary explicitly; that membership follows boundary and contract, never convenience; that a missing member, unaccounted extra, duplicate identity, or digest conflict prevents a clean completeness verdict; that no inventory or seal claims evidence outside its own boundary; and that self-reference exclusions are explicit, never conventional. |
-| Mapped requirement IDs | WP2-EVID-040, WP2-EVID-041, WP2-EVID-042, WP2-EVID-045, WP2-ISO-022. |
+| Mapped requirement IDs | WP2-ISO-022, WP2-EVID-001, WP2-EVID-040, WP2-EVID-041, WP2-EVID-042, WP2-EVID-045. |
 | Fixtures and setup | Prepared evidence corpus with complete roots and variants carrying an omission, a duplicate, a substitution, an out-of-boundary claim, and an inventory that silently omits its own seal and verification records under an unstated self-reference convention. |
 | Controlled operation or observation | Build inventories over the complete and defective variants; read boundary naming, member enumeration, and each variant's verdict. |
 | Injected fault or clean path | FLT-018 — incomplete inventory. |
@@ -2039,7 +2041,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that one run-level seal authenticates exactly one closed boundary in its entirety and the exact full-root inventory it names; that no seal claims a zero-member boundary where the closure record is a member, an empty execution-produced subset remaining sealable as an enumerated boundary with the empty subset explicitly stated and never a subset inventory substituting for the full root; that every seal record identifies rules and version, authority, inventory, boundary, and digest facts without requiring residence inside the boundary; that a sealed package seals exactly one identified boundary; and that per-execution sealing, root sealing, study-level sealing, and aggregation stay distinct recorded operations. |
-| Mapped requirement IDs | WP2-EVID-043, WP2-EVID-044, WP2-EVID-046, WP2-ID-020, WP2-SCOPE-008. |
+| Mapped requirement IDs | WP2-SCOPE-008, WP2-ID-020, WP2-EVID-001, WP2-EVID-043, WP2-EVID-044, WP2-EVID-046. |
 | Fixtures and setup | Prepared evidence corpus including an empty-execution-subset root; deterministic engine fixture. |
 | Controlled operation or observation | Seal roots including the empty-subset root; present a zero-member seal claim and a subset-for-full substitution and verify refusal; read seal records and operation distinctness. |
 | Injected fault or clean path | FLT-036 — terminal closure with an empty execution-produced subset but nonempty full root. |
@@ -2055,7 +2057,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that seal verification is read-only, carries its own verification identity, names the exact package or seal, inventory, boundary, rules, and version verified, and preserves its verdict; that post-seal mutation, missing or extra members, digest and inventory mismatches, and package corruption each produce a typed integrity failure never repaired by silent same-identity replacement; and that a later package over a sealed boundary arrives only under a new identity with explicit correction or supersession lineage, the original preserved. |
-| Mapped requirement IDs | WP2-EVID-047, WP2-EVID-048, WP2-EVID-049, WP2-EVID-050. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-047, WP2-EVID-048, WP2-EVID-049, WP2-EVID-050. |
 | Fixtures and setup | Prepared evidence corpus; a controlled post-seal mutation applied to a copy; a supersession scenario. |
 | Controlled operation or observation | Verify intact seals; mutate a sealed copy and re-verify; byte-compare roots across packaging and verification; drive a re-package with lineage. |
 | Injected fault or clean path | FLT-017 — evidence mutation after seal. |
@@ -2071,7 +2073,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that no completed, successfully finalized attempt is considered or eligible for authoritative acceptance without one exact attempt-integrity basis — naming exactly one closed own-root boundary, exactly one full-root inventory over it, exactly one run-level seal over that inventory and boundary, and exactly one verification of that chain with its preserved successful verdict, none absent — current and successful, named and verified current and successful at the authoritative-commit boundary, standing beside the WP2-SCHED-025 conditions as necessary and not sufficient, and conferring no commit authority on finalizing, sealing, or verifying authorities. |
-| Mapped requirement IDs | WP2-EVID-051; the composition half of WP2-EVID-073, whose race half belongs to CHK-081. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-051, WP2-EVID-073. |
 | Fixtures and setup | Prepared evidence corpus with complete chains and variants each missing one member — no inventory, no seal, no verification, no verdict; synthetic registered-study fixture. |
 | Controlled operation or observation | Drive acceptance for the complete-chain attempt and for each missing-member variant; read the acceptance's basis naming and commit-boundary verification. |
 | Injected fault or clean path | FLT-038 — a basis with a missing inventory, seal, verification, or verdict. |
@@ -2087,7 +2089,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that an integrity failure detected after authoritative acceptance never rewrites the accepted outcome, remaining a preserved post-acceptance incident whose study-completion, aggregation, validity, and claim consequences flow through the Sections 14 and 15 records; and that the failing result unseats the affected basis's currentness from its recording, a further basis arriving only through a further operation over the complete recorded results. |
-| Mapped requirement IDs | The post-acceptance clauses of WP2-EVID-049 and WP2-EVID-073; the consequence-propagation clause of WP2-AGG-021. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-049, WP2-EVID-073, WP2-AGG-021. |
 | Fixtures and setup | Prepared evidence corpus with an accepted attempt; a controlled post-acceptance mutation of its sealed root copy in place under the same identities. |
 | Controlled operation or observation | Detect the mutation through re-verification; read the accepted outcome, the basis currentness, the incident record, and the study-level consequence records. |
 | Injected fault or clean path | FLT-039 — post-acceptance integrity failure. |
@@ -2103,7 +2105,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every attempt a cancellation makes terminal — pre-execution cancellations among them — receives terminal evidence closure plus the Section 13.9 treatment over its actual closed boundary, producing a current full-root inventory and exactly one current recorded sealing outcome: a run-level seal with preserved verification verdict, or a typed, preserved sealing or integrity failure or blocker record stating why a clean seal could not be produced, the registered evidence contract never rendering inventory or outcome inapplicable and the outcome visible to the Section 15 evidence-closure-and-integrity dimension. |
-| Mapped requirement IDs | WP2-FAIL-026; the cancellation-case clauses of WP2-EVID-017 and WP2-EVID-043. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-017, WP2-EVID-043, WP2-FAIL-026, WP2-AGG-018. |
 | Fixtures and setup | Synthetic registered-study fixture; deterministic engine fixture; a cancellation scenario whose sealing is deliberately blocked in one variant. |
 | Controlled operation or observation | Cancel attempts before and during execution; drive the sealing treatment; block sealing in the variant; read inventories, outcomes, and the completion dimension's view. |
 | Injected fault or clean path | FLT-041 — cancellation-terminal sealing failure or blocker. |
@@ -2119,7 +2121,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every study evidence root identifies or contains every member run root and required study-level record with explicit identity-based membership never reconstructed from layout, timestamps, or success counts; that post-closure study-level records stay outside closed attempt roots with lineage; that a study-level seal attests completeness and integrity over all registered evidence, naming the exact ledger identity and version lineage read and the current registered-membership-closure result, a complete seal recorded only against a reached closure and pre-closure seals labeled partial or snapshot, later lawful membership producing new records without rewriting; that a one-root package is never reported as a study-level seal; that the five operations stay distinct; and that later study-level packages rewrite nothing earlier. |
-| Mapped requirement IDs | WP2-EVID-052, WP2-EVID-053, WP2-EVID-054, WP2-EVID-055, WP2-EVID-056, WP2-EVID-057, WP2-EVID-058, WP2-ID-019. |
+| Mapped requirement IDs | WP2-ID-019, WP2-EVID-001, WP2-EVID-052, WP2-EVID-053, WP2-EVID-054, WP2-EVID-055, WP2-EVID-056, WP2-EVID-057, WP2-EVID-058. |
 | Fixtures and setup | Synthetic registered-study fixture with several roots and one single-root study; deterministic engine fixture; a pre-closure sealing scenario. |
 | Controlled operation or observation | Build study roots; seal before and after membership closure; present the one-root package as a study seal and verify refusal; read membership derivations and rewrite surfaces. |
 | Injected fault or clean path | None — clean path with controlled pre-closure and single-root variants; post-closure admission belongs to CHK-128. |
@@ -2135,7 +2137,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that registered-membership closure is recorded as reached only under every WP2-AGG-016 condition — exact ledger binding, complete presence by identity, every planned run in a no-further-admission status, continuation and replacement rules permitting nothing more — with post-closure admissions refused and preserved or belonging to an expressly required new boundary; that evidence closure and integrity is reached only under every WP2-AGG-018 condition including the cancellation-sealing outcomes and current bases; that reconciliation is never claimed over represented unresolved exposure; that analysis readiness requires resolved registered rules and an identity-fixed sealed source set with named verification records; and that no dimension is reached on desired success counts. |
-| Mapped requirement IDs | WP2-AGG-015, WP2-AGG-016, WP2-AGG-018, WP2-AGG-019, WP2-AGG-020. |
+| Mapped requirement IDs | WP2-AGG-001, WP2-AGG-015, WP2-AGG-016, WP2-AGG-018, WP2-AGG-019, WP2-AGG-020. |
 | Fixtures and setup | Synthetic registered-study fixture drivable to each reached condition and to near-miss variants — one open planned run, one missing basis, one unresolved exposure, one unresolved rule. |
 | Controlled operation or observation | Drive each dimension to reached on the clean path; present reached recordings for each near-miss variant; present a post-closure admission. |
 | Injected fault or clean path | FLT-040 — post-membership-closure attempt or replacement admission. |
@@ -2151,7 +2153,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every evidence-size and retention policy is versioned and names its governed classes and subjects; that capacity or size exhaustion produces a typed, evidence-preserving refusal or failure — never silent truncation, drop, overwrite, unidentified recompression, or omission; that every retention disposition is explicit, attributed, policy-versioned, and incapable of making an incomplete set appear complete or replayable; and that evidence required by an active package, claim dependency, audit, or review is never lost to an unrecorded action. |
-| Mapped requirement IDs | WP2-EVID-059, WP2-EVID-060, WP2-EVID-062, WP2-EVID-063; the restart half of WP2-EVID-061 belongs to CHK-092. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-059, WP2-EVID-060, WP2-EVID-062, WP2-EVID-063. |
 | Fixtures and setup | Synthetic registered-study fixture with a versioned retention policy and a constrained-capacity evidence store variant. |
 | Controlled operation or observation | Exhaust capacity mid-attempt; drive policy-authorized dispositions including one over package-required evidence; read refusals, disposition records, and completeness representations. |
 | Injected fault or clean path | None — controlled capacity exhaustion and disposition operations; no catalogued environmental fault applies. |
@@ -2167,7 +2169,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that discovery of live secret material in already-persisted or admitted evidence creates a typed, nonsecret incident record with the full WP2-SEC-014 identification, marking every affected root, inventory, seal, package, and study-level surface affected or compromised through records outside every closed or sealed boundary, none left clean and none altered in place; that the discovery blocks new clean-sealing, acceptance, and clean-aggregation claims until an explicit disposition; that it triggers the registered credential path where applicable; that handling copies the material nowhere; that quarantine or removal preserves nonsecret identity, digest, and lineage; and that sanitized derivatives are new, labeled, lineage-bound, and never claimed as originals, no seal rewritten. |
-| Mapped requirement IDs | WP2-EVID-064, WP2-EVID-065, WP2-EVID-066, WP2-EVID-067, WP2-EVID-068, WP2-EVID-069, WP2-EVID-070. |
+| Mapped requirement IDs | WP2-EVID-001, WP2-EVID-064, WP2-EVID-065, WP2-EVID-066, WP2-EVID-067, WP2-EVID-068, WP2-EVID-069, WP2-EVID-070. |
 | Fixtures and setup | Prepared evidence corpus seeded post-sealing with the synthetic marker; synthetic credential fixture tying the marker to a fixture credential. |
 | Controlled operation or observation | Run discovery; read incident and marking records, blocked-claim behavior, the credential-path trigger, quarantine lineage, and a produced sanitized derivative; sweep all new records for the marker. |
 | Injected fault or clean path | FLT-035 — live secret discovered after persistence or sealing. |
@@ -2183,7 +2185,7 @@ The checks of this class verify the evidence contract of specification Sections 
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify that every aggregation identifies everything WP2-AGG-022 enumerates — study and version through the operation's own execution and concurrency provenance — with explicit absences; that source membership is established by recorded identity alone; that a primary aggregate includes at most one accepted outcome per planned run and none where none exists; that non-authoritative attempts stay referenced in audit and missingness surfaces, never promoted, erased, or counted as sample units; and that recorded deviations reach completion results, denominators, ledgers, and reports only through explicit dimension results, never silent omission, shrinkage, or adjustment. |
-| Mapped requirement IDs | WP2-AGG-021, WP2-AGG-022, WP2-AGG-023, WP2-AGG-025, WP2-AGG-026. |
+| Mapped requirement IDs | WP2-ID-021, WP2-AGG-021, WP2-AGG-022, WP2-AGG-023, WP2-AGG-025, WP2-AGG-026. |
 | Fixtures and setup | Synthetic registered-study fixture with accepted, failed, replaced, and excluded attempts; prepared evidence corpus of sealed sources. |
 | Controlled operation or observation | Produce aggregations; read the full identification, membership derivation, primary-aggregate composition, and audit surfaces; permute storage in a copy and re-derive membership. |
 | Injected fault or clean path | None — clean path with a permutation probe; blocker conditions belong to CHK-132. |
@@ -2251,7 +2253,7 @@ The checks of this class read evidence from later, separately authorized registe
 | Field | Statement |
 | --- | --- |
 | Purpose | Supplement CHK-111 by verifying, over a later registered study's evidence, that observed concurrency-provenance records were produced with the required observer, time-domain, and profile identification under genuine operational contention, and that material registered-versus-observed divergences were recorded, attributed, and retained. |
-| Mapped requirement IDs | WP2-SCHED-039, WP2-SCHED-040, WP2-SCHED-042 — as supplementary evidence only; their acceptance basis remains CHK-111 and CHK-109. |
+| Mapped requirement IDs | WP2-SCHED-039, WP2-SCHED-040, WP2-SCHED-042, WP2-HAND-028. |
 | Fixtures and setup | None — the sealed evidence of a later, separately authorized registered study, read in place. |
 | Controlled operation or observation | Read-only audit of provenance and divergence records within the study's sealed evidence. |
 | Injected fault or clean path | None — read-only audit of evidence produced elsewhere; no fault is ever injected into study evidence. |
@@ -2267,7 +2269,7 @@ The checks of this class read evidence from later, separately authorized registe
 | Field | Statement |
 | --- | --- |
 | Purpose | Supplement CHK-108 by verifying, over a later registered study's evidence, that provider-behavior observations for phenomena that in fact occurred on live request paths — rate limits, outages, substitutions, late completions among them — carry the full required identification with explicit absences. |
-| Mapped requirement IDs | WP2-MODEL-049, WP2-MODEL-050 — as supplementary evidence only; their acceptance basis remains CHK-108. |
+| Mapped requirement IDs | WP2-MODEL-049, WP2-MODEL-050. |
 | Fixtures and setup | None — the sealed evidence of a later, separately authorized registered study, read in place. |
 | Controlled operation or observation | Read-only audit of provider-behavior observation records against the identification contract. |
 | Injected fault or clean path | None — read-only audit; live provider behavior is observed, never induced, by conformance activity. |
@@ -2283,7 +2285,7 @@ The checks of this class read evidence from later, separately authorized registe
 | Field | Statement |
 | --- | --- |
 | Purpose | Verify, over the reporting of any later registered study, that no conformance result, concurrency profile, provenance record, comparison, throughput result, or sealed or reproducible aggregation is reported or cited as evidence of serial-versus-parallel behavioral parity, neutrality, or interchangeability, and that nothing is treated as beginning, satisfying, or substituting for the separately authorized Work Package 3 study. |
-| Mapped requirement IDs | WP2-SCOPE-011, WP2-SCHED-050, WP2-AGG-040, WP2-AGG-041, WP2-HAND-027, WP2-HAND-031, WP2-HAND-037, WP2-HAND-038 — the operational-reporting half of the rows that cite this check, each of which also cites a static implementation-acceptance check of its documentation half, CHK-007 or CHK-020. |
+| Mapped requirement IDs | WP2-SCOPE-011, WP2-SCHED-050, WP2-AGG-040, WP2-AGG-041, WP2-HAND-027, WP2-HAND-031, WP2-HAND-037, WP2-HAND-038. |
 | Fixtures and setup | None — the published reporting of a later, separately authorized registered study. |
 | Controlled operation or observation | Read-only audit of every parity-adjacent claim in the study's reporting. |
 | Injected fault or clean path | None — read-only audit. |
@@ -2832,7 +2834,7 @@ Every identifier of this section is a test-document identifier of the form FLT-#
 
 Injection is conceptual. A fault entry describes an adverse condition and the boundary at which it is induced or represented; it selects no fault-injection harness, tool, framework, library, scheduler mechanism, provider, or venue, and how a fault is realized is an implementation-plan decision within the handoff boundary of specification Section 18. A realization of a concurrency fault forces or systematically enumerates the material interleavings conceptually; none of them relies on ordinary timing luck. The provider-facing faults are exercised against fake-provider behavior within the keyless boundary Section 1 states: no fault in this catalogue requires a live provider credential, a repository game-model call, a browser experiment, or a Work Package 3 study. The two detected-secret faults are exercised with synthetic, non-live fixture material that is described as a fixture property and never exemplified with a realistic-looking secret value.
 
-The catalogue holds forty-four entries in two groups: the twenty-two minimum fault classes of Section 3.2 and the twenty-two high-consequence cases of Section 3.3, each group in its established order. Each entry carries the same fields: the fault identifier and name in its lead-in; the injection point or authority boundary; the mapped checks; the mapped requirements, by exact requirement ID; the expected preserved records; the forbidden outcomes; the conceptual pass condition; and the principal false-pass risk. The mapped-checks line of each entry is the reverse index reconciled from the conceptual check catalogue of Section 2.2: every fault maps to at least one conceptual check, and every check that depends on an injected fault names that fault explicitly.
+The catalogue holds forty-four entries in two groups: the twenty-two minimum fault classes of Section 3.2 and the twenty-two high-consequence cases of Section 3.3, each group in its established order. Each entry carries the same fields: the fault identifier and name in its lead-in; the injection point or authority boundary; the mapped checks; the mapped requirements, by exact requirement ID; the expected preserved records; the forbidden outcomes; the conceptual pass condition; and the principal false-pass risk. Every entry enumerates the exact complete set of checks whose Section 2.2 fields name that fault and the exact complete set of requirements whose Section 2.3 rows name it, using direct individual IDs only. The independently parsed mapped-check fields form `G`, the exact reverse view of `Q`; the independently parsed mapped-requirement fields form `F`, the exact reverse view of `R`. Every fault maps to at least one conceptual check and requirement, and no check or requirement relation is inferred through the other catalogue.
 
 Fault outcomes follow the outcome discipline Section 1 states. A fault case passes only where the injected fault demonstrably occurred and the conceptual pass condition was observed; a case whose trigger did not occur is blocked or not run, never passed. The expected preserved records are part of the pass condition — an execution that avoids the forbidden outcomes while destroying the records the cited requirements keep preservable has failed — and the evidence of every failed or blocked fault case is preserved under the evidence contract of Section 5.
 
@@ -2847,7 +2849,7 @@ Mapped checks: CHK-023.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The identity-issuance and admission boundary of the Section 6 register: a second entity instance is presented carrying an identity already recorded within the identity scope the register states for that entity — a planned-run identity and an execution-attempt identity among the variants, including an identity whose earlier bearer has already reached a terminal state. |
-| Mapped requirements | WP2-ID-003, WP2-ID-024, WP2-ISO-030, WP2-ISO-031, WP2-ISO-032. |
+| Mapped requirements | WP2-ID-001, WP2-ID-003, WP2-ID-005, WP2-ID-024, WP2-ID-027, WP2-ISO-030, WP2-ISO-031, WP2-ISO-032. |
 | Expected preserved records | The distinguishable refusal record WP2-ISO-031 requires, identifying the duplicate-identity condition and such owning lineage as the refused operation demonstrated; the original instance's identity record, lineage, and evidence, unchanged. |
 | Forbidden outcomes | Admission of a second instance under the duplicated identity; merging of the two instances; reuse of an identity freed by cancellation, failure, exclusion, supersession, or completion; overwriting, truncation, or unverifiability of any record that existed before the refused operation. |
 | Conceptual pass condition | For each injected variant the operation is refused, the refusal record identifies the duplicate-identity condition, and the original instance's records are demonstrably unchanged after the refusal. |
@@ -2860,7 +2862,7 @@ Mapped checks: CHK-028, CHK-029, CHK-093.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The run-evidence-root creation and reservation boundary: an existing location is presented that the laboratory did not itself create or reserve under the exact evidence-root identity it expects — in an empty variant, a non-empty variant, and a companion variant created by the same authenticated creation or reservation transaction. |
-| Mapped requirements | WP2-ISO-026, WP2-ISO-027, WP2-ISO-028, WP2-ISO-030, WP2-EVID-011. |
+| Mapped requirements | WP2-ISO-004, WP2-ISO-026, WP2-ISO-027, WP2-ISO-028, WP2-ISO-029, WP2-ISO-030, WP2-ISO-031, WP2-ISO-032, WP2-LIFE-019, WP2-EVID-011, WP2-FAIL-020. |
 | Expected preserved records | The collision refusal record in the WP2-ISO-030 and WP2-ISO-031 discipline; the colliding location's pre-existing contents, unchanged. |
 | Forbidden outcomes | Adoption of the colliding location as any isolation unit's evidence root; any evidence write into it; deletion or cleanup of the colliding location; treatment of the empty variant as free for adoption; treatment of the same-transaction variant as a collision. |
 | Conceptual pass condition | The empty and non-empty variants are both treated as existing-root collisions and refused, the same-transaction variant is not refused, and the pre-existing contents are demonstrably unchanged. |
@@ -2873,7 +2875,7 @@ Mapped checks: CHK-068.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The all-or-none admission boundary WP2-SCHED-013 states: two competing admission or claim operations for one proposed execution attempt, with the material interleavings forced or enumerated. |
-| Mapped requirements | WP2-SCHED-003, WP2-SCHED-004, WP2-SCHED-013, WP2-ISO-030. |
+| Mapped requirements | WP2-LIFE-009, WP2-SCHED-013, WP2-EVID-007. |
 | Expected preserved records | Exactly one admitted execution attempt naming exactly one owning laboratory-worker identity and one backing assignment-authority grant; the losing operation as a distinguishable refusal or rejection carrying any identity values it proposed. |
 | Forbidden outcomes | Two admitted attempts for one proposal; a partially admitted attempt; an orphan current grant; reassignment of the admitted attempt to the laboratory worker whose claim lost. |
 | Conceptual pass condition | In every forced interleaving at most one operation becomes authoritative, the complete admission bundle stands or none of it does, and the losing operation is preserved. |
@@ -2886,7 +2888,7 @@ Mapped checks: CHK-072.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The authority boundary at which lease and assignment-authority currency is evaluated: operations are performed in exercise of a lease or grant after its expiry, revocation, or supersession. |
-| Mapped requirements | WP2-ISO-020, WP2-ISO-021, WP2-SCHED-021, WP2-SCHED-022, WP2-ISO-030. |
+| Mapped requirements | WP2-ISO-020, WP2-ISO-021, WP2-SCHED-021, WP2-SCHED-022. |
 | Expected preserved records | The output produced under the stale authority, attributable to the laboratory worker, the lease or grant, and the execution attempt that produced it and preserved for later disposition; a refusal record for each attempted exercise of the stale authority. |
 | Forbidden outcomes | Mutation of any unit's authoritative state under the stale authority; the stale output becoming an authoritative outcome; deletion of the stale output; an append to any lineage-relation collection under the stale grant. |
 | Conceptual pass condition | No stale operation changes any authoritative record, every attempted exercise is refused and recorded, and the stale output remains preserved and attributable. |
@@ -2899,7 +2901,7 @@ Mapped checks: CHK-087.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The owning laboratory worker terminates after its execution attempt's admission and before any execution-produced evidence exists. |
-| Mapped requirements | WP2-SCHED-023, WP2-SCHED-024, WP2-EVID-008, WP2-EVID-017, WP2-FAIL-012. |
+| Mapped requirements | WP2-LIFE-011, WP2-LIFE-021, WP2-EVID-008, WP2-EVID-017. |
 | Expected preserved records | The attempt's identity, run-evidence-root identity, recorded transition history, and terminal disposition; an evidence-closure result stating the empty execution-produced evidence subset explicitly. |
 | Forbidden outcomes | Transfer of the attempt, its root, or its authority to another laboratory worker; continuation of the attempt in place; inference of the empty root from an absent location; disappearance of the attempt from any ledger or denominator. |
 | Conceptual pass condition | The interrupted attempt reaches a recorded terminal disposition with the explicit empty-subset closure result, and any further physical execution is admitted as a new execution attempt under its own root. |
@@ -2912,7 +2914,7 @@ Mapped checks: CHK-088, CHK-093.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The owning laboratory worker terminates mid-execution, with partial execution-produced evidence already written into the still-open run evidence root. |
-| Mapped requirements | WP2-SCHED-023, WP2-SCHED-024, WP2-FAIL-021, WP2-FAIL-012, WP2-ISO-005. |
+| Mapped requirements | WP2-ISO-005, WP2-ISO-029, WP2-LIFE-019, WP2-LIFE-020, WP2-LIFE-021, WP2-SCHED-023, WP2-SCHED-024, WP2-FAIL-020, WP2-FAIL-021. |
 | Expected preserved records | The partial evidence, attributable through the per-write attribution WP2-EVID-012 requires; the interrupted attempt's terminal disposition and recorded transition history. |
 | Forbidden outcomes | Continuation of the interrupted attempt in place under the same execution-attempt identity; adoption of the partial evidence by a successor attempt; two attempts continuing one another; deletion of partial evidence during recovery. |
 | Conceptual pass condition | The interrupted attempt terminates with its partial evidence preserved, and any successor is a distinct execution attempt with a distinct root whose evidence lineage never absorbs the predecessor's. |
@@ -2925,7 +2927,7 @@ Mapped checks: CHK-089.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The finalizing authority terminates between the ordinary evidence-intake closure of its finalization operation and that operation's completion record. |
-| Mapped requirements | WP2-EVID-034, WP2-EVID-035, WP2-EVID-036, WP2-EVID-072. |
+| Mapped requirements | WP2-LIFE-033, WP2-EVID-036, WP2-EVID-072. |
 | Expected preserved records | Every record the interrupted operation produced, attributed to its finalization-operation identity; a recorded disposition for the interrupted operation whose output membership is stated as observed at disposition rather than as complete. |
 | Forbidden outcomes | A current successful finalization result resting on partially committed artifacts, validations, or completion record; the interrupted operation's outputs becoming required outputs of a later winning operation. |
 | Conceptual pass condition | No successful finalization result is current unless its operation's validated source snapshot and required output membership are coherent and fully committed, and the interrupted operation is preserved and distinguishable. |
@@ -2938,7 +2940,7 @@ Mapped checks: CHK-090, CHK-091, CHK-092.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The orchestrator, in the Section 8.3 sense of the main specification, terminates and resumes while execution attempts are admitted, running, and finalizing. |
-| Mapped requirements | WP2-LIFE-018, WP2-LIFE-019, WP2-LIFE-020, WP2-LIFE-021, WP2-MODEL-033, WP2-MODEL-042, WP2-EVID-061. |
+| Mapped requirements | WP2-LIFE-018, WP2-LIFE-019, WP2-LIFE-022, WP2-LIFE-023, WP2-SCHED-023, WP2-MODEL-033, WP2-MODEL-042, WP2-MODEL-045, WP2-MODEL-046, WP2-EVID-061, WP2-FAIL-017. |
 | Expected preserved records | Every recorded status exactly as the durable records state it; a recorded terminal disposition for each attempt the restart interrupted; the idempotency, budget, usage, exposure, evidence-size, and retention state, intact. |
 | Forbidden outcomes | Any status change from the restart alone; reconstruction from process memory, storage or directory ordering, identifier shape, or wall-clock proximity; continuation, revival, or reopening of an interrupted attempt in place; reset, erasure, or re-derivation of any accounting record. |
 | Conceptual pass condition | Post-restart state is demonstrably reconstructed from durable, identity-matched records, equals the pre-crash durable record, and every interrupted attempt terminates rather than resumes. |
@@ -2964,7 +2966,7 @@ Mapped checks: CHK-075, CHK-098.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The response path of a logical model request: a provider response arrives after the request's timeout, supersession, cancellation, or authoritative terminal resolution. |
-| Mapped requirements | WP2-MODEL-014, WP2-MODEL-015, WP2-MODEL-032. |
+| Mapped requirements | WP2-MODEL-012, WP2-MODEL-014, WP2-MODEL-015, WP2-MODEL-032. |
 | Expected preserved records | The late response, attributable to its provider attempt and logical model request — or, where Section 16.8 of the main specification refuses it persistence, the typed nonsecret incident record and any sanitized derivative in its place — with a recorded, distinguishable non-authoritative disposition. |
 | Forbidden outcomes | Silent alteration of simulation state; silent acceptance; any change to the recorded resolution; deletion of the late response. |
 | Conceptual pass condition | The late arrival is preserved with recorded attribution and a non-authoritative disposition, and every simulation and resolution record is demonstrably unchanged by it. |
@@ -2977,7 +2979,7 @@ Mapped checks: CHK-097.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The attribution and keying boundary of a component serving model requests for more than one isolation unit: a record is presented carrying the lineage of a different study, planned run, or execution attempt, and two concurrent attempts carry equal locally scoped request identifiers. |
-| Mapped requirements | WP2-ID-016, WP2-ISO-002, WP2-ISO-015, WP2-ISO-030, WP2-MODEL-018. |
+| Mapped requirements | WP2-SCOPE-009, WP2-ID-016, WP2-MODEL-019, WP2-MODEL-020. |
 | Expected preserved records | The refusal record identifying the misattribution condition; the separate records of the two like-named requests, each resolving to exactly one owning isolation unit. |
 | Forbidden outcomes | Adoption of a record by a unit other than the one its lineage names; collapse of the like-named requests into one record; any join made by wall-clock proximity, arrival order, or temporal adjacency. |
 | Conceptual pass condition | Every injected record either resolves through its recorded lineage to exactly one owning unit or is refused, and the equal-identifier attempts remain distinct records throughout. |
@@ -2990,7 +2992,7 @@ Mapped checks: CHK-104.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The budget-authorization boundary: a provider dispatch is attempted against a registered budget scope whose authorized capacity is exhausted. |
-| Mapped requirements | WP2-MODEL-035, WP2-MODEL-043, WP2-MODEL-041. |
+| Mapped requirements | WP2-MODEL-043. |
 | Expected preserved records | The distinguishable, typed refusal identifying the exhausted scope and the registered budget policy identity and version applied, attributed to the study, planned run, and execution attempt concerned. |
 | Forbidden outcomes | The refused dispatch proceeding; any dispatch made before its authorization or reservation is recorded; an unknown exposure counted as zero to make capacity appear available. |
 | Conceptual pass condition | The dispatch is refused in place of being made, the refusal carries the identifications WP2-MODEL-043 requires, and no charge reaches the exhausted scope. |
@@ -3003,7 +3005,7 @@ Mapped checks: CHK-054, CHK-108, CHK-111.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | Fake-provider behavior on the request path: rate-limit responses are returned for identified provider attempts. |
-| Mapped requirements | WP2-MODEL-049, WP2-MODEL-050, WP2-MODEL-051, WP2-SCHED-040. |
+| Mapped requirements | WP2-SCHED-035, WP2-SCHED-036, WP2-SCHED-037, WP2-SCHED-038, WP2-SCHED-039, WP2-SCHED-040, WP2-SCHED-044, WP2-SCHED-045, WP2-SCHED-046, WP2-SCHED-047, WP2-SCHED-048, WP2-SCHED-049, WP2-TIME-002, WP2-TIME-003, WP2-TIME-004, WP2-MODEL-018, WP2-MODEL-049, WP2-MODEL-050, WP2-MODEL-051, WP2-HAND-028, WP2-HAND-030. |
 | Expected preserved records | A separately identified provider-behavior observation for each rate-limit occurrence observable on the path, carrying the identities WP2-MODEL-050 requires; the observed rate-limit response count as an observed value carrying its observing authority. |
 | Forbidden outcomes | A further provider attempt made outside a registered retry or fallback policy; any effect of the rate-limit delay on logical simulation time, simulated psychology, decision eligibility, or any registered treatment. |
 | Conceptual pass condition | Each occurrence yields its observation record with the required identities and time domain, and the simulation records are demonstrably unaffected by the delay. |
@@ -3016,7 +3018,7 @@ Mapped checks: CHK-109.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | Fake-provider behavior: one correlated failure window spans several concurrent execution attempts, with at least one concurrent attempt the window does not reach. |
-| Mapped requirements | WP2-MODEL-049, WP2-FAIL-040, WP2-FAIL-041. |
+| Mapped requirements | WP2-SCHED-042, WP2-SCHED-043, WP2-MODEL-021, WP2-MODEL-022, WP2-MODEL-052, WP2-FAIL-040, WP2-FAIL-041. |
 | Expected preserved records | The correlated failure-window observation; a failure record for each unit the window in fact reached; the unaffected unit's records, untouched. |
 | Forbidden outcomes | Propagation of the failure to units related to it only by shared infrastructure; affected-set membership inferred from temporal proximity or wall-clock adjacency; any disposition of the unaffected unit. |
 | Conceptual pass condition | The recorded affected set equals the set the window demonstrably reached, established through recorded observations rather than adjacency, and the unaffected unit completes undisturbed. |
@@ -3042,7 +3044,7 @@ Mapped checks: CHK-117.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The reducer/ledger replay boundary: one registered replay input or comparison target is altered so that reconstruction diverges from the recorded canonical outcome. |
-| Mapped requirements | WP2-EVID-021, WP2-EVID-022, WP2-EVID-027, WP2-EVID-032. |
+| Mapped requirements | WP2-EVID-027, WP2-EVID-032. |
 | Expected preserved records | The replay-verification record carrying its input identities and digests, replay implementation identity and version, comparisons, mismatch verdict, and verifying authority; the mismatch as a typed, preserved failure in the Section 14 vocabulary of the main specification. |
 | Forbidden outcomes | A mismatch recorded or reported as a passed verification; repeated silent re-runs until a match; a successful finalization where the registered evidence contract requires the failed replay; a replay that writes into the evidence it inspects. |
 | Conceptual pass condition | The mismatch surfaces as a typed, preserved failure with a complete verification record, and the finalization of the affected attempt fails wherever the registered evidence contract requires that replay. |
@@ -3055,7 +3057,7 @@ Mapped checks: CHK-123.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The sealed-boundary integrity surface: a member of a sealed, closed run-evidence-root boundary is mutated after the run-level seal exists. |
-| Mapped requirements | WP2-EVID-048, WP2-EVID-049, WP2-EVID-050. |
+| Mapped requirements | WP2-EVID-047, WP2-EVID-048, WP2-EVID-049, WP2-EVID-050. |
 | Expected preserved records | The seal-verification record with its unsuccessful verdict; the typed integrity failure; the original seal and any package, under their original identities. |
 | Forbidden outcomes | Silent replacement, recomputation, or rewriting of the seal or package under its same identity; a verification operation that mutates the root; the mutation escaping a verification evaluated after it. |
 | Conceptual pass condition | A verification evaluated over the sealed boundary after the mutation records the mismatch as a typed integrity failure, and every original record survives unrewritten. |
@@ -3068,7 +3070,7 @@ Mapped checks: CHK-121.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The inventory boundary: variants omitting a required member, duplicating a member identity, and carrying a conflicting digest are each presented for a completeness verdict. |
-| Mapped requirements | WP2-EVID-040, WP2-EVID-041, WP2-EVID-042. |
+| Mapped requirements | WP2-ISO-022, WP2-EVID-040, WP2-EVID-041, WP2-EVID-042, WP2-EVID-045. |
 | Expected preserved records | The inventory record with its identified boundary, inventory identity, and versioned rules; a completeness result in which no clean verdict stands for any defective variant. |
 | Forbidden outcomes | A clean completeness verdict over any defective variant; membership determined by whichever records happen to be present; the omitted member's absence passing undetected. |
 | Conceptual pass condition | Each defect class — omission, duplication, and digest conflict — separately prevents a clean completeness verdict, with the defect identified. |
@@ -3081,7 +3083,7 @@ Mapped checks: CHK-132.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The aggregation membership boundary: a source set carries a duplicate planned-run membership, a second claimed authoritative outcome for one planned run, and an omitted member the registered analysis requires. |
-| Mapped requirements | WP2-AGG-023, WP2-AGG-024, WP2-AGG-025, WP2-AGG-026. |
+| Mapped requirements | WP2-AGG-024. |
 | Expected preserved records | The aggregation record identifying its exact source set; the prevented clean aggregation; where any derived result is produced at all, only the explicitly labeled partial record of Section 15.7 of the main specification; every non-authoritative attempt on the audit and missingness surface. |
 | Forbidden outcomes | A duplicate counted twice; a primary aggregate carrying two outcomes for one planned run or any outcome for a planned run that has none; an omitted member silently dropped; membership established from file discovery or storage layout. |
 | Conceptual pass condition | Each membership defect separately prevents a clean aggregation, and membership is demonstrably established by recorded identity alone. |
@@ -3094,7 +3096,7 @@ Mapped checks: CHK-040.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The replacement admission path: a registered replacement is admitted through an operation that also attempts to rename, renumber, reopen, or overwrite the execution attempt it replaces. |
-| Mapped requirements | WP2-ID-010, WP2-ID-011, WP2-LIFE-026, WP2-FAIL-030, WP2-FAIL-034. |
+| Mapped requirements | WP2-ID-010, WP2-ID-011, WP2-ID-012, WP2-LIFE-026, WP2-LIFE-032, WP2-FAIL-032, WP2-FAIL-033, WP2-FAIL-034, WP2-FAIL-036, WP2-FAIL-045. |
 | Expected preserved records | The replaced attempt's identity, recorded status, terminal disposition, and evidence, unchanged; the replacement lineage naming the specific replaced attempt explicitly. |
 | Forbidden outcomes | Any mutation of the replaced attempt's records; the replacement recorded as a new planned run, a new independent run, or a new study; replacement lineage established from an identifier suffix, ordering, storage path, or timestamp. |
 | Conceptual pass condition | After the admission the predecessor's records are demonstrably identical to their pre-admission state, and the replacement stands as an additional execution attempt of the same planned run with explicit lineage. |
@@ -3107,7 +3109,7 @@ Mapped checks: CHK-083, CHK-085.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The isolation boundary between two concurrently executing independent runs: a shared mutable-state vector is induced — shared in-memory state, shared random-generator state, an ambient configuration value, and a write into the sibling's namespace among the variants. |
-| Mapped requirements | WP2-SCOPE-001, WP2-ISO-003, WP2-ISO-006, WP2-ISO-007, WP2-ISO-011. |
+| Mapped requirements | WP2-SCOPE-001, WP2-SCOPE-003, WP2-SCOPE-013, WP2-ISO-001, WP2-ISO-002, WP2-ISO-003, WP2-ISO-004, WP2-ISO-005, WP2-ISO-006, WP2-ISO-007, WP2-ISO-033. |
 | Expected preserved records | Each run's own mutable state, stochastic-event state, and evidence, unaffected; the refusal record wherever the contaminating operation cannot demonstrate its owning lineage. |
 | Forbidden outcomes | State carryover between the runs; a write landing in the sibling's namespace; either run's identity, registered treatment, evidence, or lineage merging with the other's. |
 | Conceptual pass condition | For every injected vector the contamination either is refused or demonstrably has no effect on the sibling's state and evidence, and the two runs' records remain fully disjoint. |
@@ -3120,7 +3122,7 @@ Mapped checks: CHK-084.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The study-level isolation boundary on shared infrastructure: a charge and an evidence record are each presented for attribution against the wrong one of two concurrently executing studies. |
-| Mapped requirements | WP2-SCOPE-002, WP2-SCOPE-003, WP2-ISO-002, WP2-ISO-016. |
+| Mapped requirements | WP2-SCOPE-002, WP2-SCOPE-003, WP2-ISO-016. |
 | Expected preserved records | Each study's budget accounting and evidence lineage, with every record resolving to exactly one owning study; the refusal record for the misattributed operation. |
 | Forbidden outcomes | Merged budget scopes; a charge attributed to a study that did not incur it; evidence adopted across studies; any merging of identity, treatment, state, namespace, or lineage as a consequence of shared infrastructure. |
 | Conceptual pass condition | Every record and every unit of accounting resolves through recorded lineage to exactly one owning study, and each injected cross-attribution is refused or dispositioned through typed records. |
@@ -3137,7 +3139,7 @@ Mapped checks: CHK-071, CHK-078.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | Two authority boundaries, taken separately: two competing initial assignment-authority grant issuances for one proposed execution attempt, and two competing initial credential-authority issuance events for one exact nonsecret credential reference and version, with interleavings forced or enumerated. |
-| Mapped requirements | WP2-SCHED-013, WP2-SCHED-052, WP2-SEC-017. |
+| Mapped requirements | WP2-SCHED-014, WP2-SCHED-016, WP2-SCHED-052, WP2-SEC-017. |
 | Expected preserved records | The one prevailing issuance in each variant; the losing issuance as a distinguishable, recorded rejection naming its proposed subject, the authority that attempted it, and the reason it did not prevail; for the admission variant, the complete all-or-none bundle. |
 | Forbidden outcomes | Two current grants for one execution attempt; one credential version acquiring two independent currentness chains; an orphan current grant; a partially admitted attempt. |
 | Conceptual pass condition | In every forced interleaving at most one issuance becomes current in each variant, and every losing issuance is preserved with the identifications its governing requirement states. |
@@ -3150,7 +3152,7 @@ Mapped checks: CHK-069, CHK-073.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The transition-acceptance boundary WP2-LIFE-034 states: an operation records a transition proceeding from a revision that a competing accepted operation has already superseded, one variant performed under an assignment-authority grant superseded mid-flight. |
-| Mapped requirements | WP2-LIFE-034, WP2-LIFE-035, WP2-SCHED-014, WP2-SCHED-021. |
+| Mapped requirements | WP2-ID-009, WP2-LIFE-034, WP2-LIFE-035, WP2-SCHED-028, WP2-SCHED-030. |
 | Expected preserved records | The stale operation as a distinguishable rejection naming the entity, the status dimension, the predecessor revision it attempted to proceed from, the next value it attempted, the authority, and the reason; the accepted transition chain, unbroken. |
 | Forbidden outcomes | Two accepted successors of one current revision; a stale-grant operation mutating any status dimension, lineage-relation collection, or authoritative-outcome state; currentness or race resolution inferred from wall-clock arrival order. |
 | Conceptual pass condition | In every forced interleaving only operations proceeding from the current revision become current, and every stale operation is rejected and preserved with the required naming. |
@@ -3163,7 +3165,7 @@ Mapped checks: CHK-068.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The all-or-none admission boundary: an admission operation is interrupted, or contends, so that only part of the admission bundle — execution-attempt identity, run-evidence-root identity, owning-laboratory-worker relation, initial status recordings, initial lineage-relation-collection state, and backing grant — would commit. |
-| Mapped requirements | WP2-SCHED-013, WP2-LIFE-009, WP2-EVID-007. |
+| Mapped requirements | WP2-LIFE-009, WP2-SCHED-013, WP2-EVID-007, WP2-FAIL-045. |
 | Expected preserved records | The losing or incomplete admission operation as a distinguishable refusal or rejection carrying any identity values it proposed; where an admission succeeds, the complete bundle as authoritative records. |
 | Forbidden outcomes | An admitted attempt without its root; a reserved root without its attempt; a current grant without an admitted attempt; any partial subset of the bundle standing as authoritative. |
 | Conceptual pass condition | After every injected interruption either the complete bundle is authoritative or none of it is, and the incomplete operation is preserved as a refusal or rejection. |
@@ -3176,7 +3178,7 @@ Mapped checks: CHK-070.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The coherence boundary WP2-LIFE-033 states: competing and interrupted operations offer an operational value and a finalization result that do not form one coherent compound outcome — the operational value Completed without the succeeded result it names, and a Finalization succeeded result against Failed or Cancelled, among the variants. |
-| Mapped requirements | WP2-LIFE-033, WP2-LIFE-004, WP2-EVID-037. |
+| Mapped requirements | WP2-LIFE-033, WP2-EVID-014, WP2-EVID-037. |
 | Expected preserved records | Every rejected pair member as a distinguishable rejected or refused operation supplying a current value in neither dimension; the two accepted transitions sharing one triggering fact or event identity. |
 | Forbidden outcomes | An accepted Finalization succeeded result coexisting with the operational value Failed or Cancelled; one leg of the compound outcome current without the other; either dimension's value inferred from the other's; a current compound outcome without the completion record WP2-EVID-037 requires. |
 | Conceptual pass condition | In every forced variant exactly one coherent compound outcome is accepted, both legs become current together or not at all, and every competing member is preserved without supplying a current value. |
@@ -3189,7 +3191,7 @@ Mapped checks: CHK-079.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The intake-closure authority boundary WP2-EVID-071 states: an evidence write races the acceptance of an ordinary evidence-intake closure for its execution attempt, with the material interleavings forced or enumerated. |
-| Mapped requirements | WP2-EVID-071, WP2-EVID-030. |
+| Mapped requirements | WP2-EVID-030, WP2-EVID-071. |
 | Expected preserved records | The ordinary evidence-intake-closure record naming its closed ordinary-input membership or snapshot and its acceptance point; the racing write under exactly one recorded treatment — included in the closed snapshot, refused through a distinguishable preserved refusal record naming the write and the closure boundary, or preserved outside the attempt's evidence boundary as a post-intake fact. |
 | Forbidden outcomes | Ambiguous omission of the racing write; two current intake closures for one attempt; a write half-included in the snapshot; strict validation beginning before the recorded intake closure. |
 | Conceptual pass condition | In every interleaving the racing write receives exactly one of the three recorded treatments, and the snapshot the closure names is demonstrably the one the finalization validated. |
@@ -3202,7 +3204,7 @@ Mapped checks: CHK-080.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The finalization surface of one execution attempt: two finalization operations interleave their validations, derived artifacts, and candidate completion records in the still-open root. |
-| Mapped requirements | WP2-EVID-072, WP2-EVID-036. |
+| Mapped requirements | WP2-EVID-034, WP2-EVID-035, WP2-EVID-036, WP2-EVID-072. |
 | Expected preserved records | Every interleaved record, attributed to the one finalization-operation identity that produced it; the losing operation's outputs, preserved and distinguishable; at most one current successful finalization result. |
 | Forbidden outcomes | Two current successful finalization results; the winning operation's success resting on the losing operation's outputs as required outputs; the losing outputs silently changing the winning operation's validated source snapshot; unattributed records in the root. |
 | Conceptual pass condition | Attribution partitions the interleaved outputs completely between the two operation identities, and only the operation whose intake closure is current holds a current successful result. |
@@ -3215,7 +3217,7 @@ Mapped checks: CHK-100.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The presentation boundary of one logical model request identity: a further presentation arrives carrying the known identity with conflicting request content. |
-| Mapped requirements | WP2-MODEL-026, WP2-MODEL-007, WP2-MODEL-053. |
+| Mapped requirements | WP2-MODEL-026. |
 | Expected preserved records | The typed identity/content conflict refusal preserving both content identities — the recorded one and the conflicting one; the original request record, unchanged. |
 | Forbidden outcomes | The conflicting presentation answered, merged, or dispatched; a request identity or content identity reused for different content; the conflict resolved by overwriting either content identity. |
 | Conceptual pass condition | The presentation is refused as a typed identity/content conflict, both content identities are readable from the refusal record, and nothing was dispatched, charged, or resolved for it. |
@@ -3228,7 +3230,7 @@ Mapped checks: CHK-076, CHK-099.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The presentation-disposition boundary: matching presentations of one request identity arrive, concurrently and repeatedly, while no authoritative terminal simulation resolution stands, with interleavings forced or enumerated. |
-| Mapped requirements | WP2-MODEL-055, WP2-MODEL-024, WP2-MODEL-025. |
+| Mapped requirements | WP2-MODEL-024, WP2-MODEL-025, WP2-MODEL-055. |
 | Expected preserved records | Exactly one current typed, preserved presentation disposition per presentation, of a kind WP2-MODEL-055 states, under the registered presentation-disposition policy's identity and version. |
 | Forbidden outcomes | Two presentations dispatched, charged, or resolved as though no authoritative terminal resolution stood at the boundary; a provider attempt or charge created by a disposition other than an authorized retry; a second logical model request or request identity created. |
 | Conceptual pass condition | In every interleaving each presentation receives exactly one recorded disposition, and no interleaving produces a dispatch, charge, or resolution beyond what the registered policy authorizes. |
@@ -3241,7 +3243,7 @@ Mapped checks: CHK-101.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The repetition-classification boundary: a delivery repetition of one logical model request and a policy-authorized further provider call for the same request are both induced and presented for recording. |
-| Mapped requirements | WP2-MODEL-027, WP2-MODEL-028, WP2-FAIL-016, WP2-FAIL-018, WP2-FAIL-019. |
+| Mapped requirements | WP2-MODEL-027, WP2-MODEL-028, WP2-MODEL-029, WP2-FAIL-018, WP2-FAIL-019. |
 | Expected preserved records | The transport or delivery retry carrying the retained request identity and immutable request specification, with its own local dispatch attempt record where dispatched; the further provider call as a distinct provider attempt naming its registered retry or fallback policy identity and version. |
 | Forbidden outcomes | Either repetition recorded, reported, or dispositioned as the other; a transport retry receiving a new request identity or treated as a new cognitive decision; a further provider attempt made outside a registered policy. |
 | Conceptual pass condition | The two repetitions yield structurally distinct records carrying the identities and policy lineage their governing requirements state, and each is dispositioned as itself. |
@@ -3254,7 +3256,7 @@ Mapped checks: CHK-077, CHK-105.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The multi-scope authorization boundary: competing authorization operations contend near a shared cap across overlapping registered budget scopes, and one authorized dispatch is left with unknown provider acceptance. |
-| Mapped requirements | WP2-MODEL-036, WP2-MODEL-038, WP2-MODEL-046. |
+| Mapped requirements | WP2-MODEL-036, WP2-MODEL-038, WP2-MODEL-041, WP2-MODEL-046, WP2-AGG-019. |
 | Expected preserved records | Every losing authorization operation as a distinguishable rejection carrying the identifications WP2-MODEL-036 states; the unknown dispatch's exposure represented as unresolved or disputed until a recorded settlement or reconciliation event. |
 | Forbidden outcomes | Oversubscription of any applicable scope; authorization against some applicable scopes but not others; unknown exposure counted as zero or as settled; exposure resolved by the disappearance of process-local state. |
 | Conceptual pass condition | No forced interleaving oversubscribes any scope or splits an authorization across scopes, and the unresolved exposure remains represented until the recorded settlement dispositions it. |
@@ -3267,7 +3269,7 @@ Mapped checks: CHK-078.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The credential-lifecycle authority boundary: competing rotation and revocation operations proceed from one current predecessor authority event while a provider dispatch attempts to use the contested credential version. |
-| Mapped requirements | WP2-SEC-017, WP2-SEC-018, WP2-SEC-011. |
+| Mapped requirements | WP2-SEC-017, WP2-SEC-018. |
 | Expected preserved records | The one prevailing credential-authority event chain; every losing or stale operation as the distinguishable, recorded rejection WP2-SEC-017 states; the historical attribution of every earlier request, usage, and provider-behavior record, unchanged. |
 | Forbidden outcomes | Two operations prevailing from one predecessor; two independent currentness chains for one credential version; a dispatch proceeding with a version a prevailing revocation made unusable; reattribution of history. |
 | Conceptual pass condition | In every forced interleaving one operation prevails per boundary, every dispatch names the exact version and the usability-establishing event or fact, and no dispatch proceeds on a revoked version. |
@@ -3293,7 +3295,7 @@ Mapped checks: CHK-130.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The persisted-evidence boundary: a discovery event is raised over synthetic, non-live fixture material of a registered detectable secret class in a record already persisted, inventoried, and sealed within a run-evidence-root boundary. |
-| Mapped requirements | WP2-EVID-064, WP2-EVID-065, WP2-EVID-066, WP2-EVID-067, WP2-EVID-070. |
+| Mapped requirements | WP2-EVID-064, WP2-EVID-065, WP2-EVID-066, WP2-EVID-067, WP2-EVID-068, WP2-EVID-069, WP2-EVID-070. |
 | Expected preserved records | The typed nonsecret incident record naming every affected run evidence root, inventory, seal, package, and study-level surface; the affected boundaries themselves, unaltered; the triggered registered rotation or revocation path wherever a governed credential is concerned. |
 | Forbidden outcomes | Any affected surface left recorded as clean; in-place alteration of any closed or sealed boundary; the fixture material copied into any incident record, log, package, aggregate, or report; a sanitized derivative recorded or claimed as the original evidence. |
 | Conceptual pass condition | Every affected surface is marked through records outside the closed boundaries concerned, the blocks WP2-EVID-065 states demonstrably hold until an explicit disposition record exists, and no original record was altered. |
@@ -3306,7 +3308,7 @@ Mapped checks: CHK-122.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The terminal closure and sealing boundary of an execution attempt cancelled before execution activity: its closed run-evidence-root boundary holds only non-execution records, the attempt evidence-closure record among them. |
-| Mapped requirements | WP2-EVID-017, WP2-EVID-040, WP2-EVID-043. |
+| Mapped requirements | WP2-SCOPE-008, WP2-ID-020, WP2-EVID-043, WP2-EVID-044, WP2-EVID-046. |
 | Expected preserved records | The evidence-closure result stating the empty execution-produced evidence subset explicitly; a full-root inventory enumerating every member of the closed boundary, the closure record among them; one run-level seal authenticating that inventory and that boundary. |
 | Forbidden outcomes | A seal claiming a zero-member boundary; a sub-inventory over the empty execution-produced subset substituted for the full-root inventory or the seal; the empty subset inferred from an absent location, directory, or omitted inventory. |
 | Conceptual pass condition | The run-level seal authenticates the nonempty closed boundary in its entirety, the full-root inventory names the closure record among its members, and the empty subset stands as an explicit recorded fact. |
@@ -3319,7 +3321,7 @@ Mapped checks: CHK-081.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The basis authority boundary WP2-EVID-073 states: two basis operations compete for one execution attempt, and a further basis operation proceeds while a later unsuccessful verification result stands over the chain a current basis names. |
-| Mapped requirements | WP2-EVID-073, WP2-EVID-051. |
+| Mapped requirements | WP2-EVID-073. |
 | Expected preserved records | At most one current attempt-integrity basis per attempt; every losing or superseded basis operation as a distinguishable record; explicit correction, supersession, and currentness relations among the bases. |
 | Forbidden outcomes | Two current bases; a basis selected by arrival order, by favorable outcome, or by the mere existence of a historical successful verification; an acceptance relying on a basis not verified current and successful at the authoritative-commit boundary. |
 | Conceptual pass condition | In every forced interleaving at most one basis is current, currency demonstrably ends from the recording of the unsuccessful result over the named chain, and the acceptance names and verifies its basis at the commit boundary. |
@@ -3345,7 +3347,7 @@ Mapped checks: CHK-125.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The post-acceptance integrity surface: after a planned run's authoritative acceptance, a member of the accepted attempt's sealed boundary is mutated and a seal verification is evaluated. |
-| Mapped requirements | WP2-EVID-049, WP2-EVID-073. |
+| Mapped requirements | WP2-EVID-049, WP2-EVID-073, WP2-AGG-021. |
 | Expected preserved records | The typed integrity failure; the accepted authoritative outcome, unrewritten; the recorded end of the relied-upon basis's currency from the recording of the unsuccessful result; the consequence records of Sections 14 and 15 of the main specification. |
 | Forbidden outcomes | Rewriting or revoking the accepted outcome in place; silent repair, replacement, or recomputation of the seal or package under its same identity; the basis remaining current over the failed verification; the incident reaching study surfaces through silent omission. |
 | Conceptual pass condition | The failure is preserved as a typed incident, the accepted outcome stands unmodified, the relied-upon basis demonstrably ceases to be current, and every study-level consequence flows through explicit records. |
@@ -3358,7 +3360,7 @@ Mapped checks: CHK-128.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The registered-membership-closure boundary: an execution-attempt admission and a replacement admission are each attempted for a study whose reached registered-membership-closure result stands. |
-| Mapped requirements | WP2-AGG-016, WP2-EVID-055. |
+| Mapped requirements | WP2-AGG-016, WP2-AGG-018. |
 | Expected preserved records | The refused admissions, preserved; the reached closure result and the exact ledger identity it binds, unchanged; where the governing research design lawfully proceeds, a new registered boundary with new inventory, seal, and lineage records. |
 | Forbidden outcomes | Silent reopening of the closed membership; an admission joining the closed roster; a complete study-level seal standing unqualified over membership its closure result did not cover; the earlier snapshot or the records it names rewritten. |
 | Conceptual pass condition | Each post-closure admission is refused and preserved, or belongs demonstrably to a new registered boundary, and every earlier closure, seal, and snapshot record is unchanged. |
@@ -3371,7 +3373,7 @@ Mapped checks: CHK-126.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The sealing treatment of an execution attempt a cancellation makes terminal: the inventory, run-level seal, or seal-verification operation over its actual closed run-evidence-root boundary is made to fail or is blocked. |
-| Mapped requirements | WP2-FAIL-026. |
+| Mapped requirements | WP2-EVID-017, WP2-EVID-043, WP2-FAIL-026, WP2-AGG-018. |
 | Expected preserved records | The terminal evidence closure; the current full-root inventory of the actual closed boundary; exactly one current recorded sealing outcome — a run-level seal with a preserved seal-verification verdict, or a typed, preserved sealing or integrity failure or blocker record stating why a clean seal or verification could not be produced. |
 | Forbidden outcomes | The full-root inventory or the sealing outcome rendered inapplicable; an absent sealing outcome; the blocked case invisible to the evidence-closure-and-integrity dimension of Section 15 of the main specification. |
 | Conceptual pass condition | Even where blocked, the attempt carries the full-root inventory and exactly one current typed sealing outcome, readable from the records the Section 15 dimension reads. |
@@ -3384,7 +3386,7 @@ Mapped checks: CHK-114.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The closed-root boundary: a losing result and a late result each arrive after the terminal evidence closure of the execution attempt they concern. |
-| Mapped requirements | WP2-EVID-015, WP2-EVID-016. |
+| Mapped requirements | WP2-EVID-014, WP2-EVID-015, WP2-EVID-016, WP2-EVID-017. |
 | Expected preserved records | A separately identified post-closure record for each arrival, referencing the closed boundary explicitly; the closed root, unmutated; the post-closure records' inclusion in any later package or study-level boundary that covers them. |
 | Forbidden outcomes | Reopening or rewriting the closed root; the late fact written inside the closed boundary; the arrival dropped without a record. |
 | Conceptual pass condition | The closed root is demonstrably identical before and after each arrival, and the post-closure records exist with explicit references to the boundary they stand outside. |
@@ -3397,7 +3399,7 @@ Mapped checks: CHK-132.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The aggregation source-set boundary: variants carry a duplicate source identity, an omitted member the registered analysis requires, a source whose required seal does not verify or whose named attempt-integrity basis is not current or not successful, and a source over which an undispositioned affected-or-compromised marking stands. |
-| Mapped requirements | WP2-AGG-022, WP2-AGG-024. |
+| Mapped requirements | WP2-AGG-024. |
 | Expected preserved records | The aggregation record naming the exact source-evidence set and, for every source, the exact attempt-integrity-basis or seal-verification record and verdict relied upon; the prevented clean aggregation; only the explicitly labeled partial record of Section 15.7 of the main specification where any derived result is produced. |
 | Forbidden outcomes | A clean aggregate over any defective source; a compromised source silently included or silently dropped; reliance on a stale verification while a later unsuccessful result stands over its chain. |
 | Conceptual pass condition | Each defect class separately prevents a clean aggregation over its source set, with the defect readable from the aggregation's own named records. |
@@ -3410,7 +3412,7 @@ Mapped checks: CHK-042.
 | Field | Statement |
 | --- | --- |
 | Injection point or authority boundary | The classification and replacement-eligibility boundary: a unit completes with a behaviorally unfavorable, repetitive, or incoherent trajectory, and a replacement authorization is then sought on that ground. |
-| Mapped requirements | WP2-FAIL-006, WP2-FAIL-007, WP2-FAIL-035. |
+| Mapped requirements | WP2-FAIL-006, WP2-FAIL-007, WP2-FAIL-008, WP2-FAIL-035. |
 | Expected preserved records | The outcome as an observed research outcome of the unit that produced it, attributed and preserved as evidence like every other observed outcome of the registered design; the refusal of the replacement authorization sought on the trajectory ground. |
 | Forbidden outcomes | The outcome recorded or treated as, by itself, an operational failure, an artifact invalidity, or a replacement eligibility; a further attempt admitted, authorized, or made eligible on the unfavorable-trajectory ground; the unfavorable result omitted to improve an aggregate. |
 | Conceptual pass condition | The classification remains the observed-outcome class, no eligibility or rerun authorization derives from it, and the sought replacement is refused with the ground readable from the typed eligibility and authorization records. |
@@ -3549,8 +3551,8 @@ Two coverage properties hold across the cases and are mechanically checkable. Fi
 | Constituent conceptual checks | CHK-001, CHK-002, CHK-003, CHK-004, CHK-005, CHK-006, CHK-007, CHK-008, CHK-009, CHK-010, CHK-011, CHK-012, CHK-013, CHK-014, CHK-015, CHK-016, CHK-017, CHK-018, CHK-019, CHK-020, CHK-021. |
 | Fixtures | FIX-01; FIX-02 for the policy inventory CHK-018 audits; FIX-06 for the credential-reference forms CHK-017 audits. |
 | Controlled interleavings or injected faults | None — clean-path document audit throughout; nothing executes in this case. |
-| Expected evidence package | The audit records of every constituent check, each citing every artifact read: the three bound identities per conformance artifact; the two extracted requirement-ID sets with both set differences and the per-row check-resolution report; the outcome-vocabulary, keyless-boundary, terminology, selection-prohibition, and claim-boundary audit records; the clause-by-clause conformance tables for the eight audited record models and registers; the policy-by-policy identification table; and, where the artifacts exist, the plan resolution table of CHK-019, the gate classification of CHK-020, and the register audit of CHK-021. |
-| Conceptual pass condition | Every constituent audit passes on its catalogue terms — both set differences empty, every audited clause represented, no prohibited claim or selection on any audited surface, and no collapsed outcome vocabulary. Where any constituent's subject artifacts do not yet exist, CHK-019 before an authorized implementation plan among them, that constituent is recorded blocked or not run and the case is blocked rather than passed, no blocked constituent ever being folded into a case pass. |
+| Expected evidence package | The audit records of every constituent check, each citing every artifact read: the three bound identities per conformance artifact; the two extracted requirement-ID sets with both directional differences; CHK-002's independently parsed `M`, `C`, `R`, `F`, `Q`, and `G` sets, all six cardinalities and all six directional difference lists, duplicate-occurrence reports, explicit-mapping-form scan, and per-row check/fault-resolution and clause-coverage report; the outcome-vocabulary, keyless-boundary, terminology, selection-prohibition, and claim-boundary audit records; the clause-by-clause conformance tables for the eight audited record models and registers; the policy-by-policy identification table; and, where the artifacts exist, the plan resolution table of CHK-019, the gate classification of CHK-020, and the register audit of CHK-021. |
+| Conceptual pass condition | Every constituent audit passes on its catalogue terms — both specification-to-matrix requirement-ID differences empty; `M = C`, `R = F`, and `Q = G`, with all six relation differences empty; zero duplicate ordered-pair occurrences; every mapping explicit; every audited clause represented; no prohibited claim or selection on any audited surface; and no collapsed outcome vocabulary. Where any constituent's subject artifacts do not yet exist, CHK-019 before an authorized implementation plan among them, that constituent is recorded blocked or not run and the case is blocked rather than passed, no blocked constituent ever being folded into a case pass. |
 
 **CASE-02 — Clean isolated single-attempt execution baseline.**
 
@@ -3724,7 +3726,7 @@ The evidence package of one conformance run is complete only where it identifies
 | Domain records | All request, timing, budget, evidence-root, replay, finalization, seal, verification, and aggregation records relevant to the checks exercised. |
 | Result identity, outcome, reason, and sources | For every check result: its own stable result identity, its outcome in the Section 1 vocabulary, the reason for that outcome, and explicit references to the source evidence supporting it. |
 | Preserved failures, blocked checks, losing operations, and cleanup | Every failed and blocked check with its complete evidence, every losing or superseded operation a race or fault check produced, every injected fault's residue, and the outcome of every cleanup — completed, failed, or not performed — preserved rather than discarded, in the Section 1 preservation discipline. |
-| Requirement-coverage report | A complete requirement-coverage report over the exact requirement-ID set of the bound specification version: for every requirement, its mapped checks, their outcomes, and whether a current passing basis exists, with no requirement omitted. |
+| Requirement-coverage and mapping-integrity report | A complete requirement-coverage report over the exact requirement-ID set of the bound specification version: for every requirement, its mapped checks, their outcomes, and whether a current passing basis exists, with no requirement omitted; plus the preserved CHK-002 audit record containing the independently parsed `M`, `C`, `R`, `F`, `Q`, and `G` sets, their cardinalities, all six directional differences, duplicate-occurrence reports, and the explicit-mapping-form scan. |
 | Sealed nonsecret package | The whole of the above as one nonsecret, sealed, verifiable conformance-evidence package: its contents enumerated by an inventory, the inventory and its boundary authenticated by a seal, and the seal verifiable read-only, mirroring the layering Section 13 of the main specification states for laboratory evidence, with no live secret on any surface of the package. |
 
 Every fixture the package references is synthetic and non-live. A fixture standing in for secret material is described and marked as synthetic rather than realized as a value resembling a live secret, and the package carries no live provider credential, session, or token in any form, consistent with the boundary Section 16 of the main specification states.
@@ -3774,17 +3776,18 @@ No further unresolved conformance question exists at this head. The editorial an
 
 This section states when a future implementation is accepted as conforming — the second of the three gates Section 20 of the main specification keeps distinct — and it states that gate separately from the other two. It adds no gate of its own: the gates are Section 20's, and this section states how an assessment under this document satisfies the second.
 
-**Separation from documentation-package acceptance.** Work Package 2 documentation-package acceptance is the first Section 20 gate: a complete normative contract, a complete conformance mapping, a complete handoff register, no unresolved blocking contradiction, final Chunk 8 integration, an assigned established specification version, and successful full continuous integration on the exact final head. Completion of this document belongs to that gate's inputs and does not reach the gate: Chunk 7 completion claims no documentation-package acceptance, Chunk 8 remains required, and no established specification version is assigned at this head. Because the exact-version binding of Section 1 names an established specification version, no implementation-acceptance assessment can begin before the first gate completes.
+**Separation from documentation-package acceptance.** Work Package 2 documentation-package acceptance is the first Section 20 gate: a complete normative contract, a complete bidirectionally reconciled conformance mapping, a complete handoff register, no unresolved blocking contradiction, final Chunk 8 integration, an assigned established specification version, and successful full continuous integration on the exact final head. Completion of this document belongs to that gate's inputs and does not reach the gate: Chunk 7 completion claims no documentation-package acceptance, Chunk 8 remains required, and no established specification version is assigned at this head. Because the exact-version binding of Section 1 names an established specification version, no implementation-acceptance assessment can begin before the first gate completes.
 
 **Implementation acceptance.** An implementation build is accepted as conforming only where all of the following hold, as the second Section 20 gate states.
 
 1. The implementation is separately authorized: approval, completion, or merge of the specification package authorized none, as WP2-SCOPE-014 states and the handoff boundary of Section 18 of the main specification restates for implementation.
 2. The assessment is bound to the exact triple of Section 1 — one established main-specification version, one conformance-document version, and one implementation build, each named exactly.
-3. Every implementation-acceptance requirement of the Section 2 matrix has a current passing basis from its mapped checks — or, where that requirement's own language permits inapplicability, the explicitly justified inapplicability outcome WP2-HAND-008 permits, exactly as WP2-HAND-016 and WP2-HAND-035 admit — with every requirement of the exact bound specification version accounted for in the coverage report, none omitted, none carried by a blocked, unrun, or evidence-free result, and every inapplicability resting on the recorded basis Section 1 requires.
-4. Every suite case of Section 4 shows both its clean baseline pass and successful detection of every required negative or fault case, neither substituting for the other.
-5. The complete conformance evidence exists as the sealed, nonsecret, verifiable package Section 5 states, including its complete requirement-coverage report.
-6. Every blocking implementation decision of the Section 18 register of the main specification, in the Section 18.2 sense, is resolved and versioned; an unresolved blocking decision leaves the assessment incomplete rather than conditionally passed.
-7. The keyless boundary held throughout: no live provider credential, repository game-model call, browser experiment, or Work Package 3 study contributed to any pass, and any later registered-study evidence present is identified as supplementary and substitutes for nothing.
+3. The bound conformance document passes CHK-002's independently parsed mapping-integrity audit: all six relation sets and their cardinalities are recorded; `M = C`, `R = F`, and `Q = G`; all six directional differences are empty; no ordered-pair occurrence is duplicated; and no mapping field uses an implicit range, summary subset, partial qualifier, same-as-above reference, delegated coverage, or inferential relation.
+4. Every implementation-acceptance requirement of the Section 2 matrix has a current passing basis from its mapped checks — or, where that requirement's own language permits inapplicability, the explicitly justified inapplicability outcome WP2-HAND-008 permits, exactly as WP2-HAND-016 and WP2-HAND-035 admit — with every requirement of the exact bound specification version accounted for in the coverage report, none omitted, none carried by a blocked, unrun, or evidence-free result, and every inapplicability resting on the recorded basis Section 1 requires.
+5. Every suite case of Section 4 shows both its clean baseline pass and successful detection of every required negative or fault case, neither substituting for the other.
+6. The complete conformance evidence exists as the sealed, nonsecret, verifiable package Section 5 states, including its complete requirement-coverage and mapping-integrity report.
+7. Every blocking implementation decision of the Section 18 register of the main specification, in the Section 18.2 sense, is resolved and versioned; an unresolved blocking decision leaves the assessment incomplete rather than conditionally passed.
+8. The keyless boundary held throughout: no live provider credential, repository game-model call, browser experiment, or Work Package 3 study contributed to any pass, and any later registered-study evidence present is identified as supplementary and substitutes for nothing.
 
 A whole-implementation conformance verdict under these criteria is the infrastructure verdict of Section 1's acceptance-versus-research separation: it makes the implementation eligible for consideration under the third Section 20 gate and establishes nothing that gate reserves.
 
